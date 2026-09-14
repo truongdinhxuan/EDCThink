@@ -7,7 +7,7 @@ import {
   faDashboard,
   faLayerGroup,
   faLocationDot,
-  faRightLeft,
+  // faRightLeft,
   faRulerCombined,
   faSliders,
   faTruck,
@@ -54,7 +54,7 @@ export interface WorkspaceNavigationCatalog {
 
 const OVERVIEW_PERMISSIONS = [
   PERMISSION_CODE.SUPPLY_DASHBOARD_READ,
-  PERMISSION_CODE.MILKRUN_DASHBOARD_READ,
+  // PERMISSION_CODE.MILKRUN_DASHBOARD_READ,
   PERMISSION_CODE.ADMIN_USER_READ,
 ] as const;
 
