@@ -32,7 +32,7 @@ const CreateOrderPage = () => {
       <div>
         <Link to={ordersPath} className={TextButton}>← Danh sách order</Link>
         <h1 className="mt-3 text-2xl font-bold text-slate-900">Tạo order</h1>
-        <p className="mt-1 text-sm text-slate-500">Order được tạo ở trạng thái DRAFT và chưa làm thay đổi tồn kho.</p>
+        <p className="mt-1 text-sm text-slate-500">Order được gửi trực tiếp ở trạng thái PENDING và chưa làm thay đổi tồn kho.</p>
       </div>
 
       {shiftOrderSheetId && (shiftSheetQuery.isError || !shiftSheetQuery.data) ? (
@@ -42,7 +42,6 @@ const CreateOrderPage = () => {
       ) : (
         <CreateOrderForm
           formId={LEGACY_CREATE_FORM_ID}
-          mode="draft-only"
           sheetContext={shiftSheetQuery.data ?? null}
           showInlineActions
           onCancel={() => navigate(ordersPath)}

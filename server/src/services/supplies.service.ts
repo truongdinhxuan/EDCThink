@@ -365,7 +365,7 @@ export class SuppliesService {
    * Non-authoritative pre-submit hint for the normal (non-stack) inventory
    * dimension. Mirrors the grouping used by attachStockAvailability so the
    * number matches what the Order detail will show after creation. The
-   * authoritative zero-stock gate stays in submit_order_to_pending.
+   * authoritative zero-stock gate stays in create_pending_order_with_items.
    */
   async getAvailability(id: string, query: SupplyStackOptionsQuery) {
     const providerId = assertFilterId(query.provider_id, 'provider_id');

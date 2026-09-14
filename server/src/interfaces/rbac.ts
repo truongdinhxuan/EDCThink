@@ -11,3 +11,7 @@ export interface ReplaceRolePermissionsBody {
 export interface ReplaceUserRolesBody {
   role_ids: string[];
 }
+
+export interface ReplaceRoleAreaTypeScopesBody {
+  areaTypeIds: string[];
+}

@@ -9,7 +9,6 @@ import type {
 } from './lookups';
 
 export const ORDER_STATUS = {
-  DRAFT: 'DRAFT',
   PENDING: 'PENDING',
   APPROVED: 'APPROVED',
   REJECTED: 'REJECTED',
@@ -198,6 +197,7 @@ export interface OrderListParams extends PaginatedListParams {
   status?: OrderStatus;
   createdBy?: string;
   areaId?: string;
+  workShiftId?: string;
   dateFrom?: string;
   dateTo?: string;
 }
@@ -221,10 +221,6 @@ export interface CreateOrderInput {
   order_list: OrderItemInput[];
 }
 
-export interface SubmitOrderInput {
-  shift_order_sheet_id?: string;
-}
-
 export interface ZeroStockErrorDetails {
   order_item_id: string;
   supply_code: string;
@@ -236,7 +232,6 @@ export interface ZeroStockErrorDetails {
 
 export interface UpdateOrderInput {
   note?: string;
-  order_list?: OrderItemInput[];
 }
 
 export interface ApproveOrderInput {
@@ -262,5 +257,5 @@ export interface ReceiveOrderInput {
 }
 
 export interface CancelOrderInput {
-  cancel_reason?: string;
+  cancel_reason: string;
 }

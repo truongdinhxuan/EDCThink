@@ -17,7 +17,7 @@ declare
   v_location_legacy uuid;
   v_import_type uuid;
   v_adjustment_type uuid;
-  v_draft uuid;
+  v_pending uuid;
   v_order uuid;
   v_normal_category uuid;
   v_special_category uuid;
@@ -42,8 +42,8 @@ begin
     from public.stock_transaction_types where code = 'IMPORT';
     select id into strict v_adjustment_type
     from public.stock_transaction_types where code = 'ADJUSTMENT_IN';
-    select id into strict v_draft
-    from public.order_statuses where code = 'DRAFT';
+    select id into strict v_pending
+    from public.order_statuses where code = 'PENDING';
 
     insert into public.areas(code, name)
     values ('P7IT_AREA_A', 'P7 source') returning id into v_area_a;
@@ -188,7 +188,7 @@ begin
 
     -- F-004/F-005: authoritative create and one Stack size per OrderItem.
     v_order := public.create_order_with_items(
-      'P7IT_ORDER', v_area_a, v_area_b, v_actor, v_draft, null,
+      'P7IT_ORDER', v_area_a, v_area_b, v_actor, v_pending, null,
       jsonb_build_array(
         jsonb_build_object(
           'supply_id', v_stack_supply, 'provider_id', v_provider,
@@ -217,7 +217,7 @@ begin
     v_error := null;
     begin
       perform public.create_order_with_items(
-        'P7IT_TAMPER_TOTAL', v_area_a, v_area_b, v_actor, v_draft, null,
+        'P7IT_TAMPER_TOTAL', v_area_a, v_area_b, v_actor, v_pending, null,
         jsonb_build_array(jsonb_build_object(
           'supply_id', v_stack_supply, 'provider_id', v_provider,
           'unit_id', v_stack_unit, 'category', 'NORMAL',
@@ -248,7 +248,7 @@ begin
     values (v_normal_supply, v_provider), (v_special_supply, v_provider);
 
     v_order := public.create_order_with_items(
-      'P7IT_NORMAL_ORDER', v_area_a, v_area_b, v_actor, v_draft, null,
+      'P7IT_NORMAL_ORDER', v_area_a, v_area_b, v_actor, v_pending, null,
       jsonb_build_array(
         jsonb_build_object(
           'supply_id', v_normal_supply, 'provider_id', v_provider,

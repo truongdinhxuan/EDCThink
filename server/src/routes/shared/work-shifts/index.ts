@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { listWorkShifts } from '../../../controllers/work-shifts';
 import { PERMISSION_CODE } from '../../../domain/permission-codes';
+import { ORDER_READ_PERMISSIONS } from '../../../domain/order-access';
 import { requirePermission, verifyToken } from '../../../middleware/auth';
 
 const workShiftRoutes: FastifyPluginAsync = async (fastify) => {
@@ -9,7 +10,12 @@ const workShiftRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         verifyToken,
-        requirePermission(PERMISSION_CODE.ADMIN_USER_READ),
+        requirePermission({
+          anyOf: [
+            PERMISSION_CODE.ADMIN_USER_READ,
+            ...ORDER_READ_PERMISSIONS,
+          ],
+        }),
       ],
     },
     listWorkShifts,

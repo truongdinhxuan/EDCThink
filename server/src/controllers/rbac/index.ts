@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type {
   PermissionListQuery,
+  ReplaceRoleAreaTypeScopesBody,
   ReplaceRolePermissionsBody,
   ReplaceUserRolesBody,
 } from '../../interfaces/rbac';
@@ -20,6 +21,21 @@ export const replaceRolePermissions = (request: FastifyRequest, reply: FastifyRe
   respondWithData(request, reply, () => new RbacService(request.server).replaceRolePermissions(
     (request.params as { id: string }).id,
     request.body as ReplaceRolePermissionsBody,
+    request.user.id,
+  ));
+
+export const listAreaTypes = (request: FastifyRequest, reply: FastifyReply) =>
+  respondWithData(request, reply, () => new RbacService(request.server).listAreaTypes());
+
+export const getRoleAreaTypeScopes = (request: FastifyRequest, reply: FastifyReply) =>
+  respondWithData(request, reply, () => new RbacService(request.server).getRoleAreaTypeScopes(
+    (request.params as { id: string }).id,
+  ));
+
+export const replaceRoleAreaTypeScopes = (request: FastifyRequest, reply: FastifyReply) =>
+  respondWithData(request, reply, () => new RbacService(request.server).replaceRoleAreaTypeScopes(
+    (request.params as { id: string }).id,
+    request.body as ReplaceRoleAreaTypeScopesBody,
     request.user.id,
   ));
 

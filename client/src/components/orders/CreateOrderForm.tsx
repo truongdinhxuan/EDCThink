@@ -11,7 +11,7 @@ import {
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { listAreas } from '../../api/areas.service';
 import { getApiErrorMessage } from '../../api/errors';
-import { createOrder, submitOrder } from '../../api/orders.service';
+import { createOrder } from '../../api/orders.service';
 import { useAuth } from '../../context/AuthContext';
 import { useCrudResource } from '../../hooks/useCrudResource';
 import { queryKeys } from '../../lib/queryKeys';
@@ -20,11 +20,6 @@ import type { CreateOrderInput, Order } from '../../types/orders';
 import type { ShiftOrderSheetCreateContext } from '../../types/shift-order-sheets';
 import { InfoButton, SecondaryButton, TextErrorButton } from '../common/Button';
 import { SupplyProviderSelect } from '../common/SupplyProviderSelect';
-import {
-  createAndSubmitOrder,
-  DraftSubmitError,
-  type CreateOrderStage,
-} from './createOrderOrchestration';
 import { OrderItemAvailability } from './OrderItemAvailability';
 import { OrderStackFields } from './OrderStackFields';
 import { SupplyCombobox } from './SupplyCombobox';
@@ -44,15 +39,13 @@ interface CreateOrderFormValues {
 }
 
 export interface CreateOrderFormState {
-  stage: CreateOrderStage;
-  draftOrder: Order | null;
+  stage: 'editing' | 'creating' | 'success' | 'create-failed';
   isDirty: boolean;
   isBusy: boolean;
 }
 
 interface CreateOrderFormProps {
   formId: string;
-  mode?: 'draft-only' | 'shift-sheet-submit';
   sheetContext?: ShiftOrderSheetCreateContext | null;
   compact?: boolean;
   showInlineActions?: boolean;
@@ -95,7 +88,6 @@ const shiftLabel = (context: ShiftOrderSheetCreateContext): string => {
 
 export const CreateOrderForm = ({
   formId,
-  mode = 'draft-only',
   sheetContext = null,
   compact = false,
   showInlineActions = false,
@@ -125,8 +117,7 @@ export const CreateOrderForm = ({
   const receivingArea = user?.publicData.area
     ?? areas.find((area) => area.id === receivingAreaId);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [stage, setStage] = useState<CreateOrderStage>('editing');
-  const [draftOrder, setDraftOrder] = useState<Order | null>(null);
+  const [stage, setStage] = useState<CreateOrderFormState['stage']>('editing');
 
   const {
     control,
@@ -161,17 +152,15 @@ export const CreateOrderForm = ({
   const pendingProviderFocusRef = useRef<number | null>(null);
   const previousFieldCount = useRef(fields.length);
 
-  const isBusy = stage === 'creating-draft' || stage === 'submitting';
-  const formLocked = Boolean(draftOrder);
+  const isBusy = stage === 'creating';
 
   useEffect(() => {
     onStateChange?.({
       stage,
-      draftOrder,
-      isDirty: isDirty && !draftOrder,
+      isDirty,
       isBusy,
     });
-  }, [draftOrder, isBusy, isDirty, onStateChange, stage]);
+  }, [isBusy, isDirty, onStateChange, stage]);
 
   // Focus the freshly appended material row's Supply search (P0: add-row flow).
   useEffect(() => {
@@ -325,37 +314,13 @@ export const CreateOrderForm = ({
     }
 
     try {
-      if (mode === 'draft-only') {
-        setStage('creating-draft');
-        const created = await createOrder(buildPayload(values));
-        setDraftOrder(created);
-        setStage('success');
-        await onSuccess(created);
-        return;
-      }
-
-      const submitted = await createAndSubmitOrder({
-        draft: draftOrder,
-        createDraft: () => createOrder(buildPayload(values)),
-        submitDraft: (draft) => submitOrder(
-          draft.id,
-          sheetContext?.id ? { shift_order_sheet_id: sheetContext.id } : {},
-        ),
-        onDraftCreated: setDraftOrder,
-        onStageChange: setStage,
-      });
-      await onSuccess(submitted);
+      setStage('creating');
+      const created = await createOrder(buildPayload(values));
+      setStage('success');
+      await onSuccess(created);
     } catch (requestError) {
-      if (requestError instanceof DraftSubmitError) {
-        setDraftOrder(requestError.draft);
-        setSubmitError(getApiErrorMessage(
-          requestError.cause,
-          'Không thể gửi Order nháp sang PENDING.',
-        ));
-      } else {
-        setStage('editing');
-        setSubmitError(getApiErrorMessage(requestError, 'Không thể tạo Order nháp.'));
-      }
+      setStage('create-failed');
+      setSubmitError(getApiErrorMessage(requestError, 'Không thể tạo và gửi Order.'));
     }
   };
 
@@ -373,7 +338,7 @@ export const CreateOrderForm = ({
     const tag = target.tagName;
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault();
-      if (!isBusy && !formLocked && !referenceUnavailable) {
+      if (!isBusy && !referenceUnavailable) {
         void handleSubmit(onSubmit)();
       }
       return;
@@ -415,26 +380,18 @@ export const CreateOrderForm = ({
       noValidate
     >
       {/* Compact, non-focusable context. Area gửi / Area nhận / ca / ngày are
-          locked by the Sheet and re-checked server-side on create + submit. */}
+          locked by the Sheet and re-checked server-side during atomic create. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
         {contextRow}
         <span className="w-full text-xs text-slate-400">
-          Area gửi/nhận khóa theo phiếu; backend kiểm tra lại khi tạo và gửi.
+          Area gửi/nhận khóa theo phiếu; backend kiểm tra lại khi tạo Order.
         </span>
         {areaResource.error && (
           <span className="w-full text-xs text-rose-600">{areaResource.error}</span>
         )}
       </div>
 
-      {draftOrder && stage === 'submit-failed' && (
-        <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-          <p className="font-bold">Order nháp {draftOrder.code} đã được tạo nhưng chưa thể gửi.</p>
-          <p className="mt-1">Dữ liệu hiện đã được lưu ở trạng thái DRAFT. Form được khóa để tránh chỉnh sửa không được lưu; hãy thử gửi lại hoặc mở Order nháp.</p>
-          {submitError && <p className="mt-2 font-semibold">{submitError}</p>}
-        </div>
-      )}
-
-      <fieldset disabled={formLocked || isBusy} className="space-y-4 disabled:opacity-75">
+      <fieldset disabled={isBusy} className="space-y-4 disabled:opacity-75">
         <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-sm font-bold text-slate-900">Vật tư yêu cầu</h2>
@@ -580,11 +537,11 @@ export const CreateOrderForm = ({
         </details>
       </fieldset>
 
-      {!formLocked && !hasActionableItem && (
+      {!hasActionableItem && (
         <p className="text-xs text-slate-500">Chọn mã vật tư và nhập số lượng để gửi Order.</p>
       )}
 
-      {submitError && !(draftOrder && stage === 'submit-failed') && (
+      {submitError && (
         <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{submitError}</div>
       )}
 
@@ -593,7 +550,7 @@ export const CreateOrderForm = ({
           {onCancel && <button type="button" onClick={onCancel} disabled={isBusy} className={`${SecondaryButton} w-full sm:w-auto`}>Hủy</button>}
           <div className="sm:text-right">
             <button type="submit" disabled={isBusy || referenceUnavailable} className={`${InfoButton} w-full sm:w-auto`}>
-              {isBusy ? 'Đang tạo...' : 'Lưu DRAFT'}
+              {isBusy ? 'Đang gửi...' : 'Gửi Order'}
             </button>
             <span className="mt-1 block text-xs text-slate-400">Ctrl + Enter</span>
           </div>

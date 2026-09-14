@@ -7,9 +7,10 @@ import { listStorageLocations } from '../../api/storage-locations.service';
 import { listSupplies } from '../../api/supplies.service';
 import { TextButton } from '../../components/common/Button';
 import { DataTable,type Column } from '../../components/common/DataTable';
-import { CardSkeleton,SelectSkeleton } from '../../components/common/skeleton';
+import { CardSkeleton } from '../../components/common/skeleton';
 import { CrudEntityView } from '../../components/crud/CrudEntityView';
 import { CrudFeedbackToast,CrudPageHeader,ErrorState,inputClassName } from '../../components/crud/CrudPrimitives';
+import { FilterField,FilterSection,PageFilterLayout,PageFilterRail } from '../../components/filters';
 import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
 import { StockAdjustmentModal } from '../../components/stock/StockAdjustmentModal';
 import { PERMISSION_CODE } from '../../constants/permissions';
@@ -82,7 +83,7 @@ const StockTransactionsPage = () => {
     errorMessage: 'Không thể tải danh sách vị trí kho.',
   });
   const [searchInput, setSearchInput] = useState('');
-  const debouncedSearch = useDebounce(searchInput);
+  const debouncedSearch = useDebounce(searchInput, 400);
   const resourceSearch = resource.query.search;
   const updateResourceQuery = resource.updateQuery;
   const [adjustmentOpen, setAdjustmentOpen] = useState(false);
@@ -149,30 +150,50 @@ const StockTransactionsPage = () => {
     ['Sai lệch tồn', detail.discrepancy ? `${detail.discrepancy.status} — có liên kết audit` : '—'],
   ] : [];
 
-  return <div className="space-y-6">
+  const resetFilters = () => {
+    setSearchInput('');
+    supplies.setSearch('');
+    locations.setSearch('');
+    resource.updateQuery({ supplyId: undefined, providerId: undefined, areaId: undefined, storageLocationId: undefined, type: undefined, createdBy: undefined, dateFrom: undefined, dateTo: undefined });
+  };
+  const filtersAreDefault = searchInput.length === 0
+    && supplies.search.length === 0
+    && locations.search.length === 0
+    && !resource.query.supplyId
+    && !resource.query.providerId
+    && !resource.query.areaId
+    && !resource.query.storageLocationId
+    && !resource.query.type
+    && !resource.query.createdBy
+    && !resource.query.dateFrom
+    && !resource.query.dateTo;
+
+  return <PageFilterLayout rail={(
+    <PageFilterRail title="Bộ lọc giao dịch tồn" onReset={resetFilters} resetDisabled={filtersAreDefault}>
+      <FilterSection>
+        <FilterField label="Tìm kiếm"><input type="search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Tìm transaction, vật tư, lý do..." className={inputClassName} /></FilterField>
+        <FilterField label="Tìm vật tư"><input type="search" value={supplies.search} onChange={(event) => supplies.setSearch(event.target.value)} placeholder="Tìm vật tư trên server..." className={inputClassName} /></FilterField>
+        <FilterField label="Vật tư"><select disabled={supplies.loading && supplies.items.length === 0} value={resource.query.supplyId ?? ''} onChange={(event) => resource.updateQuery({ supplyId: event.target.value || undefined })} className={inputClassName}><option value="">{supplies.loading && supplies.items.length === 0 ? 'Đang tải vật tư...' : 'Tất cả vật tư'}</option>{supplies.items.map((supply) => <option key={supply.id} value={supply.id}>{supply.code}</option>)}</select></FilterField>
+        <FilterField label="Provider"><select disabled={providers.loading && providers.items.length === 0} value={resource.query.providerId ?? ''} onChange={(event) => resource.updateQuery({ providerId: event.target.value || undefined })} className={inputClassName}><option value="">{providers.loading && providers.items.length === 0 ? 'Đang tải Provider...' : 'Tất cả Provider'}</option>{providers.items.map((provider) => <option key={provider.id} value={provider.id}>{provider.code} - {provider.name}</option>)}</select></FilterField>
+        <FilterField label="Khu vực"><select disabled={areas.loading && areas.items.length === 0} value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value || undefined, storageLocationId: undefined })} className={inputClassName}><option value="">{areas.loading && areas.items.length === 0 ? 'Đang tải khu vực...' : 'Tất cả khu vực'}</option>{areas.items.map((area) => <option key={area.id} value={area.id}>{area.code} - {area.name}</option>)}</select></FilterField>
+        <FilterField label="Tìm vị trí kho"><input type="search" value={locations.search} onChange={(event) => locations.setSearch(event.target.value)} placeholder="Tìm vị trí kho trên server..." className={inputClassName} /></FilterField>
+        <FilterField label="Vị trí kho"><select disabled={locations.loading && locations.items.length === 0} value={resource.query.storageLocationId ?? ''} onChange={(event) => resource.updateQuery({ storageLocationId: event.target.value || undefined })} className={inputClassName}><option value="">{locations.loading && locations.items.length === 0 ? 'Đang tải vị trí kho...' : 'Tất cả vị trí kho'}</option>{locations.items.map((location) => <option key={location.id} value={location.id}>{location.code}</option>)}</select></FilterField>
+        <FilterField label="Loại giao dịch"><select value={resource.query.type ?? ''} onChange={(event) => resource.updateQuery({ type: (event.target.value || undefined) as StockTransactionType | undefined })} className={inputClassName}><option value="">Tất cả transaction type</option>{STOCK_TRANSACTION_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></FilterField>
+        <FilterField label="Người tạo"><input type="text" value={resource.query.createdBy ?? ''} onChange={(event) => resource.updateQuery({ createdBy: event.target.value.trim() || undefined })} placeholder="Created by UUID" className={inputClassName} /></FilterField>
+      </FilterSection>
+      <FilterSection title="Thời gian">
+        <FilterField label="Từ ngày"><input type="date" value={resource.query.dateFrom ?? ''} onChange={(event) => resource.updateQuery({ dateFrom: event.target.value || undefined })} className={inputClassName} /></FilterField>
+        <FilterField label="Đến ngày"><input type="date" value={resource.query.dateTo ?? ''} onChange={(event) => resource.updateQuery({ dateTo: event.target.value || undefined })} className={inputClassName} /></FilterField>
+      </FilterSection>
+      {[supplies.error, providers.error, areas.error, locations.error].some(Boolean) && <p role="alert" className="text-xs text-amber-700">Một số bộ lọc không tải được. Danh sách transaction vẫn được hiển thị.</p>}
+    </PageFilterRail>
+  )}><div className="min-w-0 space-y-6">
     <CrudPageHeader title="Stock transactions" description="Audit log bất biến của mọi biến động tồn kho." createLabel="Tạo adjustment" onCreate={canAdjust ? () => setAdjustmentOpen(true) : undefined} />
     <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
-    <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-4">
-      <div className="space-y-1">
-        <input type="search" value={supplies.search} onChange={(event) => supplies.setSearch(event.target.value)} placeholder="Tìm vật tư trên server..." className={inputClassName} />
-        {supplies.loading && supplies.items.length === 0 ? <SelectSkeleton label="Đang tải bộ lọc vật tư" /> : <select value={resource.query.supplyId ?? ''} onChange={(event) => resource.updateQuery({ supplyId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả vật tư</option>{supplies.items.map((supply) => <option key={supply.id} value={supply.id}>{supply.code}</option>)}</select>}
-      </div>
-      {providers.loading && providers.items.length === 0 ? <SelectSkeleton label="Đang tải bộ lọc Provider" /> : <select value={resource.query.providerId ?? ''} onChange={(event) => resource.updateQuery({ providerId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả Provider</option>{providers.items.map((provider) => <option key={provider.id} value={provider.id}>{provider.code} - {provider.name}</option>)}</select>}
-      {areas.loading && areas.items.length === 0 ? <SelectSkeleton label="Đang tải bộ lọc khu vực" /> : <select value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value || undefined, storageLocationId: undefined })} className={inputClassName}><option value="">Tất cả khu vực</option>{areas.items.map((area) => <option key={area.id} value={area.id}>{area.code} - {area.name}</option>)}</select>}
-      <div className="space-y-1">
-        <input type="search" value={locations.search} onChange={(event) => locations.setSearch(event.target.value)} placeholder="Tìm vị trí kho trên server..." className={inputClassName} />
-        {locations.loading && locations.items.length === 0 ? <SelectSkeleton label="Đang tải bộ lọc vị trí kho" /> : <select value={resource.query.storageLocationId ?? ''} onChange={(event) => resource.updateQuery({ storageLocationId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả vị trí kho</option>{locations.items.map((location) => <option key={location.id} value={location.id}>{location.code}</option>)}</select>}
-      </div>
-      <select value={resource.query.type ?? ''} onChange={(event) => resource.updateQuery({ type: (event.target.value || undefined) as StockTransactionType | undefined })} className={inputClassName}><option value="">Tất cả transaction type</option>{STOCK_TRANSACTION_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select>
-      <input type="text" value={resource.query.createdBy ?? ''} onChange={(event) => resource.updateQuery({ createdBy: event.target.value.trim() || undefined })} placeholder="Created by UUID" className={inputClassName} />
-      <input type="date" value={resource.query.dateFrom ?? ''} onChange={(event) => resource.updateQuery({ dateFrom: event.target.value || undefined })} className={inputClassName} aria-label="Từ ngày" />
-      <input type="date" value={resource.query.dateTo ?? ''} onChange={(event) => resource.updateQuery({ dateTo: event.target.value || undefined })} className={inputClassName} aria-label="Đến ngày" />
-    </div>
-    {[supplies.error, providers.error, areas.error, locations.error].some(Boolean) && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Một số bộ lọc không tải được. Danh sách transaction vẫn được hiển thị nếu API chính hoạt động.</p>}
-    {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} searchPlaceholder="Tìm transaction, vật tư, lý do..." searchValue={searchInput} onSearchChange={setSearchInput} pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có transaction phù hợp với bộ lọc." />}
+    {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} hideInternalSearch pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có transaction phù hợp với bộ lọc." />}
     {detailId && <PrimaryCrudDrawer mode="view" title="Chi tiết stock transaction" onClose={() => setDetailId(null)}>{detailQuery.isPending ? <CardSkeleton lines={6} label="Đang tải chi tiết transaction" /> : detailQuery.isError ? <ErrorState message={getApiErrorMessage(detailQuery.error, 'Không thể tải chi tiết transaction.')} onRetry={() => void detailQuery.refetch()} /> : detail ? <CrudEntityView fields={detailFields.map(([label, value]) => ({ label, value }))} /> : null}</PrimaryCrudDrawer>}
     {adjustmentOpen && canAdjust && <StockAdjustmentModal busy={resource.mutating} onClose={() => setAdjustmentOpen(false)} onSubmit={createAdjustment} />}
-  </div>;
+  </div></PageFilterLayout>;
 };
 
 export default StockTransactionsPage;

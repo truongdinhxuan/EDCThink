@@ -34,7 +34,6 @@ import type {
   PatchOrderBody,
   ReceiveOrderBody,
   RejectOrderBody,
-  SubmitOrderBody,
 } from '../interfaces/orders';
 import { ORDER_SORT_FIELDS } from '../schemas/orders';
 import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
@@ -249,22 +248,33 @@ function parseRpcDetails(details?: string): Record<string, unknown> | undefined 
   }
 }
 
-function submitRpcError(error: SupabaseErrorLike): never {
-  const code = error.message ?? 'ORDER_SUBMIT_FAILED';
+function createOrderRpcError(error: SupabaseErrorLike): never {
+  const code = error.message ?? 'ORDER_CREATE_FAILED';
   const details = parseRpcDetails(error.details);
   const failures: Record<string, { status: number; message: string }> = {
+    ORDER_CREATE_FORBIDDEN: {
+      status: 403,
+      message: 'Bạn không có quyền tạo Order.',
+    },
+    ORDER_REQUESTER_CONTEXT_INVALID: {
+      status: 403,
+      message: 'Tài khoản hoặc Area nhận không hợp lệ.',
+    },
+    ORDER_SOURCE_AREA_INVALID: {
+      status: 409,
+      message: `Không tìm thấy Area nguồn ${ORDER_SOURCE_AREA_CODE} đang hoạt động.`,
+    },
+    ORDER_ITEMS_REQUIRED: {
+      status: 400,
+      message: 'Order phải có ít nhất một dòng vật tư.',
+    },
+    ORDER_ITEM_REFERENCE_INVALID: {
+      status: 400,
+      message: 'Vật tư hoặc Provider của Order không hợp lệ.',
+    },
     ORDER_ITEM_ZERO_STOCK: {
       status: 409,
-      message: 'Vật tư hiện không còn tồn tại khu vực cấp. Không thể gửi Order.',
-    },
-    ORDER_NOT_FOUND: { status: 404, message: 'Order not found' },
-    ORDER_NOT_DRAFT: {
-      status: 409,
-      message: 'Chỉ Order DRAFT mới được submit.',
-    },
-    ORDER_SUBMIT_FORBIDDEN: {
-      status: 403,
-      message: 'Bạn không có quyền submit Order này.',
+      message: 'Vật tư hiện không còn tồn tại khu vực cấp. Không thể tạo Order.',
     },
     ORDER_SHIFT_LEADER_NOT_FOUND: {
       status: 409,
@@ -272,7 +282,7 @@ function submitRpcError(error: SupabaseErrorLike): never {
     },
     WORK_SHIFT_ASSIGNMENT_NOT_FOUND: {
       status: 409,
-      message: 'Tài khoản chưa có ca làm việc hiệu lực tại thời điểm submit.',
+      message: 'Tài khoản chưa có ca làm việc hiệu lực tại thời điểm tạo Order.',
     },
     WORK_SHIFT_NOT_AVAILABLE: {
       status: 409,
@@ -280,20 +290,27 @@ function submitRpcError(error: SupabaseErrorLike): never {
     },
     ORDER_SHIFT_SHEET_CONTEXT_INVALID: {
       status: 403,
-      message: 'Phiếu Order Ca không thuộc đúng Area, nhóm, ca hoặc ngày làm việc.',
-    },
-    SHIFT_ORDER_SHEET_LEADER_CONFLICT: {
-      status: 409,
-      message: 'Area và ca này đã có Phiếu Order Ca thuộc Tổ trưởng khác.',
+      message: 'Phiếu Order Ca không thuộc đúng Area, ca hoặc ngày làm việc.',
     },
     SHIFT_ORDER_SHEET_NOT_AVAILABLE: {
       status: 409,
       message: 'Phiếu Order Ca không còn hoạt động.',
     },
+    ORDER_STATUS_NOT_FOUND: {
+      status: 409,
+      message: 'Trạng thái PENDING không tồn tại hoặc đã ngừng hoạt động.',
+    },
+    ORDER_SUBMITTED_AT_INVALID: {
+      status: 400,
+      message: 'Thời điểm tạo Order không hợp lệ.',
+    },
   };
   const failure = failures[code];
   if (failure) serviceError(failure.status, failure.message, details, code);
-  serviceError(400, 'Không thể submit Order.', details, code);
+
+  // Validation errors from the shared item normalizer are already written for
+  // operators and are safe to preserve as a 400 response.
+  serviceError(400, code === 'ORDER_CREATE_FAILED' ? 'Không thể tạo Order.' : code, details, code);
 }
 
 function allocationRpcError(error: SupabaseErrorLike): never {
@@ -472,6 +489,11 @@ const ORDER_LIST_SELECT = `
     )
   )
 `;
+
+const ORDER_LIST_WORK_SHIFT_FILTER_SELECT = ORDER_LIST_SELECT.replace(
+  'supply_shift_order_sheets!orders_shift_order_sheet_id_fkey',
+  'supply_shift_order_sheets!inner',
+);
 
 const ORDER_DETAIL_SELECT = `
   ${ORDER_LIST_SELECT},
@@ -757,62 +779,6 @@ export class OrderService {
     }
   }
 
-  private async assertShiftSheetContext(
-    actor: OrderActor,
-    receivingAreaId: string,
-    sheetId: string,
-  ): Promise<void> {
-    const [sheetResult, requesterResult, shiftResult] = await Promise.all([
-      this.db
-        .from('supply_shift_order_sheets')
-        .select('id, area_id, work_shift_id, work_date, leader_id, is_active, is_deleted')
-        .eq('id', sheetId)
-        .single(),
-      this.db
-        .from('users')
-        .select('id, managed_by_user_id')
-        .eq('id', actor.id)
-        .eq('is_active', true)
-        .eq('is_verified', true)
-        .eq('is_deleted', false)
-        .single(),
-      this.db.rpc('resolve_user_work_shift_instance', {
-        p_user_id: actor.id,
-        p_at: new Date().toISOString(),
-      }),
-    ]);
-
-    if (sheetResult.error || !sheetResult.data || requesterResult.error
-        || !requesterResult.data || shiftResult.error || !shiftResult.data?.[0]) {
-      serviceError(403, 'Phiếu Order Ca không hợp lệ với tài khoản hiện tại');
-    }
-
-    let leaderId = requesterResult.data.managed_by_user_id as string | null;
-    if (!leaderId) {
-      const { count, error } = await this.db
-        .from('users')
-        .select('id', { count: 'exact', head: true })
-        .eq('managed_by_user_id', actor.id)
-        .eq('is_active', true)
-        .eq('is_deleted', false);
-      if (error) databaseError(error, 'Cannot validate Order hierarchy');
-      if ((count ?? 0) > 0) leaderId = actor.id;
-    }
-
-    const sheet = sheetResult.data;
-    const shift = shiftResult.data[0] as {
-      work_shift_id: string;
-      work_date: string;
-    };
-    if (!sheet.is_active || sheet.is_deleted
-        || sheet.area_id !== receivingAreaId
-        || sheet.leader_id !== leaderId
-        || sheet.work_shift_id !== shift.work_shift_id
-        || sheet.work_date !== shift.work_date) {
-      serviceError(403, 'Phiếu Order Ca không thuộc đúng Area, nhóm, ca hoặc ngày làm việc');
-    }
-  }
-
   private async prepareOrderItems(
     orderList: OrderListItemInput[],
     fromAreaId: string,
@@ -995,20 +961,15 @@ export class OrderService {
     if (body.to_area_id !== actor.areaId) {
       serviceError(400, 'to_area_id must equal the current user area_id');
     }
-    if (body.shift_order_sheet_id) {
-      await this.assertShiftSheetContext(actor, actor.areaId, body.shift_order_sheet_id);
-    }
-
     const items = await this.prepareOrderItems(body.order_list, sourceAreaId);
-    const draftStatusId = await this.getStatusId(ORDER_STATUS.DRAFT);
+    const submittedAt = new Date().toISOString();
     const { data: orderId, error } = await this.db.rpc(
-      'create_order_with_items',
+      'create_pending_order_with_items',
       {
         p_code: generateOrderCode(),
         p_from_area_id: sourceAreaId,
         p_to_area_id: actor.areaId,
         p_requested_by: actor.id,
-        p_status_id: draftStatusId,
         p_note: body.note ?? null,
         p_items: items.map((item) => ({
           supply_id: item.supply_id,
@@ -1020,75 +981,55 @@ export class OrderService {
           requested_total_set_quantity: item.requested_total_set_quantity ?? null,
           note: item.note ?? null,
         })),
+        p_shift_order_sheet_id: body.shift_order_sheet_id ?? null,
+        p_submitted_at: submittedAt,
       },
     );
-    if (error || !orderId) databaseError(error, 'Cannot create Order and OrderItems');
-    return this.findOrder(orderId as string);
+    if (error) createOrderRpcError(error);
+    if (!orderId) serviceError(400, 'Không thể tạo Order.');
+    const order = await this.findOrder(orderId as string);
+    try {
+      await new NotificationsService(this.fastify).persistOrderCreated(actor, order);
+    } catch (notificationError) {
+      // Order creation has committed. Notification persistence is post-commit
+      // and must never turn a successful Order into a false client failure.
+      this.fastify.log.error({
+        err: notificationError,
+        orderId: order.id,
+      }, 'Order notification persistence failed after committed create');
+    }
+    return order;
   }
 
   async patch(actor: OrderActor, orderId: string, body: PatchOrderBody) {
     const order = await this.findOrder(orderId);
     this.assertPackingOwner(actor, order);
+    const currentStatus = this.statusCode(order);
     try {
-      assertOrderActionAllowed(this.statusCode(order), 'edit');
+      assertOrderActionAllowed(currentStatus, 'edit');
     } catch (error) {
       translateRuleError(error);
     }
 
-    if (!body || (body.note === undefined && body.order_list === undefined)) {
-      serviceError(400, 'No order fields were provided');
-    }
-
-    if (body.order_list !== undefined) {
-      const items = await this.prepareOrderItems(body.order_list, order.from_area_id);
-      const { error } = await this.db.rpc(
-        'replace_order_items_with_providers',
-        {
-          p_order_id: orderId,
-          p_items: items.map((item) => ({
-            supply_id: item.supply_id,
-            provider_id: item.provider_id,
-            unit_id: item.unit_id,
-            quantity_requested: item.quantity_requested,
-            set_per_qty: item.set_per_qty ?? null,
-            requested_stack_quantity: item.requested_stack_quantity ?? null,
-            requested_total_set_quantity: item.requested_total_set_quantity ?? null,
-            note: item.note ?? null,
-          })),
-        },
-      );
-      if (error) databaseError(error, 'Cannot replace order items');
+    if (!body || body.note === undefined) {
+      serviceError(400, 'note is required');
     }
 
     if (body.note !== undefined) {
-      const { error } = await this.db
+      const { data, error } = await this.db
         .from('orders')
         .update({ note: body.note })
-        .eq('id', orderId);
+        .eq('id', orderId)
+        .eq('status_id', order.status_id)
+        .select('id')
+        .maybeSingle();
       if (error) databaseError(error, 'Cannot update order');
+      if (!data) {
+        serviceError(409, 'Trạng thái Order đã thay đổi. Vui lòng tải lại dữ liệu.');
+      }
     }
 
     return this.findOrder(orderId);
-  }
-
-  async submit(actor: OrderActor, orderId: string, body: SubmitOrderBody = {}) {
-    const order = await this.findOrder(orderId);
-    this.assertPackingOwner(actor, order);
-    try {
-      assertOrderActionAllowed(this.statusCode(order), 'submit');
-    } catch (error) {
-      translateRuleError(error);
-    }
-    if (!order.order_items.length) serviceError(400, 'Order must contain at least one item');
-
-    const { error } = await this.db.rpc('submit_order_to_pending', {
-      p_order_id: orderId,
-      p_actor_id: actor.id,
-      p_shift_order_sheet_id: body.shift_order_sheet_id ?? null,
-      p_submitted_at: new Date().toISOString(),
-    });
-    if (error) submitRpcError(error);
-    return this.finishStatusTransition(actor, order, NOTIFICATION_TYPE.ORDER_CREATED);
   }
 
   async list(actor: OrderActor, query: OrderListQuery = {}) {
@@ -1101,7 +1042,12 @@ export class OrderService {
 
     let request = this.db
       .from('orders')
-      .select(ORDER_LIST_SELECT, { count: 'exact' })
+      .select(
+        query.workShiftId
+          ? ORDER_LIST_WORK_SHIFT_FILTER_SELECT
+          : ORDER_LIST_SELECT,
+        { count: 'exact' },
+      )
       .eq('is_deleted', false);
     if (isOrderAreaScoped(actor)) {
       request = request.eq('to_area_id', actor.areaId);
@@ -1114,6 +1060,9 @@ export class OrderService {
       request = request.or(
         `from_area_id.eq.${query.areaId},to_area_id.eq.${query.areaId}`,
       );
+    }
+    if (query.workShiftId) {
+      request = request.eq('shift_order_sheet.work_shift_id', query.workShiftId);
     }
     if (pagination.search) {
       request = request.or(
@@ -1412,7 +1361,7 @@ export class OrderService {
     try {
       const currentStatus = this.statusCode(order);
       assertOrderActionAllowed(currentStatus, 'cancel');
-      const cancelReason = assertCancelReason(currentStatus, body?.cancel_reason);
+      const cancelReason = assertCancelReason(body?.cancel_reason);
       const cancelledStatusId = await this.getStatusId(ORDER_STATUS.CANCELLED);
       const { error } = await this.db
         .from('orders')

@@ -48,6 +48,27 @@ describe('frontend permission authorization contract', () => {
     assert.doesNotMatch(pages, /canMutate/);
   });
 
+  it('uses dedicated Area CRUD permissions in navigation, route and actions', () => {
+    const permissions = read('src/constants/permissions.ts');
+    const navigation = read('src/constants/workspaceNavigation.ts');
+    const routes = read('src/routes/workspace.routes.tsx');
+    const page = read('src/pages/management/AreasPage.tsx');
+
+    for (const permission of [
+      'SUPPLY_AREA_READ',
+      'SUPPLY_AREA_CREATE',
+      'SUPPLY_AREA_UPDATE',
+      'SUPPLY_AREA_DEACTIVATE',
+    ]) assert.match(permissions, new RegExp(permission));
+
+    assert.match(navigation, /path: 'areas'[\s\S]*?SUPPLY_AREA_READ/);
+    assert.match(routes, /path: 'areas'[\s\S]*?SUPPLY_AREA_READ[\s\S]*?<AreasPage/);
+    assert.match(page, /hasPermission\(PERMISSION_CODE\.SUPPLY_AREA_CREATE\)/);
+    assert.match(page, /hasPermission\(PERMISSION_CODE\.SUPPLY_AREA_UPDATE\)/);
+    assert.match(page, /hasPermission\(PERMISSION_CODE\.SUPPLY_AREA_DEACTIVATE\)/);
+    assert.doesNotMatch(page, /hasPermission\(PERMISSION_CODE\.SUPPLY_CATALOG_/);
+  });
+
   it('does not retain role authorization arrays', () => {
     const roles = read('src/constants/roles.ts');
     assert.doesNotMatch(roles, /ORDER_CREATOR_ROLES|STOCK_MUTATOR_ROLES|MASTER_DATA_MANAGER_ROLES/);

@@ -2,9 +2,14 @@ import { useForm } from 'react-hook-form';
 import { CrudDrawerForm } from '../crud/CrudDrawerForm';
 import { FieldError, inputClassName, labelClassName } from '../crud/CrudPrimitives';
 import type { Area, CreateAreaInput } from '../../types/areas';
+import type { AreaTypeSummary } from '../../types/area-scopes';
+import { SelectSkeleton } from '../common/skeleton';
 
-export const AreaForm = ({ area, busy, onSave }: {
+export const AreaForm = ({ area, areaTypes, areaTypesLoading, areaTypesError, busy, onSave }: {
   area: Area | null; busy: boolean;
+  areaTypes: AreaTypeSummary[];
+  areaTypesLoading: boolean;
+  areaTypesError: string | null;
   onSave: (values: CreateAreaInput) => Promise<void>;
 }) => {
   const { register, handleSubmit, formState: { errors, isDirty } } = useForm<CreateAreaInput>({
@@ -12,6 +17,7 @@ export const AreaForm = ({ area, busy, onSave }: {
       code: area?.code ?? '',
       name: area?.name ?? '',
       description: area?.description ?? '',
+      area_type_id: area?.area_type_id ?? null,
       is_active: area?.is_active ?? true,
     },
   });
@@ -29,6 +35,31 @@ export const AreaForm = ({ area, busy, onSave }: {
           <FieldError message={errors.name?.message} />
         </label>
       </div>
+      <label className={labelClassName}>
+        <span>Area Type</span>
+        {areaTypesLoading && areaTypes.length === 0 ? (
+          <SelectSkeleton label="Đang tải Area Type" />
+        ) : (
+          <select
+            {...register('area_type_id', {
+              setValueAs: (value: string) => value || null,
+            })}
+            disabled={Boolean(areaTypesError)}
+            className={inputClassName}
+          >
+            <option value="">Chưa phân loại</option>
+            {areaTypes.map((areaType) => (
+              <option key={areaType.id} value={areaType.id}>
+                {areaType.code} — {areaType.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {areaTypesError && <FieldError message={`Không tải được Area Type: ${areaTypesError}`} />}
+        <span className="text-xs font-normal text-slate-500">
+          Có thể để trống khi nghiệp vụ chưa xác định Area Type.
+        </span>
+      </label>
       <label className={labelClassName}>
         <span>Mô tả</span>
         <textarea

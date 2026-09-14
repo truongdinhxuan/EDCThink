@@ -37,7 +37,7 @@ describe('order relation response contract', () => {
     assert.match(orderService, /\.select\(ORDER_DETAIL_SELECT\)/);
     assert.match(
       orderService,
-      /\.select\(ORDER_LIST_SELECT,\s*\{\s*count:\s*'exact'\s*\}\)/,
+      /\.select\(\s*query\.workShiftId[\s\S]*?ORDER_LIST_SELECT,[\s\S]*?\{\s*count:\s*'exact'\s*\}/,
     );
     const findOrderBlock =
       orderService.match(

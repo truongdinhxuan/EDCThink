@@ -96,12 +96,12 @@ describe('Phase 4 confirmation migration contract', () => {
     assert.doesNotMatch(order, /panel === "reject"/);
   });
 
-  it('preserves the existing conditional Order Cancel reason semantics and payload', () => {
+  it('requires a reason when cancelling the only cancellable PENDING state', () => {
     const order = read('src/pages/orders/OrderDetailPage.tsx');
     assert.match(order, /title: 'Hủy Order\?'/);
     assert.match(order, /status === "PENDING"/);
-    assert.match(order, /Lý do hủy là bắt buộc với Order PENDING\./);
-    assert.match(order, /cancelOrder\(id, \{ cancel_reason: cancelReason \|\| undefined \}\)/);
+    assert.match(order, /Lý do hủy là bắt buộc\./);
+    assert.match(order, /cancelOrder\(id, \{ cancel_reason: cancelReason \}\)/);
     assert.doesNotMatch(order, /panel === "cancel"/);
   });
 

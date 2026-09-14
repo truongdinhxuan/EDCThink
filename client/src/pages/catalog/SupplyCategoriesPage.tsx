@@ -16,6 +16,7 @@ RowActions,
 StatusBadge
 } from '../../components/crud/CrudPrimitives';
 import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
+import { FilterField,FilterSection,PageFilterLayout,PageFilterRail } from '../../components/filters';
 import { SupplyCategoryForm } from '../../components/forms/SupplyCategoryForm';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
@@ -55,7 +56,7 @@ const SupplyCategoriesPage = () => {
     invalidateQueryKeys: [queryKeys.supplies.all],
   });
   const [search, setSearch] = useState('');
-  const debouncedSearch = useDebounce(search);
+  const debouncedSearch = useDebounce(search, 400);
   const resourceSearch = resource.query.search;
   const updateResourceQuery = resource.updateQuery;
   const [editing, setEditing] = useState<SupplyCategory | null>(null);
@@ -119,8 +120,20 @@ const SupplyCategoriesPage = () => {
     }] : []),
   ];
 
+  const resetFilters = () => {
+    setSearch('');
+    resource.updateQuery({ isActive: true });
+  };
+
   return (
-    <div className="space-y-6">
+    <PageFilterLayout rail={(
+      <PageFilterRail title="Bộ lọc danh mục" onReset={resetFilters} resetDisabled={search.length === 0 && resource.query.isActive === true}>
+        <FilterSection>
+          <FilterField label="Tìm kiếm"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm mã hoặc mô tả danh mục..." className={inputClassName} /></FilterField>
+          <FilterField label="Trạng thái"><select value={String(resource.query.isActive ?? true)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === 'true' })} className={inputClassName}><option value="true">Active</option><option value="false">Inactive</option></select></FilterField>
+        </FilterSection>
+      </PageFilterRail>
+    )}><div className="min-w-0 space-y-6">
       <CrudPageHeader
         title="Supply categories"
         description="Quản lý nhóm vật tư với mã danh mục duy nhất."
@@ -134,10 +147,7 @@ const SupplyCategoriesPage = () => {
           data={resource.items}
           loading={resource.loading}
           keyExtractor={(item) => item.id}
-          searchPlaceholder="Tìm mã hoặc mô tả danh mục..."
-          searchValue={search}
-          onSearchChange={setSearch}
-          renderTopToolbar={() => <select value={String(resource.query.isActive ?? true)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === 'true' })} className={inputClassName}><option value="true">Active</option><option value="false">Inactive</option></select>}
+          hideInternalSearch
           pagination={resource.pagination}
           onPageChange={resource.setPage}
           onPageSizeChange={resource.setPageSize}
@@ -155,7 +165,7 @@ const SupplyCategoriesPage = () => {
             { label: 'Ngày tạo', value: new Date(editing.created_at).toLocaleString('vi-VN') },
             { label: 'Cập nhật', value: new Date(editing.updated_at).toLocaleString('vi-VN') },
           ]} /> : (<SupplyCategoryForm key={editing?.id ?? 'create'} item={editing} busy={resource.mutating} onSave={save} />)}</PrimaryCrudDrawer>}
-    </div>
+    </div></PageFilterLayout>
   );
 };
 

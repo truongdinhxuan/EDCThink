@@ -11,6 +11,12 @@ import { UnitForm } from '../../components/catalog/UnitForm';
 import { DataTable, type Column } from '../../components/common/DataTable';
 import { CrudEntityView } from '../../components/crud/CrudEntityView';
 import {
+  FilterField,
+  FilterSection,
+  PageFilterLayout,
+  PageFilterRail,
+} from '../../components/filters';
+import {
   CrudFeedbackToast,
   CrudPageHeader,
   ErrorState,
@@ -84,7 +90,7 @@ const UnitsPage = () => {
     mutationInvalidateQueryKey: queryKeys.units.lists,
   });
   const [search, setSearch] = useState('');
-  const debouncedSearch = useDebounce(search);
+  const debouncedSearch = useDebounce(search, 400);
   const resourceSearch = resource.query.search;
   const updateResourceQuery = resource.updateQuery;
   const [drawer, setDrawer] = useState<UnitDrawerState | null>(null);
@@ -94,6 +100,11 @@ const UnitsPage = () => {
   const runMutation = resource.runMutation;
   const setFeedback = resource.setFeedback;
   const activeFilter = resource.query.isActive;
+
+  const resetFilters = useCallback(() => {
+    setSearch('');
+    updateResourceQuery({ isActive: true });
+  }, [updateResourceQuery]);
 
   useEffect(() => {
     const nextSearch = debouncedSearch.trim() || undefined;
@@ -305,50 +316,72 @@ const UnitsPage = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      <CrudPageHeader
-        title="Units"
-        description="Quản lý đơn vị tính dùng cho vật tư."
-        createLabel="Thêm đơn vị"
-        onCreate={canCreate
-          ? (event) => openUnitDrawer('create', null, event.currentTarget)
-          : undefined}
-      />
-      <CrudFeedbackToast
-        feedback={resource.feedback}
-        onClose={() => resource.setFeedback(null)}
-      />
-      {resource.error ? (
-        <ErrorState message={resource.error} onRetry={() => void resource.reload()} />
-      ) : (
-        <DataTable
-          columns={columns}
-          data={resource.items}
-          loading={resource.loading}
-          keyExtractor={(item) => item.id}
-          searchPlaceholder="Tìm mã hoặc ký hiệu..."
-          searchValue={search}
-          onSearchChange={setSearch}
-          renderTopToolbar={() => (
-            <select
-              value={String(resource.query.isActive ?? true)}
-              onChange={(event) => resource.updateQuery({ isActive: event.target.value === 'true' })}
-              className={inputClassName}
-            >
-              <option value="true">Active</option>
-              <option value="false">Inactive</option>
-            </select>
-          )}
-          pagination={resource.pagination}
-          onPageChange={resource.setPage}
-          onPageSizeChange={resource.setPageSize}
-          sortBy={resource.query.sortBy}
-          sortOrder={resource.query.sortOrder}
-          onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })}
-          emptyText="Không có đơn vị phù hợp."
-        />
+    <PageFilterLayout
+      rail={(
+        <PageFilterRail
+          title="Bộ lọc đơn vị"
+          onReset={resetFilters}
+          resetDisabled={search.length === 0 && activeFilter === true}
+        >
+          <FilterSection>
+            <FilterField label="Tìm kiếm">
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Tìm mã hoặc ký hiệu..."
+                className={inputClassName}
+              />
+            </FilterField>
+            <FilterField label="Trạng thái">
+              <select
+                value={String(activeFilter ?? true)}
+                onChange={(event) => updateResourceQuery({
+                  isActive: event.target.value === 'true',
+                })}
+                className={inputClassName}
+              >
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+              </select>
+            </FilterField>
+          </FilterSection>
+        </PageFilterRail>
       )}
-    </div>
+    >
+      <div className="min-w-0 space-y-6">
+        <CrudPageHeader
+          title="Units"
+          description="Quản lý đơn vị tính dùng cho vật tư."
+          createLabel="Thêm đơn vị"
+          onCreate={canCreate
+            ? (event) => openUnitDrawer('create', null, event.currentTarget)
+            : undefined}
+        />
+        <CrudFeedbackToast
+          feedback={resource.feedback}
+          onClose={() => resource.setFeedback(null)}
+        />
+        {resource.error ? (
+          <ErrorState message={resource.error} onRetry={() => void resource.reload()} />
+        ) : (
+          <DataTable
+            columns={columns}
+            data={resource.items}
+            loading={resource.loading}
+            keyExtractor={(item) => item.id}
+            hideInternalSearch
+            pagination={resource.pagination}
+            onPageChange={resource.setPage}
+            onPageSizeChange={resource.setPageSize}
+            sortBy={resource.query.sortBy}
+            sortOrder={resource.query.sortOrder}
+            onSortChange={(sortBy, sortOrder) => updateResourceQuery({ sortBy, sortOrder })}
+            emptyText="Không có đơn vị phù hợp."
+          />
+        )}
+      </div>
+    </PageFilterLayout>
   );
 };
 

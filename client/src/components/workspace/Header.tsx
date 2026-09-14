@@ -5,6 +5,7 @@ import { AppTooltip } from "../common/AppTooltip";
 import { getButtonClassName, IconButton } from "../common/Button";
 import NotificationBell from "../notifications/NotificationBell";
 import UserMenu from "./UserMenu";
+import { APP_LAYER } from "../../constants/layers";
 
 interface HeaderProps {
   isMobileSidebarOpen: boolean;
@@ -26,7 +27,10 @@ const Header = ({
   notificationRef,
 }: HeaderProps) => {
   return (
-     <header className="z-20 mx-3 mt-3 flex min-h-14 min-w-0 shrink-0 items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 shadow-lg backdrop-blur-xl sm:mx-4 sm:mt-4 sm:min-h-16 sm:px-4 md:mx-6 lg:mx-8">
+     <header
+       className="mx-3 mt-3 flex min-h-14 min-w-0 shrink-0 items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 shadow-lg backdrop-blur-xl sm:mx-4 sm:mt-4 sm:min-h-16 sm:px-4 md:mx-6 lg:mx-8"
+       style={{ zIndex: APP_LAYER.header }}
+     >
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         {/* Nút Hamburger cho Mobile (< 768px) */}
         <AppTooltip content="Mở menu" side="bottom">
@@ -42,8 +46,8 @@ const Header = ({
           </button>
         </AppTooltip>
         <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-slate-800 sm:text-base">VF Workspace</p>
-          <p className="hidden truncate text-xs text-slate-500 sm:block md:hidden">Quản lý vận hành</p>
+          <p className="truncate text-sm font-bold text-slate-800 sm:text-base">Trung tâm đóng gói Xuất khẩu linh kiện</p>
+          <p className="truncate text-xs text-slate-500">EDC</p>
         </div>
       </div>
 

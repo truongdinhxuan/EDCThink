@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type {} from '../plugins/dbContext';
 import {
   isPermissionCode,
   type PermissionCode,

@@ -1,12 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import type {} from '../plugins/dbContext';
 import type {
-  ActiveListQuery,
+  AreaListQuery,
   CreateAreaBody,
   UpdateAreaBody,
 } from '../interfaces/master-data';
 import {
   databaseError,
+  fail,
   normalizeOptionalText,
   normalizeRequiredText,
   parseActiveFilter,
@@ -14,8 +15,13 @@ import {
 import { AREA_SORT_FIELDS } from '../schemas/master-data';
 import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
 
-const SELECT =
-  'id, code, name, description, is_active, is_deleted, created_at, updated_at';
+const SELECT = `
+  id, code, name, description, area_type_id,
+  is_active, is_deleted, created_at, updated_at,
+  area_type:area_types!areas_area_type_id_fkey(
+    id, code, name, description, is_active, is_deleted
+  )
+`;
 
 export class AreasService {
   constructor(private readonly fastify: FastifyInstance) {}
@@ -24,7 +30,19 @@ export class AreasService {
     return this.fastify.supabaseAdmin;
   }
 
-  async list(query: ActiveListQuery = {}) {
+  private async assertActiveAreaType(areaTypeId: string): Promise<void> {
+    const { data, error } = await this.db
+      .from('area_types')
+      .select('id')
+      .eq('id', areaTypeId)
+      .eq('is_active', true)
+      .eq('is_deleted', false)
+      .maybeSingle();
+    if (error) databaseError(error, 'Không thể kiểm tra Area Type');
+    if (!data) fail(400, 'area_type_id không tồn tại hoặc không active');
+  }
+
+  async list(query: AreaListQuery = {}) {
     const active = parseActiveFilter(query.isActive ?? query.is_active);
     const pagination = parsePagination(query, {
       allowedSortBy: AREA_SORT_FIELDS,
@@ -37,6 +55,8 @@ export class AreasService {
       .select(SELECT, { count: 'exact' })
       .eq('is_active', active)
       .eq('is_deleted', false);
+
+    if (query.areaTypeId) request = request.eq('area_type_id', query.areaTypeId);
 
     if (pagination.search) {
       request = request.or(
@@ -61,10 +81,12 @@ export class AreasService {
   }
 
   async create(body: CreateAreaBody) {
+    if (body.area_type_id) await this.assertActiveAreaType(body.area_type_id);
     const payload = {
       code: normalizeRequiredText(body.code, 'code', 100),
       name: normalizeRequiredText(body.name, 'name'),
       description: normalizeOptionalText(body.description, 'description') ?? null,
+      area_type_id: body.area_type_id ?? null,
       is_active: body.is_active ?? true,
       is_deleted: false,
     };
@@ -78,12 +100,14 @@ export class AreasService {
   }
 
   async update(id: string, body: UpdateAreaBody) {
+    if (body.area_type_id) await this.assertActiveAreaType(body.area_type_id);
     const payload: Record<string, unknown> = {};
     if (body.code !== undefined) payload.code = normalizeRequiredText(body.code, 'code', 100);
     if (body.name !== undefined) payload.name = normalizeRequiredText(body.name, 'name');
     if (body.description !== undefined) {
       payload.description = normalizeOptionalText(body.description, 'description');
     }
+    if (body.area_type_id !== undefined) payload.area_type_id = body.area_type_id;
     if (body.is_active !== undefined) {
       payload.is_active = body.is_active;
       if (body.is_active) payload.is_deleted = false;

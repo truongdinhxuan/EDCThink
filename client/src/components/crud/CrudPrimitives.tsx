@@ -11,6 +11,7 @@ import {
   TextButton,
   TextErrorButton,
 } from '../common/Button';
+import { APP_LAYER } from '../../constants/layers';
 export const inputClassName =
   'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition ' +
   'focus:border-blue-500 focus:ring-2 focus:ring-blue-100 ' +
@@ -94,13 +95,14 @@ export const CrudFeedbackToast = ({
             duration: 0.25,
             ease: 'easeOut',
           }}
-          className={`fixed inset-x-0 top-0 z-[100] flex w-full items-start justify-between gap-3 border-b px-4 py-3 text-sm shadow-xl
+          className={`fixed inset-x-0 top-0 flex w-full items-start justify-between gap-3 border-b px-4 py-3 text-sm shadow-xl
             md:inset-x-auto md:right-6 md:top-6 md:w-auto md:max-w-md md:rounded-xl md:border
             ${
               feedback.type === 'success'
                 ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                 : 'border-rose-200 bg-rose-50 text-rose-800'
             }`}
+          style={{ zIndex: APP_LAYER.toast }}
         >
           <span className="min-w-0 flex-1 break-words font-medium">
             {feedback.message}
@@ -171,7 +173,8 @@ export const CrudModal = ({
 }) =>
   renderPortal(
     <div
-      className="fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto bg-slate-900/50 p-3 backdrop-blur-sm sm:p-4"
+      className="fixed inset-0 flex items-center justify-center overflow-y-auto bg-slate-900/50 p-3 backdrop-blur-sm sm:p-4"
+      style={{ zIndex: APP_LAYER.primaryDrawer }}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !busy) {
           onClose();

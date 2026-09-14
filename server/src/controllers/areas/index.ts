@@ -1,6 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type {
-  ActiveListQuery,
+  AreaListQuery,
   CreateAreaBody,
   UpdateAreaBody,
 } from '../../interfaces/master-data';
@@ -9,7 +9,7 @@ import { respondWithData } from '../master-data-response';
 
 export const listAreas = (request: FastifyRequest, reply: FastifyReply) =>
   respondWithData(request, reply, () =>
-    new AreasService(request.server).list(request.query as ActiveListQuery));
+    new AreasService(request.server).list(request.query as AreaListQuery));
 
 export const getArea = (request: FastifyRequest, reply: FastifyReply) =>
   respondWithData(request, reply, () =>

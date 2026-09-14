@@ -25,6 +25,19 @@ export const replaceRolePermissionsSchema: FastifySchema = {
   },
 };
 
+export const roleAreaTypeScopeParamsSchema: FastifySchema = { params: idParams };
+export const replaceRoleAreaTypeScopesSchema: FastifySchema = {
+  params: idParams,
+  body: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['areaTypeIds'],
+    properties: {
+      areaTypeIds: { type: 'array', maxItems: 100, items: uuid },
+    },
+  },
+};
+
 export const userRoleParamsSchema: FastifySchema = { params: idParams };
 export const replaceUserRolesSchema: FastifySchema = {
   params: idParams,

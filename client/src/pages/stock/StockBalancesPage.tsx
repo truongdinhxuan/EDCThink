@@ -8,10 +8,10 @@ import { createStockAdjustment } from '../../api/stock-transactions.service';
 import { listStorageLocations } from '../../api/storage-locations.service';
 import { listSupplies } from '../../api/supplies.service';
 import { DataTable, type Column } from '../../components/common/DataTable';
-import { SelectSkeleton } from '../../components/common/skeleton';
 import { CardSkeleton } from '../../components/common/skeleton';
 import { InfoButton, TextButton } from '../../components/common/Button';
 import { CrudFeedbackToast, CrudModal, CrudPageHeader, ErrorState, FieldError, inputClassName, labelClassName } from '../../components/crud/CrudPrimitives';
+import { FilterField, FilterSection, PageFilterLayout, PageFilterRail } from '../../components/filters';
 import { StockAdjustmentModal } from '../../components/stock/StockAdjustmentModal';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
@@ -86,7 +86,7 @@ const StockBalancesPage = () => {
     errorMessage: 'Không thể tải danh sách vị trí kho.',
   });
   const [searchInput, setSearchInput] = useState('');
-  const debouncedSearch = useDebounce(searchInput);
+  const debouncedSearch = useDebounce(searchInput, 400);
   const resourceSearch = resource.query.search;
   const updateResourceQuery = resource.updateQuery;
   const [adjustmentOpen, setAdjustmentOpen] = useState(false);
@@ -184,35 +184,45 @@ const StockBalancesPage = () => {
     }
   };
 
-  return <div className="space-y-6">
+  const resetFilters = () => {
+    setSearchInput('');
+    supplies.setSearch('');
+    locations.setSearch('');
+    resource.updateQuery({
+      supplyId: undefined,
+      providerId: undefined,
+      areaId: undefined,
+      storageLocationId: undefined,
+      warning: 'all',
+    });
+  };
+  const filtersAreDefault = searchInput.length === 0
+    && supplies.search.length === 0
+    && locations.search.length === 0
+    && !resource.query.supplyId
+    && !resource.query.providerId
+    && !resource.query.areaId
+    && !resource.query.storageLocationId
+    && (resource.query.warning ?? 'all') === 'all';
+
+  return <PageFilterLayout rail={(
+    <PageFilterRail title="Bộ lọc tồn kho" onReset={resetFilters} resetDisabled={filtersAreDefault}>
+      <FilterSection>
+        <FilterField label="Tìm kiếm"><input type="search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Tìm mã vật tư, khu vực, vị trí..." className={inputClassName} /></FilterField>
+        <FilterField label="Tìm vật tư"><input type="search" value={supplies.search} onChange={(event) => supplies.setSearch(event.target.value)} placeholder="Tìm vật tư trên server..." className={inputClassName} /></FilterField>
+        <FilterField label="Vật tư"><select disabled={supplies.loading && supplies.items.length === 0} value={resource.query.supplyId ?? ''} onChange={(event) => resource.updateQuery({ supplyId: event.target.value || undefined })} className={inputClassName}><option value="">{supplies.loading && supplies.items.length === 0 ? 'Đang tải vật tư...' : 'Tất cả vật tư'}</option>{supplies.items.map((supply) => <option key={supply.id} value={supply.id}>{supply.code}{supply.description ? ` - ${supply.description}` : ''}</option>)}</select></FilterField>
+        <FilterField label="Cảnh báo"><select value={resource.query.warning ?? 'all'} onChange={(event) => resource.updateQuery({ warning: event.target.value as StockBalanceQuery['warning'] })} className={inputClassName}><option value="all">Tất cả cảnh báo</option><option value="warning">Có cảnh báo</option><option value="no_warning">Không cảnh báo</option></select></FilterField>
+        <FilterField label="Provider"><select disabled={providers.loading && providers.items.length === 0} value={resource.query.providerId ?? ''} onChange={(event) => resource.updateQuery({ providerId: event.target.value || undefined })} className={inputClassName}><option value="">{providers.loading && providers.items.length === 0 ? 'Đang tải Provider...' : 'Tất cả Provider'}</option>{providers.items.map((provider) => <option key={provider.id} value={provider.id}>{provider.code} - {provider.name}</option>)}</select></FilterField>
+        <FilterField label="Khu vực"><select disabled={areas.loading && areas.items.length === 0} value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value || undefined, storageLocationId: undefined })} className={inputClassName}><option value="">{areas.loading && areas.items.length === 0 ? 'Đang tải khu vực...' : 'Tất cả khu vực'}</option>{areas.items.map((area) => <option key={area.id} value={area.id}>{area.code} - {area.name}</option>)}</select></FilterField>
+        <FilterField label="Tìm vị trí kho"><input type="search" value={locations.search} onChange={(event) => locations.setSearch(event.target.value)} placeholder="Tìm vị trí kho trên server..." className={inputClassName} /></FilterField>
+        <FilterField label="Vị trí kho"><select disabled={locations.loading && locations.items.length === 0} value={resource.query.storageLocationId ?? ''} onChange={(event) => resource.updateQuery({ storageLocationId: event.target.value || undefined })} className={inputClassName}><option value="">{locations.loading && locations.items.length === 0 ? 'Đang tải vị trí kho...' : 'Tất cả vị trí kho'}</option>{locations.items.map((location) => <option key={location.id} value={location.id}>{location.code}{location.name ? ` - ${location.name}` : ''}</option>)}</select></FilterField>
+      </FilterSection>
+      {[supplies.error, providers.error, areas.error, locations.error].some(Boolean) && <p role="alert" className="text-xs text-amber-700">Một số bộ lọc không tải được. Dữ liệu tồn kho vẫn được hiển thị.</p>}
+    </PageFilterRail>
+  )}><div className="min-w-0 space-y-6">
     <CrudPageHeader title="Stock balances" description="Tồn kho hiện tại theo vật tư, Provider, khu vực và vị trí lưu." createLabel="Tạo adjustment" onCreate={canAdjust ? () => setAdjustmentOpen(true) : undefined} />
     <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
-    <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-5">
-      <div className="space-y-1">
-        <input type="search" value={supplies.search} onChange={(event) => supplies.setSearch(event.target.value)} placeholder="Tìm vật tư trên server..." className={inputClassName} />
-        {supplies.loading && supplies.items.length === 0 ? <SelectSkeleton label="Đang tải bộ lọc vật tư" /> : <select value={resource.query.supplyId ?? ''} onChange={(event) => resource.updateQuery({ supplyId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả vật tư</option>{supplies.items.map((supply) => <option key={supply.id} value={supply.id}>{supply.code}{supply.description ? ` - ${supply.description}` : ''}</option>)}</select>}
-      </div>
-      <select
-        value={resource.query.warning ?? 'all'}
-        onChange={(event) => resource.updateQuery({
-          warning: event.target.value as StockBalanceQuery['warning'],
-        })}
-        className={inputClassName}
-        aria-label="Lọc cảnh báo kiểm kê"
-      >
-        <option value="all">Tất cả cảnh báo</option>
-        <option value="warning">Có cảnh báo</option>
-        <option value="no_warning">Không cảnh báo</option>
-      </select>
-      {providers.loading && providers.items.length === 0 ? <SelectSkeleton label="Đang tải bộ lọc Provider" /> : <select value={resource.query.providerId ?? ''} onChange={(event) => resource.updateQuery({ providerId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả Provider</option>{providers.items.map((provider) => <option key={provider.id} value={provider.id}>{provider.code} - {provider.name}</option>)}</select>}
-      {areas.loading && areas.items.length === 0 ? <SelectSkeleton label="Đang tải bộ lọc khu vực" /> : <select value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value || undefined, storageLocationId: undefined })} className={inputClassName}><option value="">Tất cả khu vực</option>{areas.items.map((area) => <option key={area.id} value={area.id}>{area.code} - {area.name}</option>)}</select>}
-      <div className="space-y-1">
-        <input type="search" value={locations.search} onChange={(event) => locations.setSearch(event.target.value)} placeholder="Tìm vị trí kho trên server..." className={inputClassName} />
-        {locations.loading && locations.items.length === 0 ? <SelectSkeleton label="Đang tải bộ lọc vị trí kho" /> : <select value={resource.query.storageLocationId ?? ''} onChange={(event) => resource.updateQuery({ storageLocationId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả vị trí kho</option>{locations.items.map((location) => <option key={location.id} value={location.id}>{location.code}{location.name ? ` - ${location.name}` : ''}</option>)}</select>}
-      </div>
-    </div>
-    {[supplies.error, providers.error, areas.error, locations.error].some(Boolean) && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Một số bộ lọc không tải được. Dữ liệu tồn kho vẫn được hiển thị nếu API chính hoạt động.</p>}
-    {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} searchPlaceholder="Tìm mã vật tư, khu vực, vị trí..." searchValue={searchInput} onSearchChange={setSearchInput} pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có tồn kho phù hợp với bộ lọc." />}
+    {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} hideInternalSearch pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có tồn kho phù hợp với bộ lọc." />}
     {adjustmentOpen && canAdjust && <StockAdjustmentModal busy={resource.mutating} onClose={() => setAdjustmentOpen(false)} onSubmit={createAdjustment} />}
     {discrepancyBalance && (
       <CrudModal
@@ -296,7 +306,7 @@ const StockBalancesPage = () => {
         )}
       </CrudModal>
     )}
-  </div>;
+  </div></PageFilterLayout>;
 };
 
 const Summary = ({ label, value }: { label: string; value: string }) => (

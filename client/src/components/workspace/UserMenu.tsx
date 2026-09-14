@@ -4,6 +4,7 @@ import { faChevronDown, faRightFromBracket } from "@fortawesome/free-solid-svg-i
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { getButtonClassName } from "../common/Button";
+import { APP_LAYER } from "../../constants/layers";
 
 const fallbackAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png";
@@ -83,7 +84,8 @@ const UserMenu = () => {
       {isOpen && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-[70] mt-2 w-[min(18rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl"
+          className="absolute right-0 top-full mt-2 w-[min(18rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl"
+          style={{ zIndex: APP_LAYER.dropdown }}
         >
           <div className="border-b border-slate-100 px-3 py-2.5">
             <p className="truncate text-sm font-bold text-slate-900">{displayName}</p>

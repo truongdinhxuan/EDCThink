@@ -11,7 +11,6 @@ import {
   patchOrder,
   receiveOrder,
   rejectOrder,
-  submitOrder,
   confirmOrderAllocation,
 } from '../../controllers/orders';
 import { PERMISSION_CODE } from '../../domain/permission-codes';
@@ -19,11 +18,11 @@ import { ORDER_READ_PERMISSIONS } from '../../domain/order-access';
 import { requirePermission, verifyToken } from '../../middleware/auth';
 import {
   orderCreateSchema,
+  orderApproveSchema,
   orderListSchema,
   orderPatchSchema,
   allocationConfirmSchema,
   orderIssueSchema,
-  orderSubmitSchema,
 } from '../../schemas/orders';
 
 const orderRoutes: FastifyPluginAsync = async (fastify) => {
@@ -65,11 +64,6 @@ const orderRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: ownerPermission, schema: orderPatchSchema },
     patchOrder,
   );
-  fastify.post(
-    '/:id/submit',
-    { preHandler: ownerPermission, schema: orderSubmitSchema },
-    submitOrder,
-  );
   fastify.get(
     '/',
     { preHandler: orderReadPermission, schema: orderListSchema },
@@ -78,7 +72,7 @@ const orderRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/:id', { preHandler: orderReadPermission }, getOrder);
   fastify.post(
     '/:id/approve',
-    { preHandler: orderReviewPermission },
+    { preHandler: orderReviewPermission, schema: orderApproveSchema },
     approveOrder,
   );
   fastify.post(

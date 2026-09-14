@@ -16,6 +16,7 @@ RowActions,
 StatusBadge
 } from '../../components/crud/CrudPrimitives';
 import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
+import { FilterField,FilterSection,PageFilterLayout,PageFilterRail } from '../../components/filters';
 import { ProviderForm } from '../../components/forms/ProviderForm';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
@@ -90,7 +91,7 @@ const ProvidersPage = () => {
     ],
   });
   const [search, setSearch] = useState('');
-  const debouncedSearch = useDebounce(search);
+  const debouncedSearch = useDebounce(search, 400);
   const [editing, setEditing] = useState<Provider | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -201,8 +202,20 @@ const ProvidersPage = () => {
     }] : []),
   ];
 
+  const resetFilters = () => {
+    setSearch('');
+    resource.updateQuery(statusQuery('active'));
+  };
+
   return (
-    <div className="space-y-6">
+    <PageFilterLayout rail={(
+      <PageFilterRail title="Bộ lọc Provider" onReset={resetFilters} resetDisabled={search.length === 0 && resolveStatusFilter(resource.query) === 'active'}>
+        <FilterSection>
+          <FilterField label="Tìm kiếm"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm code, tên hoặc mô tả Provider..." className={inputClassName} /></FilterField>
+          <FilterField label="Trạng thái"><select value={resolveStatusFilter(resource.query)} onChange={(event) => resource.updateQuery(statusQuery(event.target.value as StatusFilter))} className={inputClassName}><option value="active">Đang hoạt động</option><option value="inactive">Ngừng hoạt động</option><option value="deleted">Đã deactivate</option></select></FilterField>
+        </FilterSection>
+      </PageFilterRail>
+    )}><div className="min-w-0 space-y-6">
       <CrudPageHeader
         title="Providers"
         description="Quản lý nhà cung cấp được liên kết với vật tư và tồn kho."
@@ -225,23 +238,7 @@ const ProvidersPage = () => {
           loading={resource.loading}
           loadingText="Đang tải danh sách Provider..."
           keyExtractor={(item) => item.id}
-          searchPlaceholder="Tìm code, tên hoặc mô tả Provider..."
-          searchValue={search}
-          onSearchChange={setSearch}
-          renderTopToolbar={() => (
-            <select
-              value={resolveStatusFilter(resource.query)}
-              onChange={(event) => resource.updateQuery(
-                statusQuery(event.target.value as StatusFilter),
-              )}
-              className={inputClassName}
-              aria-label="Lọc trạng thái Provider"
-            >
-              <option value="active">Đang hoạt động</option>
-              <option value="inactive">Ngừng hoạt động</option>
-              <option value="deleted">Đã deactivate</option>
-            </select>
-          )}
+          hideInternalSearch
           pagination={resource.pagination}
           onPageChange={resource.setPage}
           onPageSizeChange={resource.setPageSize}
@@ -275,7 +272,7 @@ const ProvidersPage = () => {
           />)}
         </PrimaryCrudDrawer>
       )}
-    </div>
+    </div></PageFilterLayout>
   );
 };
 

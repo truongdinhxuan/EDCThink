@@ -8,6 +8,7 @@ import { workspaceRoutes } from "./workspace.routes";
 
 const HomePage = lazy(() => import("../pages/HomePage"));
 const UnauthorizedPage = lazy(() => import("../pages/error/UnauthorizedPage"));
+const NotFoundPage = lazy(() => import("../pages/error/NotFoundPage"));
 
 const RoleWorkspaceRedirect = ({
   relativePath,
@@ -35,9 +36,10 @@ export const AppRoutes = () => {
     { path: "/", element: <HomePage /> },
     authRoutes,
     { path: "/403-unauthorized", element: <UnauthorizedPage /> },
+    { path: "/404", element: <NotFoundPage /> },
     ...workspaceRoutes,
     { path: "/milkrun", element: <RoleWorkspaceRedirect relativePath="milkrun" /> },
-    { path: "*", element: <Navigate to="/" replace /> },
+    { path: "*", element: <Navigate to="/404" replace /> },
   ];
 
   return useRoutes(routes);

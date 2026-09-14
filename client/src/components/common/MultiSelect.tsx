@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { APP_LAYER } from '../../constants/layers';
 
 export interface MultiSelectOption {
   value: string;
@@ -193,7 +194,8 @@ export const MultiSelect = ({
           role="listbox"
           aria-label={ariaLabel}
           aria-multiselectable="true"
-          className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"
+          className="absolute mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"
+          style={{ zIndex: APP_LAYER.dropdown }}
         >
           {filteredOptions.length === 0 ? (
             <p className="px-3 py-4 text-center text-sm text-slate-500">

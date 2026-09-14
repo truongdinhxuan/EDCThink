@@ -1,21 +1,26 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { ShiftOrderSheetListQuery } from '../../interfaces/shift-order-sheets';
-import type { OrderActor } from '../../services/orders.service';
+import type {
+  ShiftOrderSheetDetailQuery,
+  ShiftOrderSheetListQuery,
+} from '../../interfaces/shift-order-sheets';
 import {
   ShiftOrderSheetServiceError,
   ShiftOrderSheetsService,
+  type ShiftOrderSheetActor,
 } from '../../services/shift-order-sheets.service';
+import { AreaScopeServiceError } from '../../services/area-scopes.service';
 import {
   isPaginatedResult,
   PaginationValidationError,
   toPaginatedResponse,
 } from '../../utils/pagination';
 
-const actorFrom = (request: FastifyRequest): OrderActor => {
+const actorFrom = (request: FastifyRequest): ShiftOrderSheetActor => {
   if (!request.user) throw new ShiftOrderSheetServiceError(401, 'Unauthorized');
   return {
     id: request.user.id,
     areaId: request.user.areaId,
+    roleIds: request.user.roleIds,
     permissions: request.user.permissions,
     isSystemAdmin: request.user.isSystemAdmin,
   };
@@ -33,7 +38,7 @@ const respond = async (
     if (error instanceof PaginationValidationError) {
       return reply.code(error.statusCode).send({ error: error.message });
     }
-    if (error instanceof ShiftOrderSheetServiceError) {
+    if (error instanceof ShiftOrderSheetServiceError || error instanceof AreaScopeServiceError) {
       return reply.code(error.statusCode).send({ error: error.message });
     }
     request.log.error(error);
@@ -51,6 +56,7 @@ export const getShiftOrderSheet = (request: FastifyRequest, reply: FastifyReply)
   respond(request, reply, () => new ShiftOrderSheetsService(request.server).get(
     actorFrom(request),
     (request.params as { id: string }).id,
+    request.query as ShiftOrderSheetDetailQuery,
   ));
 
 export const getCurrentShiftOrderSheet = (request: FastifyRequest, reply: FastifyReply) =>
@@ -76,7 +82,7 @@ export const exportShiftOrderSheet = async (
       .header('Cache-Control', 'no-store')
       .send(result.buffer);
   } catch (error) {
-    if (error instanceof ShiftOrderSheetServiceError) {
+    if (error instanceof ShiftOrderSheetServiceError || error instanceof AreaScopeServiceError) {
       return reply.code(error.statusCode).send({ error: error.message });
     }
     request.log.error(error);

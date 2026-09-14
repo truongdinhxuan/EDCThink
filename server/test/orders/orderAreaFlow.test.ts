@@ -43,8 +43,8 @@ describe('order source and receiving area flow', () => {
 
   it('renders both order areas as fixed values in the create form', () => {
     assert.match(createOrderForm, /area\.code === ORDER_SOURCE_AREA_CODE/);
-    assert.match(createOrderForm, /sourceArea\.code/);
-    assert.match(createOrderForm, /receivingArea\.code/);
+    assert.match(createOrderForm, /sourceArea\?\.code/);
+    assert.match(createOrderForm, /receivingArea\?\.code/);
     assert.doesNotMatch(createOrderForm, /register\("to_area_id"/);
   });
 });

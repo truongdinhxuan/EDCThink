@@ -5,6 +5,14 @@ export interface ShiftOrderSheetListQuery extends PaginationQuery {
   workShiftId?: string;
   leaderId?: string;
   areaId?: string;
+  statusId?: string;
+  categoryId?: string;
+}
+
+export interface ShiftOrderSheetDetailQuery {
+  search?: string;
+  statusId?: string;
+  categoryId?: string;
 }
 
 export interface ShiftOrderSheetRelation {

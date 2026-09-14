@@ -15,6 +15,9 @@ const orderRuntime = read(
 const stackImport = read(
   'supabase/migrations/20260822135035_supply_stack_import.sql',
 );
+const directPendingOrder = read(
+  'supabase/migrations/20260909173958_create_order_direct_pending.sql',
+);
 const balanceService = read('src/services/stock-balances.service.ts');
 const transactionService = read('src/services/stock-transactions.service.ts');
 const adjustmentService = read('src/services/stock-adjustments.service.ts');
@@ -127,19 +130,19 @@ describe('Provider-aware atomic OrderItem contract', () => {
   });
 
   it('creates Order and all OrderItems in one RPC without compensation delete', () => {
-    assert.match(orderService, /rpc\(\s*'create_order_with_items'/);
+    assert.match(orderService, /rpc\(\s*'create_pending_order_with_items'/);
     assert.doesNotMatch(
       orderService,
       /async create[\s\S]*from\('orders'\)[\s\S]*\.insert\(/,
     );
     assert.doesNotMatch(orderService, /await this\.db\.from\('orders'\)\.delete/);
     assert.match(
-      orderRuntime,
+      directPendingOrder,
       /insert into public\.orders[\s\S]*returning id into v_order_id/,
     );
     assert.match(
-      orderRuntime,
-      /insert into public\.order_items[\s\S]*v_order_id,[\s\S]*v_provider_id/,
+      directPendingOrder,
+      /insert into public\.order_items[\s\S]*v_order_id,[\s\S]*provider_id/,
     );
   });
 

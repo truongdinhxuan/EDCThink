@@ -6,7 +6,12 @@ import {
   listRoles,
   updateRole,
 } from '../../controllers/roles';
-import { getRolePermissions, replaceRolePermissions } from '../../controllers/rbac';
+import {
+  getRoleAreaTypeScopes,
+  getRolePermissions,
+  replaceRoleAreaTypeScopes,
+  replaceRolePermissions,
+} from '../../controllers/rbac';
 import { PERMISSION_CODE } from '../../domain/permission-codes';
 import { requirePermission, verifyToken } from '../../middleware/auth';
 import {
@@ -15,7 +20,12 @@ import {
   roleCreateSchema,
   roleUpdateSchema,
 } from '../../schemas/master-data';
-import { replaceRolePermissionsSchema, rolePermissionParamsSchema } from '../../schemas/rbac';
+import {
+  replaceRoleAreaTypeScopesSchema,
+  replaceRolePermissionsSchema,
+  roleAreaTypeScopeParamsSchema,
+  rolePermissionParamsSchema,
+} from '../../schemas/rbac';
 
 const roleRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -41,6 +51,22 @@ const roleRoutes: FastifyPluginAsync = async (fastify) => {
       schema: replaceRolePermissionsSchema,
     },
     replaceRolePermissions,
+  );
+  fastify.get(
+    '/:id/area-type-scopes',
+    {
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_ROLE_READ)],
+      schema: roleAreaTypeScopeParamsSchema,
+    },
+    getRoleAreaTypeScopes,
+  );
+  fastify.put(
+    '/:id/area-type-scopes',
+    {
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_ROLE_UPDATE)],
+      schema: replaceRoleAreaTypeScopesSchema,
+    },
+    replaceRoleAreaTypeScopes,
   );
   fastify.get(
     '/:id',

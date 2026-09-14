@@ -9,7 +9,6 @@ import type {
   PatchOrderBody,
   ReceiveOrderBody,
   RejectOrderBody,
-  SubmitOrderBody,
 } from '../../interfaces/orders';
 import {
   OrderService,
@@ -73,15 +72,6 @@ export const patchOrder = (request: FastifyRequest, reply: FastifyReply) =>
       actorFrom(request),
       (request.params as { id: string }).id,
       request.body as PatchOrderBody,
-    ),
-  );
-
-export const submitOrder = (request: FastifyRequest, reply: FastifyReply) =>
-  respond(request, reply, () =>
-    new OrderService(request.server).submit(
-      actorFrom(request),
-      (request.params as { id: string }).id,
-      (request.body ?? {}) as SubmitOrderBody,
     ),
   );
 

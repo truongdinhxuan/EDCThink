@@ -4,6 +4,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import { APP_LAYER } from '../../constants/layers';
 
 type TooltipSide = 'top' | 'right' | 'bottom' | 'left';
 type TooltipAlign = 'start' | 'center' | 'end';
@@ -56,7 +57,8 @@ export const AppTooltip = ({
           align={align}
           sideOffset={8}
           collisionPadding={8}
-          className="app-tooltip-content z-[200] max-w-xs rounded-md bg-slate-900 px-2.5 py-1.5 text-xs font-medium leading-4 text-white shadow-lg"
+          className="app-tooltip-content max-w-xs rounded-md bg-slate-900 px-2.5 py-1.5 text-xs font-medium leading-4 text-white shadow-lg"
+          style={{ zIndex: APP_LAYER.tooltip }}
         >
           {content}
           <Tooltip.Arrow className="fill-slate-900" />

@@ -209,7 +209,7 @@ begin
   raise notice 'PASS duplicate-allocation guard';
 
   -- Only APPROVED may allocate.
-  foreach status_code in array array['DRAFT','PENDING','PARTIAL_ISSUED','ISSUED'] loop
+  foreach status_code in array array['PENDING','REJECTED','PARTIAL_ISSUED','ISSUED'] loop
     select id into strict status_id from public.order_statuses where code=status_code;
     insert into public.orders(code,from_area_id,to_area_id,requested_by,status_id)
       values('P4IT_STATUS_'||status_code,area_a,area_b,actor,status_id) returning id into order_id;

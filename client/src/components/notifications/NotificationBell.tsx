@@ -12,7 +12,9 @@ import { getWorkspacePath } from '../../constants/workspaces';
 import { useAuth } from '../../context/AuthContext';
 import { queryKeys } from '../../lib/queryKeys';
 import { NOTIFICATION_DOMAIN, type AppNotification } from '../../types/notifications';
-
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faBell, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { APP_LAYER } from '../../constants/layers';
 interface NotificationBellProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
@@ -64,7 +66,7 @@ const NotificationBell = ({ isOpen, setIsOpen, containerRef }: NotificationBellP
   };
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div ref={containerRef}>
       <AppTooltip content="Thông báo" side="bottom">
         <button
           type="button"
@@ -82,13 +84,14 @@ const NotificationBell = ({ isOpen, setIsOpen, containerRef }: NotificationBellP
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
-          <i className="hgi-stroke hgi-notification-01 text-2xl" aria-hidden="true" />
+          <FontAwesomeIcon icon={faBell} className="text-2xl hover:cursor-pointer" aria-hidden="true" />
         </button>
       </AppTooltip>
 
       {isOpen && (
         <section
-          className="fixed left-3 right-3 top-[4.75rem] z-[70] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-3 sm:w-[min(360px,calc(100vw-2rem))]"
+          className="fixed left-3 right-3 top-[4.75rem] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-3 sm:w-[min(360px,calc(100vw-2rem))]"
+          style={{ zIndex: APP_LAYER.dropdown }}
           aria-label="Danh sách thông báo"
         >
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
@@ -102,7 +105,7 @@ const NotificationBell = ({ isOpen, setIsOpen, containerRef }: NotificationBellP
               onClick={() => setIsOpen(false)}
               aria-label="Đóng thông báo"
             >
-              <i className="hgi-stroke hgi-cancel-01 text-lg" aria-hidden="true" />
+              <FontAwesomeIcon icon={faXmark} className="text-lg hover:cursor-pointer" aria-hidden="true" />
             </button>
           </div>
 
@@ -145,7 +148,7 @@ const NotificationBell = ({ isOpen, setIsOpen, containerRef }: NotificationBellP
                   notification.is_read ? 'bg-white hover:bg-slate-50' : 'bg-blue-50 hover:bg-blue-100'
                 }`}
               >
-                <span className="flex items-start gap-3">
+                <span className="hover:cursor-pointer flex items-start gap-3">
                   <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${
                     notification.is_read ? 'bg-slate-300' : 'bg-blue-600'
                   }`} aria-hidden="true" />

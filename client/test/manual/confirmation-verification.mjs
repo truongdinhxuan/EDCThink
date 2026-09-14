@@ -1,6 +1,6 @@
 // Phase 4.1 LOCAL ONLY. Real Fastify routes + local Supabase; disposable fixtures.
 // Run with --serve for production-page browser checks, otherwise runs API checks.
-// Add --ui-only with --serve to leave DRAFT/PENDING fixtures untouched for UI tests.
+// Add --ui-only with --serve to leave PENDING fixtures untouched for UI tests.
 // Serve mode creates 64 rows per representative list for non-zero scroll on page 2.
 // POST /__verify/cleanup for graceful cleanup in --serve mode (Windows process
 // termination may skip SIGINT handlers). Never use a remote database.
@@ -35,7 +35,7 @@ const sql = (command) => execFileSync('docker', [
 ], { input: command, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 20000 }).trim();
 const rows = (query) => JSON.parse(sql(`select coalesce(json_agg(x),'[]') from (${query}) x;`));
 const ids = Object.fromEntries(['actorRole', 'readerRole', 'actor', 'reader', 'category', 'unit', 'provider',
-  'supply', 'location', 'balance', 'sheet', 'draft', 'pending', 'reject', 'apiCancel', 'apiReject', 'area', 'wrongAreaOrder'].map((key) => [key, randomUUID()]));
+  'supply', 'location', 'balance', 'sheet', 'pendingExtra', 'pending', 'reject', 'apiCancel', 'apiReject', 'area', 'wrongAreaOrder'].map((key) => [key, randomUUID()]));
 const password = 'Phase41Local1!';
 const vinfast = authorizationRepair ? 940100001 : 941000001;
 let setup = false;
@@ -126,7 +126,7 @@ try {
       ['category','supply_categories','CATEGORY'], ['unit','units','UNIT'],
       ['provider','providers','PROVIDER'], ['supply','supplies','SUPPLY'],
       ['location','storage_locations','LOC'],
-      ...['draft','pending','reject','apiCancel','apiReject'].map(key => [key,'orders',key.toUpperCase()]),
+      ...['pendingExtra','pending','reject','apiCancel','apiReject'].map(key => [key,'orders',key.toUpperCase()]),
     ]) {
       const found = rows(`select id from public.${table} where code=${q(`${prefix}_${suffix}`)}`);
       assert.equal(found.length, 1, `Missing exact resume fixture ${key}`);
@@ -166,14 +166,14 @@ try {
       (${q(ids.balance)},${q(ids.supply)},${q(ids.provider)},${q(source.id)},${q(ids.location)},100);
     insert into public.supply_shift_order_sheets(id,area_id,work_shift_id,work_date,leader_id) values
       (${q(ids.sheet)},${q(area.id)},${q(shift.id)},'2099-04-01',${q(ids.actor)});
-    ${['draft','pending','reject','apiCancel','apiReject'].map(key=>`insert into public.orders(id,code,from_area_id,to_area_id,requested_by,status_id,shift_order_sheet_id,submitted_at) values
-      (${q(ids[key])},${q(`${prefix}_${key.toUpperCase()}`)},${q(source.id)},${q(area.id)},${q(ids.actor)},${q(key==='draft'?status.DRAFT:status.PENDING)},${key==='draft'?'null':q(ids.sheet)},${key==='draft'?'null':'now()'});
+    ${['pendingExtra','pending','reject','apiCancel','apiReject'].map(key=>`insert into public.orders(id,code,from_area_id,to_area_id,requested_by,status_id,shift_order_sheet_id,submitted_at) values
+      (${q(ids[key])},${q(`${prefix}_${key.toUpperCase()}`)},${q(source.id)},${q(area.id)},${q(ids.actor)},${q(status.PENDING)},${q(ids.sheet)},now());
       insert into public.order_items(order_id,supply_id,provider_id,unit_id,quantity_requested) values (${q(ids[key])},${q(ids.supply)},${q(ids.provider)},${q(ids.unit)},2);`).join('\n')}
     ${['roles','providers','milkrun.shops'].map(table=>`insert into ${table.includes('.')?table:`public.${table}`}(code,name) select ${q(`${prefix}_ROW_`)}||lpad(n::text,2,'0'),${q(`${prefix} Row `)}||n from generate_series(1,${process.argv.includes('--serve') ? 64 : 24}) n;`).join('\n')}
     commit;`);
   }
   setup = true;
-  for (const key of ['draft','pending','reject','apiCancel','apiReject']) baseline[key] = orderState(ids[key]);
+  for (const key of ['pendingExtra','pending','reject','apiCancel','apiReject']) baseline[key] = orderState(ids[key]);
   server.addHook('onRequest', async (req, reply) => {
     if (!['GET','OPTIONS'].includes(req.method) && !req.url.startsWith('/__verify')) hits.push({ method:req.method,path:req.url });
     if (req.method===control.method && req.url===control.path) {
@@ -183,7 +183,7 @@ try {
         .code(409).send({ error:current.error });
     }
   });
-  server.get('/__verify/state', async () => ({prefix,ids,hits,results,baseline,current:Object.fromEntries(['draft','pending','reject','apiCancel','apiReject'].map(k=>[k,orderState(ids[k])]))}));
+  server.get('/__verify/state', async () => ({prefix,ids,hits,results,baseline,current:Object.fromEntries(['pendingExtra','pending','reject','apiCancel','apiReject'].map(k=>[k,orderState(ids[k])]))}));
   server.post('/__verify/control', async (req) => { control = req.body; return {ok:true}; });
   server.post('/__verify/cleanup', async () => {
     setTimeout(() => void cleanup().then(() => process.exit(0)), 100);
@@ -211,7 +211,7 @@ try {
       const headers={apikey:local.ANON_KEY,Authorization:`Bearer ${local.ANON_KEY}`,'Content-Type':'application/json'};
       for (const [path,method,body] of [
         ['/orders?select=id','GET'],
-        [`/orders?id=eq.${ids.draft}`,'PATCH',{cancel_reason:'Forbidden'}],
+        [`/orders?id=eq.${ids.pendingExtra}`,'PATCH',{cancel_reason:'Forbidden'}],
         ['/roles','POST',{code:`${prefix}_DIRECT_DENIED`,name:'Forbidden'}],
       ]) {
         const response=await fetch(`${rest}${path}`,{method,headers,...(body?{body:JSON.stringify(body)}:{})});
@@ -225,12 +225,12 @@ try {
       assert.deepEqual(orderState(ids.pending),before);
       // Same owner, different receiving Area: isolates area validation from ownership.
       sql(`insert into public.orders(id,code,from_area_id,to_area_id,requested_by,status_id)
-        values (${q(ids.wrongAreaOrder)},${q(`${prefix}_WRONG_AREA`)},${q(source.id)},${q(source.id)},${q(ids.actor)},${q(status.DRAFT)});`);
+        values (${q(ids.wrongAreaOrder)},${q(`${prefix}_WRONG_AREA`)},${q(source.id)},${q(source.id)},${q(ids.actor)},${q(status.PENDING)});`);
       const wrongBefore=orderState(ids.wrongAreaOrder);
       assert.equal((await request('POST',`/orders/${ids.wrongAreaOrder}/cancel`,{cancel_reason:'Wrong area'})).statusCode,403);
       assert.deepEqual(orderState(ids.wrongAreaOrder),wrongBefore);
     });
-    await record('P401 Create DRAFT -> Submit PENDING -> Cancel preserves Sheet and stock', async () => {
+    await record('P401 Create PENDING atomically -> Cancel preserves Sheet and stock', async () => {
       const stockBefore=rows(`select * from public.stock_balances where id=${q(ids.balance)}`);
       const created=await request('POST','/orders',{
         from_area_id:source.id,to_area_id:area.id,note:`${prefix} create regression`,
@@ -238,10 +238,6 @@ try {
       });
       assert.equal(created.statusCode,201,created.body);
       const id=created.json().data.id;
-      assert.equal(orderState(id).order.status,'DRAFT');
-      assert.equal(orderState(id).order.shift_order_sheet_id,null);
-      const submitted=await request('POST',`/orders/${id}/submit`,{});
-      assert.equal(submitted.statusCode,200,submitted.body);
       const pending=orderState(id);
       assert.equal(pending.order.status,'PENDING');
       assert.ok(pending.order.shift_order_sheet_id);
@@ -257,13 +253,16 @@ try {
       assert.equal(after.notifications.filter(n=>n.type==='ORDER_CREATED').length,1);
       assert.equal(after.notifications.filter(n=>n.type==='ORDER_STATUS_CHANGED').length,1);
     });
-    await record('P401 DRAFT Cancel permits omitted reason and remains outside Sheet', async () => {
-      const before=orderState(ids.draft);
-      const response=await request('POST',`/orders/${ids.draft}/cancel`,{});
+    await record('P401 PENDING Cancel requires reason and preserves Sheet', async () => {
+      const before=orderState(ids.pendingExtra);
+      const missingReason=await request('POST',`/orders/${ids.pendingExtra}/cancel`,{});
+      assert.equal(missingReason.statusCode,409,missingReason.body);
+      assert.deepEqual(orderState(ids.pendingExtra),before);
+      const response=await request('POST',`/orders/${ids.pendingExtra}/cancel`,{cancel_reason:'P401 extra cancelled'});
       assert.equal(response.statusCode,200,response.body);
-      const after=orderState(ids.draft);
+      const after=orderState(ids.pendingExtra);
       assert.equal(after.order.status,'CANCELLED');
-      assert.equal(after.order.shift_order_sheet_id,null);
+      assert.equal(after.order.shift_order_sheet_id,ids.sheet);
       assert.deepEqual(after.stock,before.stock);
       assert.equal(after.transactions.length,0);
     });

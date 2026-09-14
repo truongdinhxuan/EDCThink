@@ -5,6 +5,7 @@ import { DataTable,type Column } from '../../components/common/DataTable';
 import { CrudEntityView } from '../../components/crud/CrudEntityView';
 import { CrudFeedbackToast,CrudPageHeader,ErrorState,inputClassName,RowActions,StatusBadge } from '../../components/crud/CrudPrimitives';
 import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
+import { FilterField,FilterSection,PageFilterLayout,PageFilterRail } from '../../components/filters';
 import { StorageLocationForm } from '../../components/forms/StorageLocationForm';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
@@ -45,7 +46,7 @@ const StorageLocationsPage = () => {
     queryKeys.areas.lookup({ pageSize: 100, isActive: true }),
   );
   const [searchInput, setSearchInput] = useState('');
-  const debouncedSearch = useDebounce(searchInput);
+  const debouncedSearch = useDebounce(searchInput, 400);
   const resourceSearch = resource.query.search;
   const updateResourceQuery = resource.updateQuery;
   const [editing, setEditing] = useState<StorageLocation | null>(null);
@@ -99,7 +100,21 @@ const StorageLocationsPage = () => {
     ...(hasActions ? [{ header: 'Thao tác', accessor: 'actions', render: (item: StorageLocation) => <RowActions onView={() => openView(item)} onEdit={canUpdate ? () => { setEditing(item); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} onDelete={canDelete ? (event) => confirmDeactivate(item, event) : undefined} deleteLabel="Ngừng sử dụng" /> }] : []),
   ];
 
-  return <div className="space-y-6">
+  const resetFilters = () => {
+    setSearchInput('');
+    resource.updateQuery({ areaId: undefined, isActive: true });
+  };
+
+  return <PageFilterLayout rail={(
+    <PageFilterRail title="Bộ lọc vị trí kho" onReset={resetFilters} resetDisabled={searchInput.length === 0 && !resource.query.areaId && resource.query.isActive === true}>
+      <FilterSection>
+        <FilterField label="Tìm kiếm"><input type="search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Tìm mã hoặc tên vị trí..." className={inputClassName} /></FilterField>
+        <FilterField label="Khu vực"><select disabled={areas.loading && areas.items.length === 0} value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value || undefined })} className={inputClassName}><option value="">{areas.loading && areas.items.length === 0 ? 'Đang tải khu vực...' : 'Tất cả khu vực'}</option>{areas.items.map((area) => <option key={area.id} value={area.id}>{area.code}</option>)}</select></FilterField>
+        <FilterField label="Trạng thái"><select value={resource.query.isActive === undefined ? '' : String(resource.query.isActive)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === '' ? undefined : event.target.value === 'true' })} className={inputClassName}><option value="">Tất cả trạng thái</option><option value="true">Đang hoạt động</option><option value="false">Ngừng hoạt động</option></select></FilterField>
+      </FilterSection>
+      {areas.error && <p role="alert" className="text-xs text-amber-700">Không thể tải bộ lọc khu vực.</p>}
+    </PageFilterRail>
+  )}><div className="min-w-0 space-y-6">
     <CrudPageHeader title="Storage locations" description="Quản lý vị trí lưu kho theo khu vực." createLabel="Thêm vị trí kho" onCreate={canCreate ? () => { setEditing(null); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} />
     <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
     {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable
@@ -107,19 +122,13 @@ const StorageLocationsPage = () => {
       data={resource.items}
       loading={resource.loading}
       keyExtractor={(item) => item.id}
-      searchPlaceholder="Tìm mã hoặc tên vị trí..."
-      searchValue={searchInput}
-      onSearchChange={setSearchInput}
+      hideInternalSearch
       pagination={resource.pagination}
       onPageChange={resource.setPage}
       onPageSizeChange={resource.setPageSize}
       sortBy={resource.query.sortBy}
       sortOrder={resource.query.sortOrder}
       onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })}
-      renderTopToolbar={() => <>
-        <select value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả khu vực</option>{areas.items.map((area) => <option key={area.id} value={area.id}>{area.code}</option>)}</select>
-        <select value={resource.query.isActive === undefined ? '' : String(resource.query.isActive)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === '' ? undefined : event.target.value === 'true' })} className={inputClassName}><option value="">Tất cả trạng thái</option><option value="true">Đang hoạt động</option><option value="false">Ngừng hoạt động</option></select>
-      </>}
       emptyText="Không có vị trí kho phù hợp."
     />}
     {formOpen && (viewing || (editing ? canUpdate : canCreate)) && <PrimaryCrudDrawer mode={viewing ? 'view' : editing ? 'edit' : 'create'} size="md" onEdit={viewing && canUpdate ? () => setViewing(false) : undefined} error={formError} title={viewing ? 'Chi tiết vị trí kho' : (editing ? 'Chỉnh sửa vị trí kho' : 'Tạo vị trí kho')} busy={resource.mutating} onClose={() => setFormOpen(false)}>{viewing && editing ? <CrudEntityView fields={[
@@ -131,7 +140,7 @@ const StorageLocationsPage = () => {
             { label: 'Ngày tạo', value: new Date(editing.created_at).toLocaleString('vi-VN') },
             { label: 'Cập nhật', value: new Date(editing.updated_at).toLocaleString('vi-VN') },
           ]} /> : (<StorageLocationForm key={editing?.id ?? 'create'} item={editing} areas={areas.items} areasLoading={areas.loading} areasError={areas.error} busy={resource.mutating} onSave={save} />)}</PrimaryCrudDrawer>}
-  </div>;
+  </div></PageFilterLayout>;
 };
 
 export default StorageLocationsPage;

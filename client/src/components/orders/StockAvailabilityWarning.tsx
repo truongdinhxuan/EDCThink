@@ -45,7 +45,7 @@ export const StockAvailabilityWarning = ({
           <p>Yêu cầu: {quantityFormatter.format(item.quantity_requested)}</p>
           <p>Tồn khả dụng: {quantityFormatter.format(item.available_quantity)}</p>
           <p>Thiếu: {quantityFormatter.format(item.shortage_quantity)}</p>
-          <p className="mt-1 font-medium">Order vẫn có thể submit hoặc approve. Tồn sẽ được kiểm tra lại khi issue.</p>
+          <p className="mt-1 font-medium">Order vẫn có thể được tạo/gửi hoặc approve. Tồn sẽ được kiểm tra lại khi issue.</p>
         </div>
       )}
     </div>

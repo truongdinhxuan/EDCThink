@@ -24,6 +24,7 @@ export interface ButtonClassNameOptions {
 const baseButtonClassName =
   'inline-flex items-center justify-center align-middle select-none whitespace-nowrap font-sans font-medium text-center antialiased ' +
   'transition duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ' +
+  'transition duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 cursor-pointer ' +
   'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none';
 
 const raisedButtonClassName =

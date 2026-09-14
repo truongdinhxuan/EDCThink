@@ -19,20 +19,21 @@ export interface CreateOrderBody {
   order_list: OrderListItemInput[];
 }
 
-export interface SubmitOrderBody {
-  shift_order_sheet_id?: string;
-}
-
 export interface PatchOrderBody {
   note?: string;
-  order_list?: OrderListItemInput[];
+}
+
+export interface OrderApprovalItemInput {
+  order_item_id: string;
+  /**
+   * A non-negative review result. Zero rejects the item; positive values are
+   * approved and are not capped by quantity_requested.
+   */
+  quantity_approved: number;
 }
 
 export interface ApproveOrderBody {
-  items: Array<{
-    order_item_id: string;
-    quantity_approved: number;
-  }>;
+  items: OrderApprovalItemInput[];
   note?: string;
 }
 
@@ -57,7 +58,7 @@ export interface ReceiveOrderBody {
 }
 
 export interface CancelOrderBody {
-  cancel_reason?: string;
+  cancel_reason: string;
 }
 
 export interface ConfirmAllocationBody {
@@ -72,6 +73,7 @@ export interface OrderListQuery extends PaginationQuery {
   date?: string;
   createdBy?: string;
   areaId?: string;
+  workShiftId?: string;
   dateFrom?: string;
   dateTo?: string;
 }

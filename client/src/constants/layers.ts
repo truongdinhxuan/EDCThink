@@ -3,6 +3,8 @@ export const APP_LAYER = {
   header: 20,
   navigationBackdrop: 30,
   navigation: 40,
+  filterBackdrop: 50,
+  filterDrawer: 51,
   dropdown: 70,
   primaryBackdrop: 80,
   primaryDrawer: 81,
@@ -14,4 +16,3 @@ export const APP_LAYER = {
   toast: 100,
   tooltip: 200,
 } as const;
-

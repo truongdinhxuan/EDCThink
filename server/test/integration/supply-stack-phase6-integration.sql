@@ -366,17 +366,17 @@ begin
       raise exception 'T-014 duplicate mismatch: %',v_error;
     end if;
     select * into v_order,v_item,v_balance,v_allocation
-    from pg_temp.make_p6_stack_case('WRONG_STATUS',v_stack_supply,v_provider,v_unit,v_from_area,v_to_area,v_actor,(select id from public.order_statuses where code='DRAFT'),19,2,5);
+    from pg_temp.make_p6_stack_case('WRONG_STATUS',v_stack_supply,v_provider,v_unit,v_from_area,v_to_area,v_actor,(select id from public.order_statuses where code='PENDING'),19,2,5);
     update public.order_item_allocations set actual_stack_quantity=2,confirmed_at=now() where id=v_allocation;
     for v_status_code in
-      select unnest(array['DRAFT','PENDING','CANCELLED','ISSUED','RECEIVED','COMPLETED'])
+      select unnest(array['PENDING','REJECTED','CANCELLED','ISSUED','RECEIVED','COMPLETED'])
     loop
       update public.orders
       set status_id=(select id from public.order_statuses where code=v_status_code)
       where id=v_order;
       v_error:=null;
       begin perform public.issue_order(v_order,v_actor,'[]'::jsonb,null,null); exception when others then v_error:=sqlerrm; end;
-      if (v_status_code in ('DRAFT','PENDING','CANCELLED') and v_error<>'ORDER_NOT_ISSUABLE')
+      if (v_status_code in ('PENDING','REJECTED','CANCELLED') and v_error<>'ORDER_NOT_ISSUABLE')
          or (v_status_code in ('ISSUED','RECEIVED','COMPLETED') and v_error<>'ORDER_ALREADY_ISSUED') then
         raise exception 'T-015 status % mismatch: %',v_status_code,v_error;
       end if;

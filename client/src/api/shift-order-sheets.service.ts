@@ -3,6 +3,7 @@ import instance from './http';
 import type { PaginatedResponse } from '../types/pagination.types';
 import type {
   ShiftOrderSheetDetail,
+  ShiftOrderSheetDetailParams,
   CurrentShiftOrderSheetResponse,
   ShiftOrderSheetListParams,
   ShiftOrderSheetSummary,
@@ -47,11 +48,12 @@ export const listShiftOrderSheets = (
 export const getShiftOrderSheet = async (
   id: string,
   signal?: AbortSignal,
+  params: ShiftOrderSheetDetailParams = {},
 ): Promise<ShiftOrderSheetDetail> => {
   const response = await instance.get<
     ApiEnvelope<ShiftOrderSheetDetail>,
     ApiEnvelope<ShiftOrderSheetDetail>
-  >(`supply/shift-order-sheets/${id}`, { signal });
+  >(`supply/shift-order-sheets/${id}`, { params, signal });
   return response.data;
 };
 

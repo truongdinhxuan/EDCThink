@@ -27,9 +27,14 @@ describe('Phase 11 persistent Supply notifications', () => {
     assert.doesNotMatch(routes, /verifyTokenAndRole|role\s*===|role\.includes/);
   });
 
-  it('emits only successful order status transitions and excludes DRAFT create', () => {
+  it('persists ORDER_CREATED after direct PENDING creation and transition notifications afterward', () => {
     const service = read('src/services/orders.service.ts');
-    assert.match(service, /submit[\s\S]*finishStatusTransition\(actor, order, NOTIFICATION_TYPE\.ORDER_CREATED\)/);
+    const createStart = service.indexOf('async create(');
+    const patchStart = service.indexOf('\n  async patch(', createStart);
+    const createBody = service.slice(createStart, patchStart);
+    assert.match(createBody, /create_pending_order_with_items/);
+    assert.match(createBody, /persistOrderCreated\(actor, order\)/);
+    assert.doesNotMatch(createBody, /finishStatusTransition/);
     for (const action of ['approve', 'reject', 'issue', 'receive', 'complete', 'cancel']) {
       const methodStart = service.indexOf(`async ${action}(`);
       assert.notEqual(methodStart, -1, `${action} method missing`);
@@ -37,9 +42,7 @@ describe('Phase 11 persistent Supply notifications', () => {
       const body = service.slice(methodStart, nextMethod === -1 ? undefined : nextMethod);
       assert.match(body, /finishStatusTransition\(actor, order/);
     }
-    const createStart = service.indexOf('async create(');
-    const patchStart = service.indexOf('\n  async patch(', createStart);
-    assert.doesNotMatch(service.slice(createStart, patchStart), /persistOrderTransition|finishStatusTransition/);
+    assert.doesNotMatch(service, /async submit\(|submit_order_to_pending/);
   });
 
   it('invalidates Supply views and targeted availability queries on live events', () => {

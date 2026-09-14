@@ -24,7 +24,7 @@ describe('Phase 4.0.1 database authorization repair', () => {
     const cancel = service.slice(service.indexOf('  async cancel('));
     assert.match(cancel, /this\.assertPackingOwner\(actor, order\)/);
     assert.match(cancel, /assertOrderActionAllowed\(currentStatus, 'cancel'\)/);
-    assert.match(cancel, /assertCancelReason\(currentStatus, body\?\.cancel_reason\)/);
+    assert.match(cancel, /assertCancelReason\(body\?\.cancel_reason\)/);
     assert.match(cancel, /\.update\(\{ status_id: cancelledStatusId, cancel_reason: cancelReason \}\)/);
     assert.match(cancel, /\.eq\('status_id', order\.status_id\)/);
     assert.match(service, /order\.requested_by !== actor\.id/);

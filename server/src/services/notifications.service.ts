@@ -127,6 +127,37 @@ export class NotificationsService {
       .map((candidate) => candidate.userId))];
   }
 
+  async persistOrderCreated(
+    actor: OrderReadAccess & { id: string },
+    order: SupplyOrderNotificationSource,
+  ): Promise<string | null> {
+    const recipientIds = await this.resolveOrderRecipients(order, actor.id);
+    if (recipientIds.length === 0) return null;
+
+    const statusLabel = order.status_lookup.name || order.status_lookup.code;
+    const { data, error } = await this.db.rpc('persist_notification_with_recipients', {
+      p_domain: NOTIFICATION_DOMAIN.SUPPLY,
+      p_type: NOTIFICATION_TYPE.ORDER_CREATED,
+      p_title: 'Order mới',
+      p_message: `Order ${order.code} đã được gửi và chuyển sang ${statusLabel}.`,
+      p_entity_type: 'order',
+      p_entity_id: order.id,
+      p_area_id: order.to_area_id,
+      p_created_by: actor.id,
+      p_event_key: [
+        NOTIFICATION_DOMAIN.SUPPLY,
+        'order',
+        order.id,
+        'created',
+        order.status_id,
+        order.updated_at,
+      ].join(':'),
+      p_recipient_ids: recipientIds,
+    });
+    if (error) databaseError(error, 'Không thể lưu thông báo Order');
+    return typeof data === 'string' ? data : null;
+  }
+
   async persistOrderTransition(
     actor: OrderReadAccess & { id: string },
     previous: SupplyOrderNotificationSource,

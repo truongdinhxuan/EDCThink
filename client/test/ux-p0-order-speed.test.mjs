@@ -37,7 +37,7 @@ describe('UX P0 — navigation priority', () => {
   });
 
   it('UXP0-044: navigation stays permission-driven, no role-name checks', () => {
-    assert.match(navigation, /anyPermissions: ORDER_READ_PERMISSIONS/);
+    assert.match(navigation, /permission: PERMISSION_CODE\.SUPPLY_SHIFT_ORDER_SHEET_READ/);
     assert.doesNotMatch(navigation, /role\s*===|role\.includes|allowedRoles|Đóng Gói/);
   });
 });

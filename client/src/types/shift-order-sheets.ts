@@ -95,4 +95,12 @@ export interface ShiftOrderSheetListParams extends PaginatedListParams {
   workShiftId?: string;
   leaderId?: string;
   areaId?: string;
+  statusId?: string;
+  categoryId?: string;
+}
+
+export interface ShiftOrderSheetDetailParams {
+  search?: string;
+  statusId?: string;
+  categoryId?: string;
 }

@@ -12,6 +12,7 @@ const UnauthorizedPage = () => {
       <h1 className="mt-2 text-2xl font-bold text-slate-900">Không có quyền truy cập</h1>
       <p className="mt-3 text-sm text-slate-500">
         Tài khoản chưa được gán một trong năm role hoặc không có quyền mở trang này.
+        Tài khoản chưa được cấp quyền truy cập chức năng này.
       </p>
       <Link
         to={role ? getRoleHomePath(role) : "/auth/login"}

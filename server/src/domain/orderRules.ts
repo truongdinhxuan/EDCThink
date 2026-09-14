@@ -2,7 +2,6 @@ import type { OrderStatus } from './enums';
 
 export type OrderAction =
   | 'edit'
-  | 'submit'
   | 'approve'
   | 'reject'
   | 'issue'
@@ -11,14 +10,13 @@ export type OrderAction =
   | 'cancel';
 
 const ACTION_STATUSES: Record<OrderAction, readonly OrderStatus[]> = {
-  edit: ['DRAFT', 'PENDING'],
-  submit: ['DRAFT'],
+  edit: ['PENDING'],
   approve: ['PENDING'],
   reject: ['PENDING'],
   issue: ['APPROVED', 'PARTIAL_ISSUED'],
   receive: ['ISSUED'],
   complete: ['RECEIVED', 'ISSUED'],
-  cancel: ['DRAFT', 'PENDING'],
+  cancel: ['PENDING'],
 };
 
 export class OrderRuleError extends Error {
@@ -48,13 +46,12 @@ export const assertRejectedReason = (reason: unknown): string => {
 };
 
 export const assertCancelReason = (
-  status: OrderStatus,
   reason: unknown,
-): string | null => {
-  if (status === 'PENDING' && (typeof reason !== 'string' || !reason.trim())) {
-    throw new OrderRuleError('cancel_reason is required for a PENDING order');
+): string => {
+  if (typeof reason !== 'string' || !reason.trim()) {
+    throw new OrderRuleError('cancel_reason is required');
   }
-  return typeof reason === 'string' && reason.trim() ? reason.trim() : null;
+  return reason.trim();
 };
 
 export const assertPositiveQuantity = (quantity: unknown, field: string): number => {
@@ -67,12 +64,12 @@ export const assertPositiveQuantity = (quantity: unknown, field: string): number
 
 export const assertApprovedQuantity = (
   quantityApproved: unknown,
-  quantityRequested: number,
+  _quantityRequested: number,
 ): number => {
   const value = Number(quantityApproved);
-  if (!Number.isFinite(value) || value <= 0 || value > quantityRequested) {
+  if (!Number.isFinite(value) || value < 0) {
     throw new OrderRuleError(
-      'quantity_approved must be greater than 0 and less than or equal to quantity_requested',
+      'quantity_approved must be greater than or equal to 0',
     );
   }
   return value;

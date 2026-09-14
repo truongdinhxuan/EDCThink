@@ -14,10 +14,8 @@ import {
 } from '../../src/domain/orderRules';
 
 describe('order state flow', () => {
-  it('supports DRAFT -> PENDING -> APPROVED -> PARTIAL_ISSUED -> ISSUED -> RECEIVED -> COMPLETED', () => {
-    let status: OrderStatus = 'DRAFT';
-    assert.doesNotThrow(() => assertOrderActionAllowed(status, 'submit'));
-    status = 'PENDING';
+  it('supports PENDING -> APPROVED -> PARTIAL_ISSUED -> ISSUED -> RECEIVED -> COMPLETED', () => {
+    let status: OrderStatus = 'PENDING';
     assert.doesNotThrow(() => assertOrderActionAllowed(status, 'approve'));
     status = 'APPROVED';
     assert.doesNotThrow(() => assertOrderActionAllowed(status, 'issue'));
@@ -39,7 +37,6 @@ describe('order state flow', () => {
 
   it('marks only issue as an order action with stock impact', () => {
     assert.equal(orderActionAffectsStock('edit'), false);
-    assert.equal(orderActionAffectsStock('submit'), false);
     assert.equal(orderActionAffectsStock('approve'), false);
     assert.equal(orderActionAffectsStock('reject'), false);
     assert.equal(orderActionAffectsStock('receive'), false);
@@ -50,10 +47,11 @@ describe('order state flow', () => {
 });
 
 describe('order quantity rules', () => {
-  it('rejects quantity_approved above quantity_requested', () => {
-    assert.throws(() => assertApprovedQuantity(0, 10), /greater than 0/);
-    assert.throws(() => assertApprovedQuantity(11, 10), /quantity_approved/);
+  it('allows zero and quantity_approved above quantity_requested', () => {
+    assert.equal(assertApprovedQuantity(0, 10), 0);
+    assert.equal(assertApprovedQuantity(11, 10), 11);
     assert.equal(assertApprovedQuantity(10, 10), 10);
+    assert.throws(() => assertApprovedQuantity(-1, 10), /greater than or equal to 0/);
   });
 
   it('reports current stock shortages without changing order quantities', () => {
@@ -86,10 +84,9 @@ describe('order reason and permission rules', () => {
     assert.equal(assertRejectedReason('not available'), 'not available');
   });
 
-  it('requires cancel_reason for PENDING but not DRAFT', () => {
-    assert.equal(assertCancelReason('DRAFT', undefined), null);
-    assert.throws(() => assertCancelReason('PENDING', ''), /cancel_reason/);
-    assert.equal(assertCancelReason('PENDING', 'changed plan'), 'changed plan');
+  it('requires cancel_reason for every cancellable Order', () => {
+    assert.throws(() => assertCancelReason(''), /cancel_reason/);
+    assert.equal(assertCancelReason(' changed plan '), 'changed plan');
   });
 
   it('uses permission codes for each operational capability', () => {

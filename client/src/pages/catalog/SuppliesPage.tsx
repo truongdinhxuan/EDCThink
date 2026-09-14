@@ -7,6 +7,7 @@ import { DataTable,type Column } from '../../components/common/DataTable';
 import { CrudEntityView } from '../../components/crud/CrudEntityView';
 import { CrudFeedbackToast,CrudPageHeader,ErrorState,inputClassName,RowActions,StatusBadge } from '../../components/crud/CrudPrimitives';
 import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
+import { FilterField,FilterSection,PageFilterLayout,PageFilterRail } from '../../components/filters';
 import { SupplyForm } from '../../components/forms/SupplyForm';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
@@ -72,7 +73,7 @@ const SuppliesPage = () => {
     { staleTime: 30 * 60 * 1000 },
   );
   const [searchInput, setSearchInput] = useState('');
-  const debouncedSearch = useDebounce(searchInput);
+  const debouncedSearch = useDebounce(searchInput, 400);
   const resourceSearch = resource.query.search;
   const updateResourceQuery = resource.updateQuery;
   const [editing, setEditing] = useState<Supply | null>(null);
@@ -132,7 +133,45 @@ const SuppliesPage = () => {
     ...(hasActions ? [{ header: 'Thao tác', accessor: 'actions', render: (item: Supply) => <RowActions onView={() => openView(item)} onEdit={canUpdate ? () => { setEditing(item); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} onDelete={canDelete ? (event) => confirmDeactivate(item, event) : undefined} deleteLabel="Ngừng sử dụng" /> }] : []),
   ];
 
-  return <div className="space-y-6">
+  const resetFilters = () => {
+    setSearchInput('');
+    resource.updateQuery({ categoryId: undefined, unitId: undefined, isActive: true });
+  };
+
+  return <PageFilterLayout rail={(
+    <PageFilterRail
+      title="Bộ lọc vật tư"
+      onReset={resetFilters}
+      resetDisabled={searchInput.length === 0
+        && !resource.query.categoryId
+        && !resource.query.unitId
+        && resource.query.isActive === true}
+    >
+      <FilterSection>
+        <FilterField label="Tìm kiếm">
+          <input type="search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Tìm mã hoặc mô tả vật tư..." className={inputClassName} />
+        </FilterField>
+        <FilterField label="Danh mục">
+          <select disabled={categories.loading && categories.items.length === 0} value={resource.query.categoryId ?? ''} onChange={(event) => resource.updateQuery({ categoryId: event.target.value || undefined })} className={inputClassName}>
+            <option value="">{categories.loading && categories.items.length === 0 ? 'Đang tải danh mục...' : 'Tất cả danh mục'}</option>
+            {categories.items.map((category) => <option key={category.id} value={category.id}>{category.code}</option>)}
+          </select>
+        </FilterField>
+        <FilterField label="Đơn vị">
+          <select disabled={units.loading && units.items.length === 0} value={resource.query.unitId ?? ''} onChange={(event) => resource.updateQuery({ unitId: event.target.value || undefined })} className={inputClassName}>
+            <option value="">{units.loading && units.items.length === 0 ? 'Đang tải đơn vị...' : 'Tất cả đơn vị'}</option>
+            {units.items.map((unit) => <option key={unit.id} value={unit.id}>{unit.code}</option>)}
+          </select>
+        </FilterField>
+        <FilterField label="Trạng thái">
+          <select value={resource.query.isActive === undefined ? '' : String(resource.query.isActive)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === '' ? undefined : event.target.value === 'true' })} className={inputClassName}>
+            <option value="">Tất cả trạng thái</option><option value="true">Đang hoạt động</option><option value="false">Ngừng hoạt động</option>
+          </select>
+        </FilterField>
+      </FilterSection>
+      {(categories.error || units.error) && <p role="alert" className="text-xs text-amber-700">Một số danh mục lọc chưa tải được.</p>}
+    </PageFilterRail>
+  )}><div className="min-w-0 space-y-6">
     <CrudPageHeader title="Supplies" description="Danh mục vật tư dùng cho tồn kho và order." createLabel="Thêm vật tư" onCreate={canCreate ? () => { setEditing(null); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} />
     <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
     {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable
@@ -141,20 +180,13 @@ const SuppliesPage = () => {
       loading={resource.loading}
       loadingText="Đang tải danh sách vật tư..."
       keyExtractor={(item) => item.id}
-      searchPlaceholder="Tìm mã hoặc mô tả vật tư..."
-      searchValue={searchInput}
-      onSearchChange={setSearchInput}
+      hideInternalSearch
       pagination={resource.pagination}
       onPageChange={resource.setPage}
       onPageSizeChange={resource.setPageSize}
       sortBy={resource.query.sortBy}
       sortOrder={resource.query.sortOrder}
       onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })}
-      renderTopToolbar={() => <>
-        <select value={resource.query.categoryId ?? ''} onChange={(event) => resource.updateQuery({ categoryId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả danh mục</option>{categories.items.map((category) => <option key={category.id} value={category.id}>{category.code}</option>)}</select>
-        <select value={resource.query.unitId ?? ''} onChange={(event) => resource.updateQuery({ unitId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả đơn vị</option>{units.items.map((unit) => <option key={unit.id} value={unit.id}>{unit.code}</option>)}</select>
-        <select value={resource.query.isActive === undefined ? '' : String(resource.query.isActive)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === '' ? undefined : event.target.value === 'true' })} className={inputClassName}><option value="">Tất cả trạng thái</option><option value="true">Đang hoạt động</option><option value="false">Ngừng hoạt động</option></select>
-      </>}
       emptyText="Không có vật tư phù hợp."
     />}
     {formOpen && (viewing || (editing ? canUpdate : canCreate)) && <PrimaryCrudDrawer mode={viewing ? 'view' : editing ? 'edit' : 'create'} size="lg" onEdit={viewing && canUpdate ? () => setViewing(false) : undefined} error={formError} title={viewing ? 'Chi tiết vật tư' : (editing ? 'Chỉnh sửa vật tư' : 'Tạo vật tư')} busy={resource.mutating} onClose={() => setFormOpen(false)}>{viewing && editing ? <CrudEntityView fields={[
@@ -173,7 +205,7 @@ const SuppliesPage = () => {
             { label: 'Ngày tạo', value: new Date(editing.created_at).toLocaleString('vi-VN') },
             { label: 'Cập nhật', value: new Date(editing.updated_at).toLocaleString('vi-VN') },
           ]} /> : (<SupplyForm key={editing?.id ?? 'create'} item={editing} busy={resource.mutating} categories={categories.items} categoriesLoading={categories.loading} categoriesError={categories.error} units={units.items} unitsLoading={units.loading} unitsError={units.error} providers={providers.items} providersLoading={providers.loading} providersError={providers.error} onSave={save} />)}</PrimaryCrudDrawer>}
-  </div>;
+  </div></PageFilterLayout>;
 };
 
 export default SuppliesPage;

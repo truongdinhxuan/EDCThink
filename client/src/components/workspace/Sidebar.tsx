@@ -6,6 +6,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { Link } from "react-router-dom";
 import { AppTooltip } from "../common/AppTooltip";
+import { APP_LAYER } from "../../constants/layers";
 import { IconButton } from "../common/Button";
 import { buildWorkspaceNavigation } from "../../constants/workspaceNavigation";
 import {
@@ -30,7 +31,7 @@ const Sidebar = ({
   pathname,
 }: SidebarProps) => {
   const {
-    user, role, hasPermission, hasAnyPermission, hasAllPermissions,
+    role, hasPermission, hasAnyPermission, hasAllPermissions,
   } = useAuth();
   const navigation = buildWorkspaceNavigation(
     role,
@@ -44,14 +45,6 @@ const Sidebar = ({
   const milkrunTripsPath = getWorkspacePath(role, "milkrun/trips");
   const createMilkrunTripPath = getWorkspacePath(role, "milkrun/trips/create");
   const myMilkrunTripsPath = getWorkspacePath(role, "milkrun/trips/my");
-  const profile = user?.publicData;
-  const displayName = [profile?.last_name, profile?.first_name]
-    .filter(Boolean)
-    .join(" ") || profile?.email || "Người dùng";
-  const roleDisplayName =
-    profile?.role && typeof profile.role === "object"
-      ? profile.role.name
-      : role ?? "Guest";
 
   const checkActive = (to: string) => {
     if (to === ordersPath) {
@@ -70,10 +63,10 @@ const Sidebar = ({
   return (
     <aside
       id="sidebar"
-      className={`workspace-sidebar fixed inset-y-0 left-0 z-40 flex h-screen h-dvh w-72 max-w-[calc(100vw-1rem)] shrink-0 flex-col overflow-hidden border-r border-slate-100 bg-white shadow-2xl md:relative md:inset-y-auto md:m-3 md:h-auto md:max-w-none md:self-stretch md:translate-x-0 md:rounded-3xl lg:m-4
-        ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"}
+      className={`transition-all duration-200 ease-in-out fixed inset-y-0 left-0 flex h-screen h-dvh w-72 max-w-[calc(100vw-1rem)] shrink-0 flex-col overflow-hidden border-r border-slate-100 bg-white shadow-2xl md:relative md:inset-y-auto md:m-3 md:h-auto md:max-w-none md:self-stretch md:translate-x-0 md:visible md:rounded-3xl lg:m-4
+        ${isMobileSidebarOpen ? "visible translate-x-0" : "invisible -translate-x-full"}
         ${isSidebarCollapsed ? "md:w-[4.5rem]" : "md:w-64"}`}
-      data-mobile-open={isMobileSidebarOpen}
+      style={{ zIndex: APP_LAYER.navigation }}
     >
       <div className={`w-full shrink-0 pb-4 pt-5 ${isSidebarCollapsed ? "px-3 md:px-2" : "px-5"}`}>
         <div className={`flex items-center justify-between gap-2 ${isSidebarCollapsed ? "md:flex-col" : ""}`}>
@@ -83,11 +76,11 @@ const Sidebar = ({
             className="flex shrink-0 items-center rounded-lg p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             aria-label="Về trang tổng quan"
           >
-            <img
-              className="w-9"
-              src="https://upload.wikimedia.org/wikipedia/commons/4/43/VinFast_logo_%28simple_variant%29.svg"
-              alt="VinFast"
-            />
+            {isSidebarCollapsed ? <img
+              className="w-9 animate-bounce"
+              src="https://res.cloudinary.com/pz6tbgyt/image/upload/v1789314542/EdcThink_logo.png"
+              alt="EDCThink"
+            /> : <span className="text-lg font-bold font-mono">EDCThink</span>}
           </Link>
           <div className="flex shrink-0 gap-1">
             <AppTooltip content="Đóng menu" side="bottom">
@@ -105,7 +98,7 @@ const Sidebar = ({
               <button
                 type="button"
                 onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                className={`${IconButton} !hidden md:!inline-flex`}
+                className={`${IconButton} !hidden md:!inline-flex `}
                 aria-label={isSidebarCollapsed ? "Mở rộng menu" : "Thu gọn menu"}
                 aria-expanded={!isSidebarCollapsed}
               >
@@ -117,7 +110,7 @@ const Sidebar = ({
       </div>
 
       <nav
-        className={`flex min-h-0 w-full flex-1 flex-col gap-6 overflow-x-hidden overflow-y-auto overscroll-contain pb-6 [scrollbar-gutter:stable] ${isSidebarCollapsed ? "px-4 md:px-2" : "px-5"}`}
+        className={`flex min-h-0 w-full flex-1 flex-col gap-6 overflow-x-hidden overflow-y-auto overscroll-contain pb-6 scrollbar-none [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${isSidebarCollapsed ? "px-4 md:px-2" : "px-5"}`}
         aria-label="Điều hướng workspace"
       >
         {navigation.map((catalog) => (
@@ -162,26 +155,6 @@ const Sidebar = ({
         ))}
       </nav>
 
-      <div className={`w-full shrink-0 border-t border-slate-100 bg-white ${isSidebarCollapsed ? "p-3 md:px-2" : "p-4"}`}>
-        <AppTooltip
-          content={`${displayName} — ${roleDisplayName}`}
-          side="right"
-          disabled={!isSidebarCollapsed || isMobileSidebarOpen}
-        >
-          <div className={`flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 p-2 ${isSidebarCollapsed ? "md:justify-center" : ""}`}>
-              <img
-                src={profile?.avatar_url || "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png"}
-                alt=""
-                aria-hidden="true"
-                className="h-10 w-10 shrink-0 rounded-full border-slate-200 object-cover shadow"
-              />
-            <div className={`min-w-0 flex-1 ${isSidebarCollapsed ? "md:hidden" : ""}`}>
-              <p className="truncate text-sm font-bold text-slate-700">{displayName}</p>
-              <p className="truncate text-[11px] text-slate-500">{roleDisplayName}</p>
-            </div>
-          </div>
-        </AppTooltip>
-      </div>
     </aside>
   );
 };

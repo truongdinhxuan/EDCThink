@@ -26,7 +26,7 @@ describe('master data CRUD contracts', () => {
       const expectedGetRoutes = feature === 'supplies'
         ? 5
         : feature === 'roles'
-          ? 3
+          ? 4
           : 2;
       assert.equal(
         (source.match(/fastify\.get\(/g) ?? []).length,
@@ -34,7 +34,7 @@ describe('master data CRUD contracts', () => {
         `${feature} GET routes`,
       );
       assert.equal((source.match(/fastify\.post\(/g) ?? []).length, 1, `${feature} POST route`);
-      assert.equal((source.match(/fastify\.put\(/g) ?? []).length, feature === 'roles' ? 1 : 0, `${feature} PUT route`);
+      assert.equal((source.match(/fastify\.put\(/g) ?? []).length, feature === 'roles' ? 2 : 0, `${feature} PUT route`);
       assert.equal((source.match(/fastify\.patch\(/g) ?? []).length, 1, `${feature} PATCH route`);
       assert.equal((source.match(/fastify\.delete\(/g) ?? []).length, 1, `${feature} DELETE route`);
     }
@@ -42,7 +42,6 @@ describe('master data CRUD contracts', () => {
 
   it('guards catalog mutations by permission code instead of role name', () => {
     for (const source of [
-      routeFiles.areas,
       routeFiles.categories,
       routeFiles.units,
       routeFiles.supplies,
@@ -55,6 +54,15 @@ describe('master data CRUD contracts', () => {
       assert.doesNotMatch(source, /verifyTokenAndRole/);
     }
     assert.equal(PERMISSION_CODE.SUPPLY_CATALOG_CREATE, 'supply.catalog.create');
+  });
+
+  it('guards Area CRUD with dedicated permissions', () => {
+    assert.match(routeFiles.areas, /PERMISSION_CODE\.SUPPLY_AREA_READ/);
+    assert.match(routeFiles.areas, /PERMISSION_CODE\.SUPPLY_AREA_CREATE/);
+    assert.match(routeFiles.areas, /PERMISSION_CODE\.SUPPLY_AREA_UPDATE/);
+    assert.match(routeFiles.areas, /PERMISSION_CODE\.SUPPLY_AREA_DEACTIVATE/);
+    assert.doesNotMatch(routeFiles.areas, /PERMISSION_CODE\.SUPPLY_CATALOG_/);
+    assert.doesNotMatch(routeFiles.areas, /verifyTokenAndRole/);
   });
 
   it('maps unique constraint failures to a stable HTTP 409 error', () => {

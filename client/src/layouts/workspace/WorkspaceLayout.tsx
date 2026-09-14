@@ -6,21 +6,31 @@ import Footer from "../../components/workspace/Footer";
 import { LiveNotificationToast } from "../../components/notifications/LiveNotificationToast";
 import { useSupplyRealtime } from "../../hooks/useSupplyRealtime";
 import { OffcanvasProvider } from "../../components/offcanvas";
+import { FilterRailProvider } from "../../components/filters";
+import { useFilterRail } from "../../hooks/useFilterRail";
 import { useBodyScrollLock } from "../../utils/bodyScrollLock";
+import { APP_LAYER } from "../../constants/layers";
 
-export const WorkspaceLayout = () => {
-  const location = useLocation();
-  const pathname = location.pathname;
-  const locationKey = location.key;
-  
+const WorkspaceLayoutContent = ({
+  pathname,
+  locationKey,
+  mobileSidebarOpenLocationKey,
+  setMobileSidebarOpenLocationKey,
+}: {
+  pathname: string;
+  locationKey: string;
+  mobileSidebarOpenLocationKey: string | null;
+  setMobileSidebarOpenLocationKey: (value: string | null) => void;
+}) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() =>
     localStorage.getItem("vf.sidebar.collapsed") === "true"
   );
-  const [mobileSidebarOpenLocationKey, setMobileSidebarOpenLocationKey] = useState<string | null>(null);
   const isMobileSidebarOpen = mobileSidebarOpenLocationKey === locationKey;
+  const { closeFilterRail } = useFilterRail();
   const setIsMobileSidebarOpen = useCallback((open: boolean) => {
+    if (open) closeFilterRail(undefined, false);
     setMobileSidebarOpenLocationKey(open ? locationKey : null);
-  }, [locationKey]);
+  }, [closeFilterRail, locationKey, setMobileSidebarOpenLocationKey]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
 
@@ -80,14 +90,18 @@ export const WorkspaceLayout = () => {
   useBodyScrollLock(isMobileSidebarOpen, "mobile-sidebar");
 
   return (
-    <OffcanvasProvider onDrawerOpen={() => setIsMobileSidebarOpen(false)}>
+    <OffcanvasProvider onDrawerOpen={() => {
+      setIsMobileSidebarOpen(false);
+      closeFilterRail(undefined, false);
+    }}>
       <div className="relative flex h-screen h-dvh min-h-0 w-full max-w-full overflow-hidden bg-slate-50 font-sans text-slate-900">
         <LiveNotificationToast notification={realtime.toast} onDismiss={realtime.dismissToast} />
 
       {/* LỚP PHỦ MỜ KHI MỞ SIDEBAR TRÊN MOBILE */}
         <button
           type="button"
-          className="workspace-sidebar-backdrop fixed inset-0 z-30 bg-slate-900/50 backdrop-blur-sm md:hidden"
+          className="workspace-sidebar-backdrop fixed inset-0 bg-slate-900/50 backdrop-blur-sm md:hidden"
+          style={{ zIndex: APP_LAYER.navigationBackdrop }}
           data-open={isMobileSidebarOpen}
           onClick={() => setIsMobileSidebarOpen(false)}
           aria-label="Đóng menu"
@@ -122,7 +136,7 @@ export const WorkspaceLayout = () => {
         />
 
         <div className="z-10 min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3 sm:p-5 lg:px-8">
-          <div className="mx-auto min-w-0 max-w-7xl space-y-6">
+          <div className="lg:pl-3 lg:pr-6 space-y-6">
             <Outlet context={{ searchQuery, setSearchQuery }} />
           </div>
         </div>
@@ -131,4 +145,21 @@ export const WorkspaceLayout = () => {
       </div>
     </OffcanvasProvider>
   );
-}
+};
+
+export const WorkspaceLayout = () => {
+  const location = useLocation();
+  const [mobileSidebarOpenLocationKey, setMobileSidebarOpenLocationKey] = useState<string | null>(null);
+  const closeMobileSidebar = useCallback(() => setMobileSidebarOpenLocationKey(null), []);
+
+  return (
+    <FilterRailProvider onRailOpen={closeMobileSidebar}>
+      <WorkspaceLayoutContent
+        pathname={location.pathname}
+        locationKey={location.key}
+        mobileSidebarOpenLocationKey={mobileSidebarOpenLocationKey}
+        setMobileSidebarOpenLocationKey={setMobileSidebarOpenLocationKey}
+      />
+    </FilterRailProvider>
+  );
+};

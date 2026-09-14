@@ -2,112 +2,38 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
-import {
-  createAndSubmitOrder,
-  DraftSubmitError,
-} from '../src/components/orders/createOrderOrchestration.ts';
 
 const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 
-describe('Phase 3 Shift Order create orchestration', () => {
-  it('creates one Draft and submits that same Draft to PENDING', async () => {
-    const stages = [];
-    let createCount = 0;
-    let submitCount = 0;
-    const result = await createAndSubmitOrder({
-      draft: null,
-      createDraft: async () => {
-        createCount += 1;
-        return { id: 'draft-1', status: 'DRAFT' };
-      },
-      submitDraft: async (draft) => {
-        submitCount += 1;
-        assert.equal(draft.id, 'draft-1');
-        return { ...draft, status: 'PENDING', shift_order_sheet_id: 'sheet-1' };
-      },
-      onDraftCreated: () => undefined,
-      onStageChange: (stage) => stages.push(stage),
-    });
-
-    assert.equal(createCount, 1);
-    assert.equal(submitCount, 1);
-    assert.equal(result.status, 'PENDING');
-    assert.deepEqual(stages, ['creating-draft', 'draft-created', 'submitting', 'success']);
+describe('Create Order direct-PENDING offcanvas contract', () => {
+  it('uses one atomic create request and has no client submit-Draft orchestration', () => {
+    const form = read('src/components/orders/CreateOrderForm.tsx');
+    const api = read('src/api/orders.service.ts');
+    assert.match(form, /const created = await createOrder\(buildPayload\(values\)\)/);
+    assert.match(form, /setStage\('creating'\)/);
+    assert.match(form, /setStage\('success'\)/);
+    assert.match(form, /setStage\('create-failed'\)/);
+    assert.doesNotMatch(form, /submitOrder|draftOrder|createAndSubmitOrder/);
+    assert.doesNotMatch(api, /submitOrder|\/:id\/submit/);
   });
 
-  it('retries submit without creating a duplicate Draft', async () => {
-    let persistedDraft = null;
-    let createCount = 0;
-    let submitCount = 0;
-    const createDraft = async () => {
-      createCount += 1;
-      return { id: 'draft-retry', code: 'ORD-RETRY' };
-    };
-    const submitDraft = async (draft) => {
-      submitCount += 1;
-      if (submitCount === 1) throw new Error('ORDER_ITEM_ZERO_STOCK');
-      return { ...draft, status: 'PENDING' };
-    };
-
-    await assert.rejects(
-      createAndSubmitOrder({
-        draft: persistedDraft,
-        createDraft,
-        submitDraft,
-        onDraftCreated: (draft) => { persistedDraft = draft; },
-        onStageChange: () => undefined,
-      }),
-      DraftSubmitError,
-    );
-
-    const result = await createAndSubmitOrder({
-      draft: persistedDraft,
-      createDraft,
-      submitDraft,
-      onDraftCreated: (draft) => { persistedDraft = draft; },
-      onStageChange: () => undefined,
-    });
-
-    assert.equal(createCount, 1);
-    assert.equal(submitCount, 2);
-    assert.equal(result.status, 'PENDING');
-  });
-
-  it('does not call submit when Draft creation fails', async () => {
-    let submitCount = 0;
-    await assert.rejects(createAndSubmitOrder({
-      draft: null,
-      createDraft: async () => { throw new Error('create failed'); },
-      submitDraft: async () => {
-        submitCount += 1;
-        return null;
-      },
-      onDraftCreated: () => undefined,
-      onStageChange: () => undefined,
-    }), /create failed/);
-    assert.equal(submitCount, 0);
-  });
-});
-
-describe('Phase 3 Create Order offcanvas contract', () => {
-  it('extracts a route-independent RHF form and keeps the legacy route wrapper', () => {
+  it('extracts a route-independent RHF form and keeps the route wrapper', () => {
     const form = read('src/components/orders/CreateOrderForm.tsx');
     const page = read('src/pages/orders/CreateOrderPage.tsx');
     assert.match(form, /useForm<CreateOrderFormValues>/);
     assert.match(form, /useFieldArray/);
     assert.doesNotMatch(form, /useNavigate|useSearchParams|<Link/);
     assert.match(page, /<CreateOrderForm/);
-    assert.match(page, /mode="draft-only"/);
     assert.match(page, /navigate\(`\$\{ordersPath\}\/\$\{order\.id\}/);
+    assert.doesNotMatch(page, /draft-only|DRAFT/);
   });
 
   it('opens creation on the Sheet through shared offcanvas without route navigation', () => {
     const sheet = read('src/components/orders/ShiftOrderSheetWorkspace.tsx');
     assert.match(sheet, /openCrud\(/);
-    assert.match(sheet, /mode="shift-sheet-submit"/);
-    assert.match(sheet, /Gửi Order/);
-    assert.doesNotMatch(sheet, /createPath/);
-    assert.doesNotMatch(sheet, /orders\/create\?shiftOrderSheetId/);
+    assert.match(sheet, /submitLabel="Gửi Order"/);
+    assert.match(sheet, /submittingLabel="Đang gửi Order\.\.\."/);
+    assert.doesNotMatch(sheet, /createPath|shift-sheet-submit|draftOrder/);
   });
 
   it('uses effective permission and targeted query invalidation', () => {
@@ -117,19 +43,8 @@ describe('Phase 3 Create Order offcanvas contract', () => {
     assert.match(sheet, /queryKeys\.orders\.lists/);
     assert.match(sheet, /queryKeys\.shiftOrderSheets\.detail\(sheetId\)/);
     assert.match(sheet, /queryKeys\.shiftOrderSheets\.current/);
-    assert.match(sheet, /queryKeys\.shiftOrderSheets\.lists/);
+    assert.match(sheet, /queryKeys\.shiftOrderSheets\.histories/);
     assert.doesNotMatch(sheet, /queryKeys\.stockBalances|queryClient\.clear/);
-  });
-
-  it('locks persisted Draft values and exposes explicit recovery actions', () => {
-    const form = read('src/components/orders/CreateOrderForm.tsx');
-    const sheet = read('src/components/orders/ShiftOrderSheetWorkspace.tsx');
-    assert.match(form, /const formLocked = Boolean\(draftOrder\)/);
-    assert.match(form, /Order nháp .* đã được tạo nhưng chưa thể gửi/);
-    assert.doesNotMatch(form, /reset\(/);
-    assert.match(sheet, /Thử gửi lại/);
-    assert.match(sheet, /Mở Order nháp/);
-    assert.match(sheet, /Order nháp chưa được gửi/);
   });
 
   it('preserves Stack, Provider and fixed Area behavior in the shared form', () => {
@@ -146,9 +61,9 @@ describe('Phase 3 Create Order offcanvas contract', () => {
     const form = read('src/components/orders/CreateOrderForm.tsx');
     const sheet = read('src/components/orders/ShiftOrderSheetWorkspace.tsx');
     assert.match(form, /if \(isBusy\) return/);
-    assert.match(form, /isDirty: isDirty && !draftOrder/);
+    assert.match(form, /isDirty,/);
     assert.match(sheet, /preventCloseWhileBusy: true/);
     assert.match(sheet, /initialFocusRef/);
-    assert.match(sheet, /requestPersistedDraftClose/);
+    assert.doesNotMatch(sheet, /requestPersistedDraftClose/);
   });
 });

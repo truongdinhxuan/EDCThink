@@ -7,9 +7,7 @@ import {
   faDashboard,
   faLayerGroup,
   faLocationDot,
-  faPlus,
   faRightLeft,
-  faRoute,
   faRulerCombined,
   faSliders,
   faTruck,
@@ -76,7 +74,7 @@ const WORKSPACE_NAVIGATION: readonly WorkspaceNavigationCatalogDefinition[] = [
       items: [
         { path: 'dashboard', label: 'Tổng quan', icon: faDashboard, anyPermissions: OVERVIEW_PERMISSIONS },
         { path: 'dashboard/supply', label: 'Vật tư tiêu hao', icon: faChartLine, permission: PERMISSION_CODE.SUPPLY_DASHBOARD_READ },
-        { path: 'dashboard/milkrun', label: 'Milkrun', icon: faRoute, permission: PERMISSION_CODE.MILKRUN_DASHBOARD_READ },
+        // { path: 'dashboard/milkrun', label: 'Milkrun', icon: faRoute, permission: PERMISSION_CODE.MILKRUN_DASHBOARD_READ },
       ],
     }],
   },
@@ -90,19 +88,18 @@ const WORKSPACE_NAVIGATION: readonly WorkspaceNavigationCatalogDefinition[] = [
           // orders against the current shift; "Orders" is the historical/search
           // workspace. Direct "Tạo order" is demoted from the sidebar — the route
           // stays registered and stays reachable from "+ Thêm Order" on the Sheet.
-          { path: 'shift-order-sheets', label: 'Phiếu order ca', icon: faClipboardList, anyPermissions: ORDER_READ_PERMISSIONS },
-          { path: 'orders', label: 'Orders (lịch sử)', icon: faClockRotateLeft, anyPermissions: ORDER_READ_PERMISSIONS },
+          { path: 'shift-order-sheets', label: 'Phiếu order ca', icon: faClipboardList, permission: PERMISSION_CODE.SUPPLY_SHIFT_ORDER_SHEET_READ },
+          { path: 'orders', label: 'Order lịch sử', icon: faClockRotateLeft, anyPermissions: ORDER_READ_PERMISSIONS },
           { path: 'stock-balances', label: 'Vật tư tồn kho', icon: faWarehouse, permission: PERMISSION_CODE.SUPPLY_STOCK_READ },
           { path: 'stock-transactions', label: 'Giao dịch vật tư', icon: faClockRotateLeft, permission: PERMISSION_CODE.SUPPLY_STOCK_READ },
           { path: 'stock-adjustments', label: 'Điều chỉnh giao dịch', icon: faSliders, permission: PERMISSION_CODE.SUPPLY_STOCK_ADJUST },
-          { path: 'stock-transfers', label: 'Chuyển kho', icon: faRightLeft, permission: PERMISSION_CODE.SUPPLY_STOCK_ADJUST },
         ],
       },
       {
         label: 'Quản lý mã',
         items: [
           { path: 'supplies', label: 'Vật tư', icon: faTruck, permission: PERMISSION_CODE.SUPPLY_CATALOG_READ },
-          { path: 'supply-categories', label: 'Vật tư categories', icon: faLayerGroup, permission: PERMISSION_CODE.SUPPLY_CATALOG_READ },
+          { path: 'supply-categories', label: 'Loại vật tư', icon: faLayerGroup, permission: PERMISSION_CODE.SUPPLY_CATALOG_READ },
           { path: 'providers', label: 'Nhà cung cấp', icon: faBuilding, permission: PERMISSION_CODE.SUPPLY_CATALOG_READ },
           { path: 'units', label: 'Đơn vị', icon: faRulerCombined, permission: PERMISSION_CODE.SUPPLY_CATALOG_READ },
           { path: 'storage-locations', label: 'Khu vực lưu kho', icon: faLocationDot, permission: PERMISSION_CODE.SUPPLY_CATALOG_READ },
@@ -110,43 +107,50 @@ const WORKSPACE_NAVIGATION: readonly WorkspaceNavigationCatalogDefinition[] = [
       },
     ],
   },
-  {
-    label: 'Milkrun',
-    groups: [
-      {
-        label: 'Vận hành',
-        items: [
-          { path: 'milkrun/trips/create', label: 'Đăng ký chuyến', icon: faPlus, permission: PERMISSION_CODE.MILKRUN_TRIP_CREATE },
-          { path: 'milkrun/trips/my', label: 'Chuyến đi của tôi', icon: faRoute, permission: PERMISSION_CODE.MILKRUN_TRIP_READ_OWN },
-          { path: 'milkrun/trips', label: 'Tất cả chuyến đi', icon: faClipboardList, permission: PERMISSION_CODE.MILKRUN_TRIP_READ_ALL },
-        ],
-      },
-      {
-        label: 'Quản lý tồn',
-        items: [
-          { path: 'milkrun/stock', label: 'Tồn rack', icon: faWarehouse, permission: PERMISSION_CODE.MILKRUN_STOCK_READ },
-          { path: 'milkrun/transactions', label: 'Giao dịch rack', icon: faClockRotateLeft, permission: PERMISSION_CODE.MILKRUN_STOCK_READ },
-          { path: 'milkrun/adjustments', label: 'Cân / điều chỉnh tồn', icon: faSliders, permission: PERMISSION_CODE.MILKRUN_STOCK_ADJUST },
-        ],
-      },
-      {
-        label: 'Quản lý danh mục',
-        items: [
-          { path: 'milkrun/racks', label: 'Rack', icon: faLayerGroup, permission: PERMISSION_CODE.MILKRUN_RACK_READ },
-          { path: 'milkrun/shops', label: 'Shop', icon: faBuilding, permission: PERMISSION_CODE.MILKRUN_SHOP_READ },
-          { path: 'milkrun/trip-types', label: 'Loại chuyến', icon: faRightLeft, permission: PERMISSION_CODE.MILKRUN_TRIP_TYPE_READ },
-          { path: 'milkrun/trip-statuses', label: 'Trạng thái chuyến', icon: faClockRotateLeft, permission: PERMISSION_CODE.MILKRUN_TRIP_STATUS_READ },
-          { path: 'milkrun/vehicles', label: 'Xe', icon: faTruck, permission: PERMISSION_CODE.MILKRUN_VEHICLE_READ },
-        ],
-      },
-      {
-        label: 'Báo cáo',
-        items: [
-          { path: 'dashboard/milkrun', label: 'Dashboard Milkrun', icon: faChartLine, permission: PERMISSION_CODE.MILKRUN_DASHBOARD_READ },
-        ],
-      },
-    ],
-  },
+
+  /**
+   *
+   *
+   *  Legacy Milkrun navigation (to be removed in the future)
+   *
+   */
+  // {
+  //   label: 'Milkrun',
+  //   groups: [
+  //     {
+  //       label: 'Vận hành',
+  //       items: [
+  //         { path: 'milkrun/trips/create', label: 'Đăng ký chuyến', icon: faPlus, permission: PERMISSION_CODE.MILKRUN_TRIP_CREATE },
+  //         { path: 'milkrun/trips/my', label: 'Chuyến đi của tôi', icon: faRoute, permission: PERMISSION_CODE.MILKRUN_TRIP_READ_OWN },
+  //         { path: 'milkrun/trips', label: 'Tất cả chuyến đi', icon: faClipboardList, permission: PERMISSION_CODE.MILKRUN_TRIP_READ_ALL },
+  //       ],
+  //     },
+  //     {
+  //       label: 'Quản lý tồn',
+  //       items: [
+  //         { path: 'milkrun/stock', label: 'Tồn rack', icon: faWarehouse, permission: PERMISSION_CODE.MILKRUN_STOCK_READ },
+  //         { path: 'milkrun/transactions', label: 'Giao dịch rack', icon: faClockRotateLeft, permission: PERMISSION_CODE.MILKRUN_STOCK_READ },
+  //         { path: 'milkrun/adjustments', label: 'Cân / điều chỉnh tồn', icon: faSliders, permission: PERMISSION_CODE.MILKRUN_STOCK_ADJUST },
+  //       ],
+  //     },
+  //     {
+  //       label: 'Quản lý danh mục',
+  //       items: [
+  //         { path: 'milkrun/racks', label: 'Rack', icon: faLayerGroup, permission: PERMISSION_CODE.MILKRUN_RACK_READ },
+  //         { path: 'milkrun/shops', label: 'Shop', icon: faBuilding, permission: PERMISSION_CODE.MILKRUN_SHOP_READ },
+  //         { path: 'milkrun/trip-types', label: 'Loại chuyến', icon: faRightLeft, permission: PERMISSION_CODE.MILKRUN_TRIP_TYPE_READ },
+  //         { path: 'milkrun/trip-statuses', label: 'Trạng thái chuyến', icon: faClockRotateLeft, permission: PERMISSION_CODE.MILKRUN_TRIP_STATUS_READ },
+  //         { path: 'milkrun/vehicles', label: 'Xe', icon: faTruck, permission: PERMISSION_CODE.MILKRUN_VEHICLE_READ },
+  //       ],
+  //     },
+  //     {
+  //       label: 'Báo cáo',
+  //       items: [
+  //         { path: 'dashboard/milkrun', label: 'Dashboard Milkrun', icon: faChartLine, permission: PERMISSION_CODE.MILKRUN_DASHBOARD_READ },
+  //       ],
+  //     },
+  //   ],
+  // },
   {
     label: 'Administration',
     groups: [{
@@ -154,7 +158,7 @@ const WORKSPACE_NAVIGATION: readonly WorkspaceNavigationCatalogDefinition[] = [
       items: [
         { path: 'users', label: 'Users', icon: faUsers, permission: PERMISSION_CODE.ADMIN_USER_READ },
         { path: 'roles', label: 'Roles', icon: faUserShield, permission: PERMISSION_CODE.ADMIN_ROLE_READ },
-        { path: 'areas', label: 'Areas', icon: faWarehouse, permission: PERMISSION_CODE.SUPPLY_CATALOG_READ },
+        { path: 'areas', label: 'Khu vực', icon: faWarehouse, permission: PERMISSION_CODE.SUPPLY_AREA_READ },
       ],
     }],
   },

@@ -68,8 +68,10 @@ const readSseEvent = async (reader, expectedEvent, timeoutMs = 8000) => {
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const ORIGIN_URL = process.env.ORIGIN_URL;
 assert.ok(supabaseUrl);
 assert.ok(supabaseServiceRoleKey);
+assert.ok(ORIGIN_URL, 'ORIGIN_URL must be provided by the test environment');
 const database = createClient(supabaseUrl, supabaseServiceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
@@ -113,7 +115,7 @@ try {
   });
   assert.equal(expiredAuth.status, 401);
   console.log('phase12-sse-auth: PASS');
-  const createDraftOrder = () => requestJson(runtime.baseUrl, ids.actor, '/orders', {
+  const createOrder = (overrides = {}) => requestJson(runtime.baseUrl, ids.actor, '/orders', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -127,6 +129,7 @@ try {
         quantity_requested: 1,
         note: null,
       }],
+      ...overrides,
     }),
   });
 
@@ -183,22 +186,10 @@ try {
   noneStreamController = undefined;
   console.log('phase12-stock-signal-scope: PASS');
 
-  const createResponse = await createDraftOrder();
+  const createResponse = await createOrder();
   assert.equal(createResponse.response.status, 201, JSON.stringify(createResponse.body));
   const createdOrder = createResponse.body.data;
-  assert.equal(createdOrder.status_lookup.code, 'DRAFT');
-  const draftNotificationCount = await database.from('notifications')
-    .select('id', { count: 'exact', head: true })
-    .eq('entity_id', createdOrder.id);
-  assert.equal(draftNotificationCount.count, 0);
-
-  const submitResponse = await requestJson(runtime.baseUrl, ids.actor, `/orders/${createdOrder.id}/submit`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({}),
-  });
-  assert.equal(submitResponse.response.status, 200, JSON.stringify(submitResponse.body));
-  assert.equal(submitResponse.body.data.status_lookup.code, 'PENDING');
+  assert.equal(createdOrder.status_lookup.code, 'PENDING');
   const liveCreated = await readSseEvent(reader, 'notification');
   const createdId = liveCreated.notification_id;
   assert.ok(createdId);
@@ -263,17 +254,7 @@ try {
   assert.equal(managerList.body.pagination.total, 1);
   assert.equal(managerList.body.unread_count, 1);
 
-  const failedRepeatSubmit = await requestJson(runtime.baseUrl, ids.actor, `/orders/${createdOrder.id}/submit`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({}),
-  });
-  assert.equal(failedRepeatSubmit.response.status, 409);
-  const afterFailedSubmit = await database.from('notifications')
-    .select('id', { count: 'exact', head: true }).eq('entity_id', createdOrder.id);
-  assert.equal(afterFailedSubmit.count, 1);
-
-  const approvalItems = submitResponse.body.data.order_items.map((item) => ({
+  const approvalItems = createdOrder.order_items.map((item) => ({
     order_item_id: item.id,
     quantity_approved: Number(item.quantity_requested),
   }));
@@ -308,47 +289,37 @@ try {
     .select('id', { count: 'exact', head: true }).eq('entity_id', createdOrder.id);
   assert.equal(afterFailedStatus.count, 2);
 
-  // A zero-stock submit remains DRAFT and does not persist/stream ORDER_CREATED.
+  // A zero-stock create rolls back the entire Order and emits no ORDER_CREATED.
   const zeroStockUpdate = await database.from('stock_balances')
     .update({ quantity: 0 }).eq('id', '69400000-0000-4000-8000-000000000022');
   assert.equal(zeroStockUpdate.error, null);
-  const zeroDraft = await createDraftOrder();
-  assert.equal(zeroDraft.response.status, 201);
-  const zeroSubmit = await requestJson(runtime.baseUrl, ids.actor, `/orders/${zeroDraft.body.data.id}/submit`, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}),
-  });
-  assert.equal(zeroSubmit.response.status, 409);
-  assert.equal(zeroSubmit.body.code, 'ORDER_ITEM_ZERO_STOCK');
-  const zeroOrder = await database.from('orders')
-    .select('status:order_statuses!orders_status_id_fkey(code),shift_order_sheet_id')
-    .eq('id', zeroDraft.body.data.id).single();
-  assert.equal(zeroOrder.error, null);
-  assert.equal(zeroOrder.data.status.code, 'DRAFT');
-  assert.equal(zeroOrder.data.shift_order_sheet_id, null);
-  const zeroNotifications = await database.from('notifications')
-    .select('id', { count: 'exact', head: true }).eq('entity_id', zeroDraft.body.data.id);
-  assert.equal(zeroNotifications.count, 0);
+  const ordersBeforeZeroCreate = await database.from('orders')
+    .select('id', { count: 'exact', head: true });
+  const notificationsBeforeZeroCreate = await database.from('notifications')
+    .select('id', { count: 'exact', head: true });
+  const zeroCreate = await createOrder();
+  assert.equal(zeroCreate.response.status, 409);
+  assert.equal(zeroCreate.body.code, 'ORDER_ITEM_ZERO_STOCK');
+  const ordersAfterZeroCreate = await database.from('orders')
+    .select('id', { count: 'exact', head: true });
+  const notificationsAfterZeroCreate = await database.from('notifications')
+    .select('id', { count: 'exact', head: true });
+  assert.equal(ordersAfterZeroCreate.count, ordersBeforeZeroCreate.count);
+  assert.equal(notificationsAfterZeroCreate.count, notificationsBeforeZeroCreate.count);
   const restoreStock = await database.from('stock_balances')
     .update({ quantity: 10 }).eq('id', '69400000-0000-4000-8000-000000000022');
   assert.equal(restoreStock.error, null);
 
   // A caller-supplied invalid Sheet context also cannot emit a notification.
-  const invalidSheetDraft = await createDraftOrder();
-  assert.equal(invalidSheetDraft.response.status, 201);
-  const invalidSheetSubmit = await requestJson(
-    runtime.baseUrl,
-    ids.actor,
-    `/orders/${invalidSheetDraft.body.data.id}/submit`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ shift_order_sheet_id: '69499999-0000-4000-8000-000000000099' }),
-    },
-  );
-  assert.ok([403, 409].includes(invalidSheetSubmit.response.status));
-  const invalidSheetNotifications = await database.from('notifications')
-    .select('id', { count: 'exact', head: true }).eq('entity_id', invalidSheetDraft.body.data.id);
-  assert.equal(invalidSheetNotifications.count, 0);
+  const ordersBeforeInvalidSheet = await database.from('orders')
+    .select('id', { count: 'exact', head: true });
+  const invalidSheetCreate = await createOrder({
+    shift_order_sheet_id: '69499999-0000-4000-8000-000000000099',
+  });
+  assert.ok([403, 409].includes(invalidSheetCreate.response.status));
+  const ordersAfterInvalidSheet = await database.from('orders')
+    .select('id', { count: 'exact', head: true });
+  assert.equal(ordersAfterInvalidSheet.count, ordersBeforeInvalidSheet.count);
 
   streamController.abort();
   await runtime.server.close();

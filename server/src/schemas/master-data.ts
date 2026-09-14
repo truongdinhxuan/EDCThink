@@ -60,6 +60,7 @@ export const roleListQuerySchema = createListQuerySchema(ROLE_SORT_FIELDS, {
 });
 export const areaListQuerySchema = createListQuerySchema(AREA_SORT_FIELDS, {
   q: legacySearch,
+  areaTypeId: uuid,
   is_active: optionalBoolean,
   isActive: optionalBoolean,
 });
@@ -110,6 +111,7 @@ const areaProperties = {
   code: { type: 'string', minLength: 1, maxLength: 100 },
   name: { type: 'string', minLength: 1, maxLength: 255 },
   description: nullableText,
+  area_type_id: { anyOf: [uuid, { type: 'null' }] },
   is_active: active,
 } as const;
 

@@ -5,7 +5,7 @@ import {
   getShiftOrderSheet,
   listShiftOrderSheets,
 } from '../../../controllers/shift-order-sheets';
-import { ORDER_READ_PERMISSIONS } from '../../../domain/order-access';
+import { PERMISSION_CODE } from '../../../domain/permission-codes';
 import { requirePermission, verifyToken } from '../../../middleware/auth';
 import {
   shiftOrderSheetDetailSchema,
@@ -17,11 +17,7 @@ import {
 const routes: FastifyPluginAsync = async (fastify) => {
   const readPermission = [
     verifyToken,
-    requirePermission({
-      anyOf: [
-        ...ORDER_READ_PERMISSIONS,
-      ],
-    }),
+    requirePermission(PERMISSION_CODE.SUPPLY_SHIFT_ORDER_SHEET_READ),
   ];
 
   fastify.get('/', {

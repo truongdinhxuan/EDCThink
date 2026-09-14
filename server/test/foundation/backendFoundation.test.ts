@@ -38,7 +38,6 @@ const interfaceProperties = (name: string): string[] => {
 describe('Phase 1 backend foundation', () => {
   it('uses lookup codes for workflow values without a hard-coded role list', () => {
     assert.deepEqual(ORDER_STATUSES, [
-      'DRAFT',
       'PENDING',
       'APPROVED',
       'REJECTED',
@@ -78,7 +77,7 @@ describe('Phase 1 backend foundation', () => {
       'is_deleted', 'created_at', 'updated_at',
     ]);
     assert.deepEqual(interfaceProperties('AreaRecord'), [
-      'id', 'code', 'name', 'description', 'is_active', 'is_deleted',
+      'id', 'code', 'name', 'description', 'area_type_id', 'is_active', 'is_deleted',
       'created_at', 'updated_at',
     ]);
     assert.deepEqual(interfaceProperties('UserRecord'), [

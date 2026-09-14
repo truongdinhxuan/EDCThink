@@ -15,6 +15,7 @@ RowActions,
 StatusBadge
 } from '../../components/crud/CrudPrimitives';
 import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
+import { FilterField,FilterSection,PageFilterLayout,PageFilterRail } from '../../components/filters';
 import { UserForm,type UserFormValues,type UserReferenceData } from '../../components/forms/UserForm';
 import { UserWorkShiftPanel } from '../../components/users/UserWorkShiftPanel';
 import { PERMISSION_CODE } from '../../constants/permissions';
@@ -85,7 +86,7 @@ const UsersPage = () => {
     errorMessage: 'Không thể tải danh sách người quản lý.',
   });
   const [searchInput, setSearchInput] = useState('');
-  const debouncedSearch = useDebounce(searchInput);
+  const debouncedSearch = useDebounce(searchInput, 400);
   const resourceSearch = resource.query.search;
   const updateResourceQuery = resource.updateQuery;
   const [editing, setEditing] = useState<UserProfile | null>(null);
@@ -189,8 +190,27 @@ const UsersPage = () => {
     { header: 'Thao tác', accessor: 'actions', render: (user: UserProfile) => <RowActions onView={() => openView(user)} onEdit={canUpdate ? () => void openUserForm(user) : undefined} onDelete={canUpdate && user.is_active ? (event) => confirmDeactivate(user, event) : undefined} deleteLabel="Ngừng sử dụng" /> },
   ];
 
+  const resetFilters = () => {
+    setSearchInput('');
+    resource.updateQuery({ roleId: undefined, areaId: undefined, isActive: undefined });
+  };
+
   return (
-    <div className="space-y-6">
+    <PageFilterLayout rail={(
+      <PageFilterRail
+        title="Bộ lọc người dùng"
+        onReset={resetFilters}
+        resetDisabled={searchInput.length === 0 && !resource.query.roleId && !resource.query.areaId && resource.query.isActive === undefined}
+      >
+        <FilterSection>
+          <FilterField label="Tìm kiếm"><input type="search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Tìm email, VinFast ID hoặc tên..." className={inputClassName} /></FilterField>
+          <FilterField label="Role"><select disabled={roles.loading && roles.items.length === 0} value={resource.query.roleId ?? ''} onChange={(event) => resource.updateQuery({ roleId: event.target.value || undefined })} className={inputClassName}><option value="">{roles.loading && roles.items.length === 0 ? 'Đang tải role...' : 'Tất cả role'}</option>{roles.items.map((role) => <option key={role.id} value={role.id}>{role.name} ({role.code})</option>)}</select></FilterField>
+          <FilterField label="Area"><select disabled={areas.loading && areas.items.length === 0} value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value || undefined })} className={inputClassName}><option value="">{areas.loading && areas.items.length === 0 ? 'Đang tải area...' : 'Tất cả area'}</option>{areas.items.map((area) => <option key={area.id} value={area.id}>{area.code}</option>)}</select></FilterField>
+          <FilterField label="Trạng thái"><select value={resource.query.isActive === undefined ? '' : String(resource.query.isActive)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === '' ? undefined : event.target.value === 'true' })} className={inputClassName}><option value="">Tất cả trạng thái</option><option value="true">Active</option><option value="false">Inactive</option></select></FilterField>
+        </FilterSection>
+        {(roles.error || areas.error) && <p role="alert" className="text-xs text-amber-700">Một số bộ lọc tham chiếu chưa tải được.</p>}
+      </PageFilterRail>
+    )}><div className="min-w-0 space-y-6">
       <CrudPageHeader title="Users" description="Quản lý hồ sơ, nhiều role, khu vực và trạng thái duyệt tài khoản." createLabel="Thêm người dùng" onCreate={canCreate ? () => void openUserForm(null) : undefined} />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
       {resource.error ? (
@@ -201,20 +221,13 @@ const UsersPage = () => {
           data={resource.items}
           loading={resource.loading}
           keyExtractor={(user) => user.id}
-          searchPlaceholder="Tìm email, VinFast ID hoặc tên..."
-          searchValue={searchInput}
-          onSearchChange={setSearchInput}
+          hideInternalSearch
           pagination={resource.pagination}
           onPageChange={resource.setPage}
           onPageSizeChange={resource.setPageSize}
           sortBy={resource.query.sortBy}
           sortOrder={resource.query.sortOrder}
           onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })}
-          renderTopToolbar={() => <>
-            <select value={resource.query.roleId ?? ''} onChange={(event) => resource.updateQuery({ roleId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả role</option>{roles.items.map((role) => <option key={role.id} value={role.id}>{role.name} ({role.code})</option>)}</select>
-            <select value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả area</option>{areas.items.map((area) => <option key={area.id} value={area.id}>{area.code}</option>)}</select>
-            <select value={resource.query.isActive === undefined ? '' : String(resource.query.isActive)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === '' ? undefined : event.target.value === 'true' })} className={inputClassName}><option value="">Tất cả trạng thái</option><option value="true">Active</option><option value="false">Inactive</option></select>
-          </>}
           emptyText="Không có người dùng phù hợp."
         />
       )}
@@ -235,7 +248,7 @@ const UsersPage = () => {
           {editing && <UserWorkShiftPanel userId={editing.id} canAssign={!viewing && canUpdate} />}
         </PrimaryCrudDrawer>
       )}
-    </div>
+    </div></PageFilterLayout>
   );
 };
 

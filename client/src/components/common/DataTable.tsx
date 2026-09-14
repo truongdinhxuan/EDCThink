@@ -17,6 +17,7 @@ interface DataTableProps<T> {
   searchPlaceholder?: string;
   searchValue?: string;
   onSearchChange?: (value: string) => void;
+  hideInternalSearch?: boolean;
   loading?: boolean;
   loadingText?: string;
   emptyText?: string;
@@ -36,6 +37,7 @@ export const DataTable = <T extends object>({
   searchPlaceholder = 'Search...',
   searchValue = '',
   onSearchChange,
+  hideInternalSearch = false,
   loading = false,
   loadingText = 'Đang tải dữ liệu...',
   emptyText = 'Không có dữ liệu.',
@@ -48,11 +50,14 @@ export const DataTable = <T extends object>({
   sortOrder = 'asc',
   onSortChange,
 }: DataTableProps<T>) => {
+  const showInternalSearch = Boolean(onSearchChange) && !hideInternalSearch;
+  const showInternalToolbar = showInternalSearch || Boolean(renderTopToolbar);
+
   if (loading && data.length === 0) {
     return (
       <TableSkeleton
         columns={columns.length}
-        showToolbar={Boolean(onSearchChange || renderTopToolbar)}
+        showToolbar={showInternalToolbar}
         showPagination={Boolean(pagination && onPageChange && onPageSizeChange)}
         label={loadingText}
       />
@@ -70,10 +75,10 @@ export const DataTable = <T extends object>({
           Đang cập nhật...
         </div>
       )}
-      {(onSearchChange || renderTopToolbar) && (
+      {showInternalToolbar && (
         <div className="flex min-w-0 flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
-            {onSearchChange && (
+            {showInternalSearch && onSearchChange && (
               <div className="flex items-center gap-2">
                 <label className="text-sm font-medium text-slate-700">Search:</label>
                 <input

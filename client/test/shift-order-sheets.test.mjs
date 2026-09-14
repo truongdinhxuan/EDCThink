@@ -29,9 +29,10 @@ describe('Supply Phase 9 shift-order-sheet UI', () => {
   it('registers list/detail routes and preserves the sheet context for Create More', () => {
     assert.match(routes, /path: 'shift-order-sheets'/);
     assert.match(routes, /path: 'shift-order-sheets\/:id'/);
-    assert.match(sheetWorkspace, /mode="shift-sheet-submit"/);
     assert.match(createOrderForm, /sheetContext\?\.id/);
-    assert.match(createOrderForm, /submitOrder\([\s\S]*sheetContext\?\.id/);
+    assert.match(createOrderForm, /shift_order_sheet_id: sheetContext\.id/);
+    assert.match(createOrderForm, /createOrder\(buildPayload\(values\)\)/);
+    assert.doesNotMatch(createOrderForm, /submitOrder|DRAFT/);
   });
 
   it('shows current Order status from related backend data', () => {
@@ -48,11 +49,10 @@ describe('Supply Phase 9 shift-order-sheet UI', () => {
     assert.doesNotMatch(sheetWorkspace, /\?\?\s*(sheet\.(leader_id|area_id|work_shift_id)|order\.requested_by)/);
   });
 
-  it('blocks submit only at zero stock and preserves warning-only shortage behavior', () => {
-    assert.match(orderDetail, /zeroStockItems\.length === 0/);
-    assert.match(orderDetail, /ORDER_ITEM_ZERO_STOCK/);
-    assert.match(orderDetail, /DRAFT/);
-    assert.match(availabilityWarning, /Order vẫn có thể submit hoặc approve/);
+  it('blocks atomic create at zero stock and preserves warning-only shortage behavior', () => {
+    assert.match(createOrderForm, /Không thể tạo và gửi Order/);
+    assert.doesNotMatch(orderDetail, /DRAFT|submitOrder/);
+    assert.match(availabilityWarning, /Order vẫn có thể được tạo\/gửi hoặc approve/);
     assert.match(availabilityWarning, /Tồn sẽ được kiểm tra lại khi issue/);
   });
 
@@ -61,7 +61,7 @@ describe('Supply Phase 9 shift-order-sheet UI', () => {
     assert.match(sheetApi, /content-disposition/);
     assert.match(sheetWorkspace, /Xuất Excel/);
     assert.match(sheetWorkspace, /Đang xuất\.\.\./);
-    assert.match(sheetWorkspace, /ORDER_READ_PERMISSIONS/);
+    assert.match(sheetWorkspace, /SUPPLY_SHIFT_ORDER_SHEET_READ/);
     assert.match(sheetWorkspace, /URL\.createObjectURL/);
     assert.match(http, /response\.config\.responseType === 'blob'/);
     assert.match(http, /:\s*response\.data/);

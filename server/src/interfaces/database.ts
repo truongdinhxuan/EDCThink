@@ -64,10 +64,29 @@ export interface AreaRecord {
   code: string;
   name: string;
   description: string | null;
+  area_type_id: string | null;
   is_active: boolean;
   is_deleted: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface AreaTypeRecord {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoleAreaTypeScopeRecord {
+  id: string;
+  role_id: string;
+  area_type_id: string;
+  created_at: string;
 }
 
 export interface UserRecord {
@@ -428,6 +447,8 @@ export interface DatabaseRecordMap {
   permissions: PermissionRecord;
   role_permissions: RolePermissionRecord;
   user_roles: UserRoleRecord;
+  area_types: AreaTypeRecord;
+  role_area_type_scopes: RoleAreaTypeScopeRecord;
   areas: AreaRecord;
   supply_categories: SupplyCategoryRecord;
   units: UnitRecord;

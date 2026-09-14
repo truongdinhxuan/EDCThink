@@ -16,30 +16,30 @@ import {
 } from '../../schemas/master-data';
 
 const areaRoutes: FastifyPluginAsync = async (fastify) => {
-  const catalogReadPermission = [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_READ)];
+  const areaReadPermission = [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_AREA_READ)];
   fastify.get(
     '/',
-    { preHandler: catalogReadPermission, schema: areaListQuerySchema },
+    { preHandler: areaReadPermission, schema: areaListQuerySchema },
     listAreas,
   );
   fastify.get(
     '/:id',
-    { preHandler: catalogReadPermission, schema: idParamsSchema },
+    { preHandler: areaReadPermission, schema: idParamsSchema },
     getArea,
   );
   fastify.post(
     '/',
-    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE)], schema: areaCreateSchema },
+    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_AREA_CREATE)], schema: areaCreateSchema },
     createArea,
   );
   fastify.patch(
     '/:id',
-    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE)], schema: areaUpdateSchema },
+    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_AREA_UPDATE)], schema: areaUpdateSchema },
     updateArea,
   );
   fastify.delete(
     '/:id',
-    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_DELETE)], schema: idParamsSchema },
+    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_AREA_DEACTIVATE)], schema: idParamsSchema },
     deleteArea,
   );
 };

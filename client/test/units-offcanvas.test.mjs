@@ -74,14 +74,15 @@ describe('Phase 2 Units CRUD offcanvas contract', () => {
     assert.doesNotMatch(units, /queryClient\.clear/);
   });
 
-  it('keeps local list query state and relies on the current server-side page query', () => {
+  it('keeps list query state in the page while the shared rail owns only filter presentation', () => {
     const units = read('src/pages/catalog/UnitsPage.tsx');
     assert.match(units, /usePaginatedResource<Unit, UnitQuery>/);
-    assert.match(units, /searchValue=\{search\}/);
+    assert.match(units, /<PageFilterRail/);
+    assert.match(units, /value=\{search\}/);
+    assert.match(units, /hideInternalSearch/);
     assert.match(units, /pagination=\{resource\.pagination\}/);
     assert.match(units, /sortBy=\{resource\.query\.sortBy\}/);
-    assert.doesNotMatch(units, /setSearch\(''\)/);
-    assert.doesNotMatch(units, /setPage\(1\)/);
+    assert.match(units, /updateResourceQuery\(\{ isActive: true \}\)/);
     assert.doesNotMatch(units, /\.slice\(/);
   });
 

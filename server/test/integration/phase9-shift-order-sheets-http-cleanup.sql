@@ -21,7 +21,9 @@ where id in (
   '69200000-0000-4000-8000-000000000003'
 );
 delete from public.role_permissions
-where role_id in (select id from public.roles where code in ('PHASE9_HTTP_MANAGER', 'PHASE9_HTTP_PACKING'));
-delete from public.roles where code in ('PHASE9_HTTP_MANAGER', 'PHASE9_HTTP_PACKING');
+where role_id in (select id from public.roles where code in ('PHASE9_HTTP_MANAGER', 'PHASE9_HTTP_PACKING', 'PHASE9_HTTP_OUTSIDER'));
+delete from public.role_area_type_scopes
+where role_id in (select id from public.roles where code in ('PHASE9_HTTP_MANAGER', 'PHASE9_HTTP_PACKING', 'PHASE9_HTTP_OUTSIDER'));
+delete from public.roles where code in ('PHASE9_HTTP_MANAGER', 'PHASE9_HTTP_PACKING', 'PHASE9_HTTP_OUTSIDER');
 
 commit;

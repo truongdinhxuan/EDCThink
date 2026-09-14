@@ -4,6 +4,7 @@ import type { PaginatedResponse } from '../types/pagination.types';
 import instance from './http';
 import { unwrapData } from './response';
 import type { Permission } from '../types/permissions';
+import type { AreaTypeSummary } from '../types/area-scopes';
 
 export const listRoles = async (
   params: RoleListParams = {},
@@ -34,3 +35,15 @@ export const replaceRolePermissions = async (
 ): Promise<Permission[]> => unwrapData(await instance.put<
   ApiEnvelope<Permission[]>, ApiEnvelope<Permission[]>
 >(`roles/${id}/permissions`, { permission_ids: permissionIds }));
+
+export const getRoleAreaTypeScopes = async (id: string): Promise<AreaTypeSummary[]> =>
+  unwrapData(await instance.get<ApiEnvelope<AreaTypeSummary[]>, ApiEnvelope<AreaTypeSummary[]>>(
+    `roles/${id}/area-type-scopes`,
+  ));
+
+export const replaceRoleAreaTypeScopes = async (
+  id: string,
+  areaTypeIds: string[],
+): Promise<AreaTypeSummary[]> => unwrapData(await instance.put<
+  ApiEnvelope<AreaTypeSummary[]>, ApiEnvelope<AreaTypeSummary[]>
+>(`roles/${id}/area-type-scopes`, { areaTypeIds }));

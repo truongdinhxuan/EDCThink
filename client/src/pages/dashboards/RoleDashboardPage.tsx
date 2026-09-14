@@ -8,6 +8,10 @@ const RoleDashboardPage = ({ workspaceRole }: { workspaceRole?: RoleCode }) => {
   const displayName = [user?.publicData.last_name, user?.publicData.first_name]
     .filter(Boolean)
     .join(" ") || user?.publicData.email || "Người dùng";
+  const roleDisplayName =
+    user?.publicData?.role && typeof user.publicData.role === "object"
+      ? user.publicData.role.name
+      : role ?? "Người dùng";
 
   return (
     <section className="space-y-6">

@@ -22,9 +22,17 @@ export const queryKeys = {
     all: ['user-roles'] as const,
     detail: (userId: string) => ['user-roles', userId] as const,
   },
+  roleAreaTypeScopes: {
+    all: ['role-area-type-scopes'] as const,
+    detail: (roleId: string) => ['role-area-type-scopes', roleId] as const,
+  },
   workShifts: resourceKeys('work-shifts'),
   userWorkShiftAssignments: resourceKeys('user-work-shift-assignments'),
   areas: resourceKeys('areas'),
+  areaTypes: resourceKeys('area-types'),
+  meAreaScopes: {
+    all: ['me-area-scopes'] as const,
+  },
   supplyCategories: resourceKeys('supply-categories'),
   units: resourceKeys('units'),
   supplies: resourceKeys('supplies'),
@@ -69,6 +77,7 @@ export const queryKeys = {
   shiftOrderSheets: {
     ...resourceKeys('shift-order-sheets'),
     current: ['shift-order-sheets', 'current'] as const,
+    histories: ['shift-order-sheets', 'history'] as const,
     history: (query: QueryParameters = {}) => ['shift-order-sheets', 'history', query] as const,
   },
   notifications: resourceKeys('notifications'),

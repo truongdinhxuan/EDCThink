@@ -13,7 +13,6 @@ import { exportShiftOrderSheet } from '../../api/shift-order-sheets.service';
 import { getApiErrorMessage } from '../../api/errors';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { getWorkspacePath } from '../../constants/workspaces';
-import { ORDER_READ_PERMISSIONS } from '../../constants/workspaceNavigation';
 import { useAuth } from '../../context/AuthContext';
 import { useCrudOffcanvas } from '../../hooks/useCrudOffcanvas';
 import type { CrudFeedback } from '../../hooks/useCrudResource';
@@ -24,7 +23,7 @@ import type {
   ShiftOrderSheetDetail,
   ShiftOrderSheetOrderItem,
 } from '../../types/shift-order-sheets';
-import { InfoButton, SecondaryButton, TextButton, getButtonClassName } from '../common/Button';
+import { InfoButton, SecondaryButton, TextButton } from '../common/Button';
 import { CrudFeedbackToast } from '../crud/CrudPrimitives';
 import { DrawerFormFooter } from '../offcanvas';
 import { CreateOrderForm, type CreateOrderFormState } from './CreateOrderForm';
@@ -33,7 +32,6 @@ import { OrderStatusBadge } from './OrderStatusBadge';
 const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
 const INITIAL_CREATE_STATE: CreateOrderFormState = {
   stage: 'editing',
-  draftOrder: null,
   isDirty: false,
   isBusy: false,
 };
@@ -79,10 +77,9 @@ export const ShiftOrderSheetWorkspace = ({
   onBackCurrent,
 }: ShiftOrderSheetWorkspaceProps) => {
   const queryClient = useQueryClient();
-  const { role, hasPermission, hasAnyPermission } = useAuth();
+  const { role, hasPermission } = useAuth();
   const {
     openCrud,
-    openConfirm,
     updatePrimary,
     requestClosePrimary,
     closePrimary,
@@ -139,7 +136,7 @@ export const ShiftOrderSheetWorkspace = ({
     const invalidations = [
       queryClient.invalidateQueries({ queryKey: queryKeys.orders.lists }),
       queryClient.invalidateQueries({ queryKey: queryKeys.shiftOrderSheets.current }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.shiftOrderSheets.lists }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.shiftOrderSheets.histories }),
     ];
     if (sheetId) {
       invalidations.push(queryClient.invalidateQueries({
@@ -151,27 +148,10 @@ export const ShiftOrderSheetWorkspace = ({
     closePrimary();
   }, [closePrimary, queryClient, sheetId]);
 
-  const requestPersistedDraftClose = useCallback((): boolean => {
-    if (createState.stage !== 'submit-failed' || !createState.draftOrder) return true;
-    openConfirm({
-      title: 'Order nháp chưa được gửi',
-      description: `Order ${createState.draftOrder.code} đã được lưu ở trạng thái DRAFT. Đóng drawer sẽ không xóa Order này.`,
-      confirmLabel: 'Đóng',
-      cancelLabel: 'Tiếp tục xử lý',
-      variant: 'warning',
-      onConfirm: () => {
-        closePrimary();
-        return false;
-      },
-    });
-    return false;
-  }, [closePrimary, createState.draftOrder, createState.stage, openConfirm]);
-
   const renderCreateContent = useCallback((current: { formId: string; formKey: string }): ReactNode => (
     <CreateOrderForm
       key={current.formKey}
       formId={current.formId}
-      mode="shift-sheet-submit"
       sheetContext={createContext}
       compact
       initialFocusRef={initialFocusRef}
@@ -184,30 +164,18 @@ export const ShiftOrderSheetWorkspace = ({
     current: { formId: string; formKey: string },
     state: CreateOrderFormState,
   ): ReactNode => {
-    const retrying = state.stage === 'submit-failed';
-    const submittingLabel = state.stage === 'creating-draft'
-      ? 'Đang tạo Order...'
-      : 'Đang gửi Order...';
-    const draftLink = state.draftOrder
-      ? `${ordersPath}/${state.draftOrder.id}${sheetId ? `?shiftOrderSheetId=${sheetId}` : ''}`
-      : null;
     return (
       <DrawerFormFooter
-        cancelLabel={retrying ? 'Đóng' : 'Hủy'}
-        submitLabel={retrying ? 'Thử gửi lại' : 'Gửi Order'}
-        submittingLabel={submittingLabel}
+        cancelLabel="Hủy"
+        submitLabel="Gửi Order"
+        submittingLabel="Đang gửi Order..."
         isSubmitting={state.isBusy}
-        hint={retrying ? undefined : 'Ctrl + Enter để gửi Order'}
+        hint="Ctrl + Enter để gửi Order"
         formId={current.formId}
         onCancel={() => requestClosePrimary('cancel')}
-        secondaryAction={draftLink ? (
-          <Link to={draftLink} onClick={() => closePrimary()} className={`${SecondaryButton} min-h-11 w-full sm:w-auto`}>
-            Mở Order nháp
-          </Link>
-        ) : undefined}
       />
     );
-  }, [closePrimary, ordersPath, requestClosePrimary, sheetId]);
+  }, [requestClosePrimary]);
 
   useEffect(() => {
     if (!createDrawer) return;
@@ -221,7 +189,6 @@ export const ShiftOrderSheetWorkspace = ({
       isBusy: createState.isBusy,
       preventCloseWhileBusy: true,
       initialFocusRef,
-      onBeforeClose: requestPersistedDraftClose,
     });
   }, [
     compactContext,
@@ -229,7 +196,6 @@ export const ShiftOrderSheetWorkspace = ({
     createState,
     renderCreateContent,
     renderCreateFooter,
-    requestPersistedDraftClose,
     updatePrimary,
   ]);
 
@@ -267,7 +233,7 @@ export const ShiftOrderSheetWorkspace = ({
   return (
     <section className="space-y-5">
       <CrudFeedbackToast feedback={feedback} onClose={() => setFeedback(null)} />
-      <header className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <header className="sticky top-0 z-20 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             {mode === 'history' && (
@@ -298,7 +264,7 @@ export const ShiftOrderSheetWorkspace = ({
                 ← Quay lại phiếu hiện tại
               </button>
             )}
-            {sheet && hasAnyPermission(ORDER_READ_PERMISSIONS) && (
+            {sheet && hasPermission(PERMISSION_CODE.SUPPLY_SHIFT_ORDER_SHEET_READ) && (
               <button
                 type="button"
                 className={`${SecondaryButton} w-full min-[360px]:w-auto`}
@@ -312,28 +278,6 @@ export const ShiftOrderSheetWorkspace = ({
         </div>
       </header>
 
-      {/* P0-E: keep the current context + primary action reachable after the
-          operator scrolls through a long Sheet. Compact, single row, no toolbar. */}
-      <div className="sticky top-0 z-20 -mx-3 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/90 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-white/75 sm:-mx-5 sm:px-5">
-        <p className="min-w-0 truncate text-sm font-medium text-slate-600">{compactContext}</p>
-        <div className="flex shrink-0 items-center gap-2">
-          {allowCreate && (
-            <button type="button" onClick={openCreateOrder} className={getButtonClassName({ variant: 'info', size: 'sm' })}>
-              + Thêm Order
-            </button>
-          )}
-          {mode === 'current' && onShowHistory && (
-            <button type="button" onClick={onShowHistory} className={getButtonClassName({ variant: 'secondary', size: 'sm' })}>
-              Lịch sử
-            </button>
-          )}
-          {mode === 'history' && onBackCurrent && (
-            <button type="button" onClick={onBackCurrent} className={getButtonClassName({ variant: 'secondary', size: 'sm' })}>
-              ← Phiếu hiện tại
-            </button>
-          )}
-        </div>
-      </div>
 
       {exportMutation.isError && (
         <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">

@@ -6,6 +6,10 @@ export interface ActiveListQuery extends PaginationQuery {
   q?: string;
 }
 
+export interface AreaListQuery extends ActiveListQuery {
+  areaTypeId?: string;
+}
+
 export interface SearchListQuery extends PaginationQuery {
   q?: string;
 }
@@ -27,6 +31,7 @@ export interface CreateAreaBody {
   code: string;
   name: string;
   description?: string | null;
+  area_type_id?: string | null;
   is_active?: boolean;
 }
 

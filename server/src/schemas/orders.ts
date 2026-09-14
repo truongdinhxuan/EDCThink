@@ -44,20 +44,6 @@ export const orderCreateSchema = {
   },
 };
 
-export const orderSubmitSchema = {
-  params: {
-    type: 'object',
-    additionalProperties: false,
-    required: ['id'],
-    properties: { id: uuid },
-  },
-  body: {
-    type: 'object',
-    additionalProperties: false,
-    properties: { shift_order_sheet_id: uuid },
-  },
-};
-
 export const orderPatchSchema = {
   params: {
     type: 'object',
@@ -71,7 +57,36 @@ export const orderPatchSchema = {
     minProperties: 1,
     properties: {
       note: { type: 'string', maxLength: 2000 },
-      order_list: orderItems,
+    },
+  },
+};
+
+export const orderApproveSchema = {
+  params: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id'],
+    properties: { id: uuid },
+  },
+  body: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['items'],
+    properties: {
+      items: {
+        type: 'array',
+        minItems: 1,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['order_item_id', 'quantity_approved'],
+          properties: {
+            order_item_id: uuid,
+            quantity_approved: { type: 'number', minimum: 0 },
+          },
+        },
+      },
+      note: { type: 'string', maxLength: 2000 },
     },
   },
 };
@@ -148,6 +163,10 @@ export const orderListSchema = createListQuerySchema(ORDER_SORT_FIELDS, {
   date: { type: 'string', minLength: 10, maxLength: 10 },
   createdBy: uuid,
   areaId: uuid,
+  workShiftId: {
+    ...uuid,
+    description: 'Filter Orders by historical Work Shift linked through Shift Order Sheet.',
+  },
   dateFrom: { type: 'string', minLength: 10, maxLength: 40 },
   dateTo: { type: 'string', minLength: 10, maxLength: 40 },
 });

@@ -1,8 +1,10 @@
+import { useQuery } from '@tanstack/react-query';
 import { useCallback,useEffect,useState,type MouseEvent } from 'react';
+import { listAreaTypes } from '../../api/area-types.service';
 import { listPermissions } from '../../api/permissions.service';
 import {
-createRole,deleteRole,getRolePermissions,listRoles,
-replaceRolePermissions,updateRole,
+createRole,deleteRole,getRoleAreaTypeScopes,getRolePermissions,listRoles,
+replaceRoleAreaTypeScopes,replaceRolePermissions,updateRole,
 } from '../../api/roles.service';
 import { TextButton } from '../../components/common/Button';
 import { DataTable,type Column } from '../../components/common/DataTable';
@@ -10,9 +12,10 @@ import { CrudEntityView } from '../../components/crud/CrudEntityView';
 import {
 CrudFeedbackToast,CrudModal,CrudPageHeader,ErrorState,
 FormActions,
-RowActions,StatusBadge
+inputClassName,RowActions,StatusBadge
 } from '../../components/crud/CrudPrimitives';
 import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
+import { FilterField,FilterSection,PageFilterLayout,PageFilterRail } from '../../components/filters';
 import { RoleForm,type RoleFormValues } from '../../components/forms/RoleForm';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
@@ -21,6 +24,7 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { queryKeys } from '../../lib/queryKeys';
 import type { PaginationParams } from '../../types/pagination.types';
+import type { AreaTypeSummary } from '../../types/area-scopes';
 import type { Permission } from '../../types/permissions';
 import type { CreateRoleInput,Role,RoleListParams,UpdateRoleInput } from '../../types/roles';
 
@@ -37,10 +41,16 @@ const RolesPage = () => {
   const resource = usePaginatedResource<Role, RoleQuery>({
     loader, initialQuery, loadErrorMessage: 'Không thể tải danh sách role.',
     queryKey: queryKeys.roles.lists,
-    invalidateQueryKeys: [queryKeys.users.all, queryKeys.rolePermissions.all, queryKeys.userRoles.all],
+    invalidateQueryKeys: [
+      queryKeys.users.all,
+      queryKeys.rolePermissions.all,
+      queryKeys.userRoles.all,
+      queryKeys.roleAreaTypeScopes.all,
+      queryKeys.meAreaScopes.all,
+    ],
   });
   const [search, setSearch] = useState('');
-  const debouncedSearch = useDebounce(search);
+  const debouncedSearch = useDebounce(search, 400);
   const [editing, setEditing] = useState<Role | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -53,6 +63,32 @@ const RolesPage = () => {
   const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([]);
   const [permissionLoading, setPermissionLoading] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [areaScopeTarget, setAreaScopeTarget] = useState<Role | null>(null);
+  const [areaTypeSelection, setAreaTypeSelection] = useState<{
+    roleId: string;
+    ids: string[];
+  } | null>(null);
+  const [areaScopeError, setAreaScopeError] = useState<string | null>(null);
+  const isSystemAdminTarget = areaScopeTarget?.code === 'ADMIN' && areaScopeTarget.is_system;
+  const areaTypesQuery = useQuery<AreaTypeSummary[]>({
+    queryKey: queryKeys.areaTypes.all,
+    queryFn: ({ signal }) => listAreaTypes(signal),
+    enabled: Boolean(areaScopeTarget),
+    staleTime: 10 * 60 * 1000,
+  });
+  const roleAreaTypeScopesQuery = useQuery<AreaTypeSummary[]>({
+    queryKey: queryKeys.roleAreaTypeScopes.detail(areaScopeTarget?.id ?? ''),
+    queryFn: () => getRoleAreaTypeScopes(areaScopeTarget!.id),
+    enabled: Boolean(areaScopeTarget) && !isSystemAdminTarget,
+    staleTime: 60 * 1000,
+  });
+  const areaTypes = areaTypesQuery.data ?? [];
+  const selectedAreaTypeIds = areaTypeSelection && areaTypeSelection.roleId === areaScopeTarget?.id
+    ? areaTypeSelection.ids
+    : roleAreaTypeScopesQuery.data?.map((areaType) => areaType.id) ?? [];
+  const areaScopeLoading = areaTypesQuery.isPending
+    || (!isSystemAdminTarget && roleAreaTypeScopesQuery.isPending);
+  const areaScopeLoadError = areaTypesQuery.isError || roleAreaTypeScopesQuery.isError;
   const resourceSearch = resource.query.search;
   const updateResourceQuery = resource.updateQuery;
 
@@ -113,6 +149,12 @@ const RolesPage = () => {
     }
   };
 
+  const openAreaTypeScopes = (target: Role) => {
+    setAreaScopeTarget(target);
+    setAreaTypeSelection(null);
+    setAreaScopeError(null);
+  };
+
   const columns: Column<Role>[] = [
     { header: 'Code', accessor: 'code', sortKey: 'code' },
     { header: 'Tên', accessor: 'name', sortKey: 'name' },
@@ -123,6 +165,7 @@ const RolesPage = () => {
       header: 'Thao tác', accessor: 'actions', render: (item: Role) => (
         <div className="flex justify-end gap-2">
           {canAssign && <button type="button" className={TextButton} onClick={() => void openPermissionMatrix(item)}>Permissions</button>}
+          <button type="button" className={TextButton} onClick={() => openAreaTypeScopes(item)}>Area Types</button>
           <RowActions
             onView={() => openView(item)} onEdit={canUpdate ? () => { setEditing(item); setViewing(false); setFormError(null); setFormOpen(true); } : undefined}
             onDelete={!canUpdate || item.is_system ? undefined : (event) => confirmDelete(item, event)}
@@ -133,13 +176,23 @@ const RolesPage = () => {
     }],
   ];
 
+  const resetFilters = () => {
+    setSearch('');
+  };
+
   return (
-    <div className="space-y-6">
+    <PageFilterLayout rail={(
+      <PageFilterRail title="Bộ lọc role" onReset={resetFilters} resetDisabled={search.length === 0}>
+        <FilterSection>
+          <FilterField label="Tìm kiếm"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm code, tên hoặc mô tả..." className={inputClassName} /></FilterField>
+        </FilterSection>
+      </PageFilterRail>
+    )}><div className="min-w-0 space-y-6">
       <CrudPageHeader title="Roles" description="Role động và permission matrix theo catalog hệ thống." createLabel="Thêm role" onCreate={canCreate ? () => { setEditing(null); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
       {resource.error ? <ErrorState message={resource.error} onRetry={() => void resource.reload()} /> : (
         <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id}
-          searchPlaceholder="Tìm code, tên hoặc mô tả..." searchValue={search} onSearchChange={setSearch}
+          hideInternalSearch
           pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize}
           sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder}
           onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })}
@@ -187,7 +240,104 @@ const RolesPage = () => {
           )}
         </CrudModal>
       )}
-    </div>
+      {areaScopeTarget && (
+        <CrudModal
+          title={`Area Type Access — ${areaScopeTarget.name}`}
+          busy={resource.mutating || areaScopeLoading}
+          onClose={() => setAreaScopeTarget(null)}
+        >
+          {areaScopeError || areaScopeLoadError ? (
+            <ErrorState
+              message={areaScopeError ?? 'Không thể tải cấu hình Area Type Scope.'}
+              onRetry={() => {
+                setAreaScopeError(null);
+                void areaTypesQuery.refetch();
+                if (!isSystemAdminTarget) void roleAreaTypeScopesQuery.refetch();
+              }}
+            />
+          ) : areaScopeLoading ? (
+            <p className="py-8 text-center text-sm text-slate-500">Đang tải Area Type Scope...</p>
+          ) : isSystemAdminTarget ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+                <p className="font-bold">Toàn bộ Area Type (System Admin)</p>
+                <p className="mt-1">Quyền này là system bypass; không tạo mapping PACKING, LOGISTICS hoặc SHOP.</p>
+              </div>
+              <div className="space-y-2">
+                {areaTypes.map((areaType) => (
+                  <div key={areaType.id} className="rounded-lg border border-slate-200 px-3 py-2">
+                    <span className="text-sm font-semibold text-slate-800">{areaType.name}</span>
+                    <span className="ml-2 text-xs text-slate-500">{areaType.code}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <form className="space-y-5" onSubmit={(event) => {
+              event.preventDefault();
+              if (!canUpdate) return;
+              setAreaScopeError(null);
+              void resource.runMutation(
+                () => replaceRoleAreaTypeScopes(areaScopeTarget.id, selectedAreaTypeIds),
+                'Đã cập nhật Area Type Scope của role.',
+                'Không thể cập nhật Area Type Scope của role.',
+                { throwOnError: true },
+              ).then((ok) => {
+                if (ok) setAreaScopeTarget(null);
+              }).catch((error: unknown) => {
+                setAreaScopeError(error instanceof Error
+                  ? error.message
+                  : 'Không thể cập nhật Area Type Scope của role.');
+              });
+            }}>
+              <fieldset className="rounded-xl border border-slate-200 p-4">
+                <legend className="px-2 text-sm font-bold text-slate-800">Area Type Access</legend>
+                <p className="mb-3 text-xs text-slate-500">
+                  Scope hiệu lực của user là hợp của tất cả Role đang hoạt động.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {areaTypes.map((areaType) => (
+                    <label key={areaType.id} className="flex items-start gap-3 rounded-lg p-2 hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        checked={selectedAreaTypeIds.includes(areaType.id)}
+                        disabled={!canUpdate}
+                        onChange={(event) => setAreaTypeSelection({
+                          roleId: areaScopeTarget.id,
+                          ids: event.target.checked
+                            ? [...selectedAreaTypeIds, areaType.id]
+                            : selectedAreaTypeIds.filter((id) => id !== areaType.id),
+                        })}
+                        className="mt-1 h-4 w-4 rounded border-slate-300"
+                      />
+                      <span>
+                        <span className="block text-sm font-semibold text-slate-800">{areaType.name}</span>
+                        <span className="block text-xs text-slate-500">{areaType.code}</span>
+                        {areaType.description && (
+                          <span className="mt-1 block text-xs text-slate-500">{areaType.description}</span>
+                        )}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {areaTypes.length === 0 && (
+                  <p className="text-sm text-slate-500">Không có Area Type đang hoạt động.</p>
+                )}
+              </fieldset>
+              {canUpdate ? (
+                <FormActions
+                  busy={resource.mutating}
+                  onCancel={() => setAreaScopeTarget(null)}
+                  submitLabel="Lưu Area Type Scope"
+                />
+              ) : (
+                <p className="text-sm text-slate-500">Bạn chỉ có quyền xem cấu hình này.</p>
+              )}
+            </form>
+          )}
+        </CrudModal>
+      )}
+    </div></PageFilterLayout>
   );
 };
 

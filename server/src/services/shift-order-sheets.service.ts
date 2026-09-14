@@ -1,8 +1,14 @@
 import type { FastifyInstance } from 'fastify';
-import type { ShiftOrderSheetListQuery } from '../interfaces/shift-order-sheets';
+import type {
+  ShiftOrderSheetDetailQuery,
+  ShiftOrderSheetListQuery,
+} from '../interfaces/shift-order-sheets';
 import { SHIFT_ORDER_SHEET_SORT_FIELDS } from '../schemas/shift-order-sheets';
-import { isOrderAreaScoped } from '../domain/order-access';
 import type { OrderActor } from './orders.service';
+import {
+  AreaScopesService,
+  isAreaWithinEffectiveScope,
+} from './area-scopes.service';
 import {
   createShiftOrderSheetExportFilename,
   createShiftOrderSheetWorkbook,
@@ -97,6 +103,10 @@ interface ExportSheetRow extends Omit<SheetRow, 'orders'> {
   orders: ExportOrderRow[];
 }
 
+export interface ShiftOrderSheetActor extends OrderActor {
+  roleIds: string[];
+}
+
 export class ShiftOrderSheetServiceError extends Error {
   constructor(public readonly statusCode: number, message: string) {
     super(message);
@@ -141,15 +151,46 @@ const SHEET_BASE_SELECT = `
   )
 `;
 
-const SHEET_LIST_SELECT = `
-  ${SHEET_BASE_SELECT},
-  orders:orders!orders_shift_order_sheet_id_fkey(
-    id, is_deleted,
-    order_items(id, is_deleted)
-  )
-`;
+interface SheetContentFilters {
+  search?: string;
+  statusId?: string;
+  categoryId?: string;
+}
 
-const SHEET_DETAIL_SELECT = `
+const normalizeContentFilters = (
+  query: ShiftOrderSheetDetailQuery,
+): SheetContentFilters => ({
+  search: query.search?.trim() || undefined,
+  statusId: query.statusId,
+  categoryId: query.categoryId,
+});
+
+const hasItemFilters = (filters: SheetContentFilters): boolean =>
+  Boolean(filters.search || filters.categoryId);
+
+const hasOrderFilters = (filters: SheetContentFilters): boolean =>
+  Boolean(filters.statusId || hasItemFilters(filters));
+
+const createSheetListSelect = (filters: SheetContentFilters): string => {
+  const filterItems = hasItemFilters(filters);
+  const filterOrders = hasOrderFilters(filters);
+  const itemContent = filterItems
+    ? `
+      id, is_deleted,
+      supply:supplies!order_items_supply_id_fkey!inner(id, code, category_id)
+    `
+    : 'id, is_deleted';
+
+  return `
+    ${SHEET_BASE_SELECT},
+    orders:orders!orders_shift_order_sheet_id_fkey${filterOrders ? '!inner' : ''}(
+      id, status_id, is_deleted,
+      order_items${filterItems ? '!inner' : ''}(${itemContent})
+    )
+  `;
+};
+
+const createSheetDetailSelect = (filters: SheetContentFilters): string => `
   ${SHEET_BASE_SELECT},
   orders:orders!orders_shift_order_sheet_id_fkey(
     id, code, from_area_id, to_area_id, requested_by, status_id, note,
@@ -161,13 +202,13 @@ const SHEET_DETAIL_SELECT = `
     ),
     from_area:areas!orders_from_area_id_fkey(id, code, name),
     to_area:areas!orders_to_area_id_fkey(id, code, name),
-    order_items(
+    order_items${hasItemFilters(filters) ? '!inner' : ''}(
       id, order_id, supply_id, provider_id, unit_id,
       quantity_requested, set_per_qty, requested_stack_quantity,
       requested_total_set_quantity, quantity_approved, quantity_issued,
       note, is_active, is_deleted, created_at, updated_at,
-      supply:supplies!order_items_supply_id_fkey(
-        id, code, description,
+      supply:supplies!order_items_supply_id_fkey${hasItemFilters(filters) ? '!inner' : ''}(
+        id, code, description, category_id,
         category:supply_categories!supplies_category_id_fkey(id, code, name)
       ),
       provider:providers!order_items_provider_id_fkey(id, code, name, description),
@@ -199,8 +240,8 @@ export class ShiftOrderSheetsService {
     return this.fastify.supabaseAdmin;
   }
 
-  private isAreaScoped(actor: OrderActor): boolean {
-    return isOrderAreaScoped(actor);
+  private areaScopes(actor: ShiftOrderSheetActor): AreaScopesService {
+    return new AreaScopesService(this.fastify, actor);
   }
 
   private normalize(row: SheetRow) {
@@ -262,73 +303,55 @@ export class ShiftOrderSheetsService {
     };
   }
 
-  private assertReadable(actor: OrderActor, row: Pick<SheetRow, 'area_id'>): void {
-    if (this.isAreaScoped(actor) && row.area_id !== actor.areaId) {
-      fail(403, 'Phiếu Order Ca nằm ngoài phạm vi Area của bạn');
-    }
+  private async assertReadable(
+    actor: ShiftOrderSheetActor,
+    row: Pick<SheetRow, 'area_id'>,
+  ): Promise<void> {
+    await this.areaScopes(actor).assertAreaWithinEffectiveScope(row.area_id);
   }
 
-  async list(actor: OrderActor, query: ShiftOrderSheetListQuery = {}) {
+  async list(actor: ShiftOrderSheetActor, query: ShiftOrderSheetListQuery = {}) {
     const pagination = parsePagination(query, {
       allowedSortBy: SHIFT_ORDER_SHEET_SORT_FIELDS,
       defaultSortBy: 'work_date',
       defaultSortOrder: 'desc',
     });
 
-    let searchFilter: string | null = null;
-    if (pagination.search) {
-      const term = pagination.search;
-      const [areaResult, shiftResult, leaderResult] = await Promise.all([
-        this.db
-          .from('areas')
-          .select('id')
-          .eq('is_deleted', false)
-          .or(`code.ilike.*${term}*,name.ilike.*${term}*`),
-        this.db
-          .from('work_shifts')
-          .select('id')
-          .eq('is_deleted', false)
-          .or(`code.ilike.*${term}*,name.ilike.*${term}*`),
-        this.db
-          .from('users')
-          .select('id')
-          .eq('is_deleted', false)
-          .or(`first_name.ilike.*${term}*,last_name.ilike.*${term}*,email.ilike.*${term}*`),
-      ]);
-      if (areaResult.error || shiftResult.error || leaderResult.error) {
-        databaseError(
-          areaResult.error ?? shiftResult.error ?? leaderResult.error,
-          'Không thể tìm Phiếu Order Ca',
-        );
-      }
-      const parts: string[] = [];
-      const areaIds = (areaResult.data ?? []).map((row) => row.id);
-      const shiftIds = (shiftResult.data ?? []).map((row) => row.id);
-      const leaderIds = (leaderResult.data ?? []).map((row) => row.id);
-      if (areaIds.length) parts.push(`area_id.in.(${areaIds.join(',')})`);
-      if (shiftIds.length) parts.push(`work_shift_id.in.(${shiftIds.join(',')})`);
-      if (leaderIds.length) parts.push(`leader_id.in.(${leaderIds.join(',')})`);
-      if (/^\d{4}-\d{2}-\d{2}$/.test(term)) parts.push(`work_date.eq.${term}`);
-      if (parts.length === 0) return createPaginatedResult([], pagination, 0);
-      searchFilter = parts.join(',');
+    const scopes = await this.areaScopes(actor).getEffectiveAreaTypeScopes();
+    const scopedAreaIds = scopes.flatMap((scope) => scope.areas.map((area) => area.id));
+    if (query.areaId && !isAreaWithinEffectiveScope(scopes, query.areaId)) {
+      fail(403, 'Phiếu Order Ca nằm ngoài Area Type Scope được cấp cho bạn');
     }
+    if (scopedAreaIds.length === 0) return createPaginatedResult([], pagination, 0);
+
+    const filters = normalizeContentFilters({
+      search: pagination.search ?? undefined,
+      statusId: query.statusId,
+      categoryId: query.categoryId,
+    });
 
     let request = this.db
       .from('supply_shift_order_sheets')
-      .select(SHEET_LIST_SELECT, { count: 'exact' })
+      .select(createSheetListSelect(filters), { count: 'exact' })
       .eq('is_deleted', false)
       .eq('orders.is_deleted', false);
 
-    if (searchFilter) request = request.or(searchFilter);
+    if (hasItemFilters(filters)) {
+      request = request.eq('orders.order_items.is_deleted', false);
+    }
+    if (filters.statusId) request = request.eq('orders.status_id', filters.statusId);
+    if (filters.categoryId) {
+      request = request.eq('orders.order_items.supply.category_id', filters.categoryId);
+    }
+    if (filters.search) {
+      request = request.ilike('orders.order_items.supply.code', `%${filters.search}%`);
+    }
 
-    if (this.isAreaScoped(actor)) request = request.eq('area_id', actor.areaId);
+    request = request.in('area_id', scopedAreaIds);
     if (query.workDate) request = request.eq('work_date', query.workDate);
     if (query.workShiftId) request = request.eq('work_shift_id', query.workShiftId);
     if (query.leaderId) request = request.eq('leader_id', query.leaderId);
     if (query.areaId) {
-      if (this.isAreaScoped(actor) && query.areaId !== actor.areaId) {
-        fail(403, 'Phiếu Order Ca nằm ngoài phạm vi Area của bạn');
-      }
       request = request.eq('area_id', query.areaId);
     }
 
@@ -345,27 +368,45 @@ export class ShiftOrderSheetsService {
     }
     return {
       ...result,
-      items: result.items.map((row) => this.normalize(row as SheetRow)),
+      items: result.items.map((row) => this.normalize(row as unknown as SheetRow)),
     };
   }
 
-  async get(actor: OrderActor, sheetId: string) {
-    const { data, error } = await this.db
+  async get(
+    actor: ShiftOrderSheetActor,
+    sheetId: string,
+    query: ShiftOrderSheetDetailQuery = {},
+  ) {
+    const filters = normalizeContentFilters(query);
+    let request = this.db
       .from('supply_shift_order_sheets')
-      .select(SHEET_DETAIL_SELECT)
+      .select(createSheetDetailSelect(filters))
       .eq('id', sheetId)
       .eq('is_deleted', false)
-      .eq('orders.is_deleted', false)
-      .single();
+      .eq('orders.is_deleted', false);
+
+    if (hasItemFilters(filters)) {
+      request = request.eq('orders.order_items.is_deleted', false);
+    }
+    if (filters.statusId) request = request.eq('orders.status_id', filters.statusId);
+    if (filters.categoryId) {
+      request = request.eq('orders.order_items.supply.category_id', filters.categoryId);
+    }
+    if (filters.search) {
+      request = request.ilike('orders.order_items.supply.code', `%${filters.search}%`);
+    }
+
+    const { data, error } = await request.single();
 
     if (error || !data) databaseError(error, 'Không thể tải Phiếu Order Ca');
     const row = data as unknown as SheetRow & { orders: Array<Record<string, unknown>> };
-    this.assertReadable(actor, row);
+    await this.assertReadable(actor, row);
     return this.normalizeDetail(row);
   }
 
-  async getCurrent(actor: OrderActor) {
+  async getCurrent(actor: ShiftOrderSheetActor) {
     if (!actor.areaId) fail(409, 'Bạn chưa được gán khu vực làm việc.');
+    await this.areaScopes(actor).assertAreaWithinEffectiveScope(actor.areaId);
 
     const now = new Date().toISOString();
     const [areaResult, shiftResult] = await Promise.all([
@@ -412,7 +453,7 @@ export class ShiftOrderSheetsService {
 
     const { data, error } = await this.db
       .from('supply_shift_order_sheets')
-      .select(SHEET_DETAIL_SELECT)
+      .select(createSheetDetailSelect({}))
       .eq('area_id', actor.areaId)
       .eq('work_shift_id', shift.work_shift_id)
       .eq('work_date', shift.work_date)
@@ -424,11 +465,10 @@ export class ShiftOrderSheetsService {
     if (!data) return { context, sheet: null };
 
     const row = data as unknown as SheetRow & { orders: Array<Record<string, unknown>> };
-    this.assertReadable(actor, row);
     return { context, sheet: this.normalizeDetail(row) };
   }
 
-  async export(actor: OrderActor, sheetId: string) {
+  async export(actor: ShiftOrderSheetActor, sheetId: string) {
     const { data, error } = await this.db
       .from('supply_shift_order_sheets')
       .select(SHEET_EXPORT_SELECT)
@@ -438,7 +478,7 @@ export class ShiftOrderSheetsService {
 
     if (error || !data) databaseError(error, 'Không thể tải Phiếu Order Ca để xuất Excel');
     const row = data as unknown as ExportSheetRow;
-    this.assertReadable(actor, row);
+    await this.assertReadable(actor, row);
 
     const source: ShiftOrderSheetExportSource = {
       id: row.id,

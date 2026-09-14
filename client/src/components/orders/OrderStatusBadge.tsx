@@ -1,7 +1,6 @@
 import type { OrderStatus } from "../../types/orders";
 
 const STATUS_STYLE: Record<OrderStatus, string> = {
-  DRAFT: "bg-slate-100 text-slate-700",
   PENDING: "bg-amber-100 text-amber-800",
   APPROVED: "bg-blue-100 text-blue-800",
   REJECTED: "bg-rose-100 text-rose-800",
