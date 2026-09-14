@@ -1,12 +1,50 @@
 import { Link } from "react-router-dom";
-import { InfoButton } from "../components/common/Button";
-
+import Beams from "../components/Backgrounds/Beams/Beams";
+import SpecularButton from "../components/common/SpecialButton/SpecialButton";
 const HomePage = () => {
-  return <>
-    Lorem ipsum dolor sit amet consectetur adipisicing elit. Quas doloribus quis, doloremque tempora, officiis eum mollitia suscipit praesentium, sapiente possimus beatae porro nam aspernatur similique. Officia sapiente exercitationem perspiciatis assumenda sed ipsa fugit voluptate, in non numquam impedit dolorem repellat possimus est laboriosam temporibus iure repudiandae? Perferendis praesentium a eligendi tenetur deleniti quia similique qui odio esse odit quidem, debitis sequi delectus impedit mollitia numquam rerum repudiandae facilis ipsa in reprehenderit ipsum fugiat. Nihil eaque voluptatibus molestiae eligendi ipsum eius consequuntur. Reprehenderit culpa cumque non tenetur obcaecati nostrum! Rem natus, molestias quasi quas iure cum! Voluptate harum dolore rem nulla itaque eaque fugiat quo excepturi ex voluptas aut facilis, distinctio a pariatur magnam molestias dolor delectus sunt ipsam ab? Sint, exercitationem fuga? Nemo fugiat incidunt tenetur in culpa tempore modi animi? Eveniet hic animi, repudiandae vel dicta vero. Asperiores repudiandae voluptatem impedit maiores. Possimus soluta repellat, mollitia, quos tempore explicabo iusto fugiat error molestias, beatae blanditiis iure. Animi debitis consectetur veritatis! Similique tempore rerum nihil eos id, illo fugiat nobis blanditiis hic? Voluptates minima, modi soluta quam odit ea. Minus, sint dolores rerum quis aut itaque explicabo sapiente maxime provident fugit ut vitae, adipisci quia? Ea cum mollitia dicta quos.
-    <Link to="/auth/login" className={InfoButton}>
-      Click login
-    </Link>
-  </>
-}
-export default HomePage
+  return (
+    <div className="relative h-screen w-full overflow-hidden bg-slate-950 text-white">
+      {/* Background layer */}
+      <div className="absolute inset-0 z-0">
+        <Beams />
+      </div>
+
+      {/* Content layer */}
+      <div className="relative z-10 flex h-full flex-col items-center justify-center p-6 text-center">
+        <h1 className="mb-6 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+          Phiên bản thử nghiệm <span className="text-blue-400">EDCThink</span>
+        </h1>
+
+        {/* <p className="mb-10 max-w-2xl text-lg text-slate-300">
+          truongdinhxuan.
+        </p> */}
+
+        <Link to="/auth/login">
+          <SpecularButton
+            size="lg"
+            radius={18}
+            tint="#ffffff"
+            tintOpacity={0}
+            blur={0}
+            textColor="#f5f5f5"
+            lineColor="#ffffff"
+            baseColor="#525252"
+            intensity={1}
+            shineSize={10}
+            shineFade={40}
+            thickness={1}
+            speed={0.35}
+            followMouse
+            proximity={250}
+            autoAnimate={false}
+            onClick={() => console.log("clicked")}
+          >
+Tới trang đăng nhập           
+          </SpecularButton>
+        </Link>
+      </div>
+    </div>
+  );
+};
+
+export default HomePage;

@@ -611,8 +611,8 @@ const OrderDetailPage = () => {
             <p className="mt-1 text-xs text-slate-500">Backend vẫn là lớp kiểm tra quyền cuối cùng.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {canApprove && <button type="button" title="PENDING → APPROVED; không làm thay đổi tồn kho" onClick={() => openPanel("approve")} className={InfoButton}>Approve → APPROVED</button>}
-            {canApprove && <button type="button" onClick={openRejectConfirmation} className={ErrorButton}>Reject</button>}
+            {canApprove && <button type="button" title="Thao tác này chưa làm thay đổi tồn kho" onClick={() => openPanel("approve")} className={InfoButton}>Xác nhận</button>}
+            {canApprove && <button type="button" title="Từ chối yêu cầu" onClick={openRejectConfirmation} className={ErrorButton}>Từ chối</button>}
             {canAllocate && <button type="button" title="Tạo đề xuất vị trí; không trừ hoặc giữ tồn kho" disabled={mutating} onClick={() => void runMutation(() => allocateOrder(id), false, (error) => setAllocationErrorDetails(getApiErrorDetails<StackAllocationErrorDetails>(error)))} className={InfoButton}>Phân bổ vị trí</button>}
             {hasIssueAction && (
               <button
@@ -624,11 +624,11 @@ const OrderDetailPage = () => {
                 onClick={openIssuePanel}
                 className={VioletButton}
               >
-                Issue hàng
+                Xuất hàng
               </button>
             )}
-            {canReceive && <button type="button" disabled={mutating} onClick={() => void runMutation(() => receiveOrder(id))} className={CyanButton}>Xác nhận nhận</button>}
-            {canComplete && <button type="button" disabled={mutating} onClick={() => void runMutation(() => completeOrder(id))} className={SuccessButton}>Complete</button>}
+            {canReceive && <button type="button" disabled={mutating} onClick={() => void runMutation(() => receiveOrder(id))} className={CyanButton}>Đã nhận hàng</button>}
+            {canComplete && <button type="button" disabled={mutating} onClick={() => void runMutation(() => completeOrder(id))} className={SuccessButton}>Hoàn thành</button>}
             {canCancel && <button type="button" onClick={openCancelConfirmation} className={SecondaryButton}>Hủy order</button>}
           </div>
         </div>
@@ -657,7 +657,7 @@ const OrderDetailPage = () => {
               <QuantityRow key={item.id} item={item} label="Số lượng duyệt" value={itemValues[item.id]?.quantity ?? ""} max={item.quantity_requested} onChange={(quantity) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity } }))} />
             ))}
           </div>
-          <PanelButtons disabled={mutating} onCancel={() => setPanel(null)} onConfirm={confirmApprove} confirmLabel="Xác nhận approve" />
+          <PanelButtons disabled={mutating} onCancel={() => setPanel(null)} onConfirm={confirmApprove} confirmLabel="Xác nhận" />
         </ActionCard>
       )}
 
@@ -753,7 +753,7 @@ const OrderDetailPage = () => {
             }
             onCancel={() => setPanel(null)}
             onConfirm={confirmIssue}
-            confirmLabel="Xác nhận issue"
+            confirmLabel="Xác nhận"
           />
         </ActionCard>
       )}
@@ -969,7 +969,7 @@ const ReadOnlyValue = ({ label, value }: { label: string; value: string }) => (
 );
 
 const PanelButtons = ({ disabled, onCancel, onConfirm, confirmLabel, danger = false }: { disabled: boolean; onCancel: () => void; onConfirm: () => void; confirmLabel: string; danger?: boolean }) => (
-  <div className="mt-4 flex justify-end gap-2"><button type="button" disabled={disabled} onClick={onCancel} className={SecondaryButton}>Bỏ qua</button><button type="button" disabled={disabled} onClick={onConfirm} className={danger ? ErrorButton : InfoButton}>{confirmLabel}</button></div>
+  <div className="mt-4 flex justify-end gap-2"><button type="button" disabled={disabled} onClick={onConfirm} className={danger ? ErrorButton : InfoButton}>{confirmLabel}</button><button type="button" disabled={disabled} onClick={onCancel} className={SecondaryButton}>Bỏ qua</button></div>
 );
 
 const QuantityRow = ({ item, label, value, max, onChange }: { item: OrderItem; label: string; value: string; max: number; onChange: (value: string) => void }) => (
