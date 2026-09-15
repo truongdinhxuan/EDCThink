@@ -27,11 +27,13 @@ import type { PaginationParams } from '../../types/pagination.types';
 import type { AreaTypeSummary } from '../../types/area-scopes';
 import type { Permission } from '../../types/permissions';
 import type { CreateRoleInput,Role,RoleListParams,UpdateRoleInput } from '../../types/roles';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 type RoleQuery = RoleListParams & PaginationParams;
 const initialQuery: RoleQuery = { page: 1, pageSize: 20, sortBy: 'code', sortOrder: 'asc' };
 
 const RolesPage = () => {
+  useDocumentTitle('Roles');
   const { openConfirm } = useCrudOffcanvas();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.ADMIN_ROLE_CREATE);

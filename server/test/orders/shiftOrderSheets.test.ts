@@ -61,7 +61,7 @@ test('Shift sheet queries are paginated, scoped and relation-based', () => {
   assert.match(sheetService, /\.range\(pagination\.from, pagination\.to\)/);
   assert.match(sheetService, /orders!orders_shift_order_sheet_id_fkey/);
   assert.match(sheetService, /getEffectiveAreaTypeScopes\(\)/);
-  assert.match(sheetService, /request = request\.in\('area_id', scopedAreaIds\)/);
+  assert.match(sheetService, /request = request\.in\('area_id', readableAreaIds\)/);
   assert.match(sheetService, /order_items\([\s\S]*supply:supplies!/);
   assert.match(sheetService, /provider:providers!order_items_provider_id_fkey/);
   assert.match(sheetService, /unit:units!order_items_unit_id_fkey/);

@@ -45,6 +45,16 @@ export interface ShiftOrderSheetCreateContext {
   area: OrderAreaSummary | null;
   work_shift: Pick<ShiftOrderSheetWorkShift, 'id' | 'code' | 'name'> | null;
   leader?: OrderUserSummary | null;
+  /**
+   * Absolute bounds of this shift instance, computed server side in
+   * Asia/Ho_Chi_Minh with the shift's crosses-midnight flag already applied.
+   * Present for the Sheet currently being worked; absent when the caller only
+   * has the create context.
+   */
+  shift_start_at?: string;
+  shift_end_at?: string;
+  /** Server verdict at fetch time. The UI re-derives from the bounds as time passes. */
+  is_outside_working_hours?: boolean;
 }
 
 export interface ShiftOrderSheetOrderItem {
@@ -82,6 +92,7 @@ export interface CurrentShiftOrderSheetContext extends Omit<ShiftOrderSheetCreat
   work_shift: Pick<ShiftOrderSheetWorkShift, 'id' | 'code' | 'name'>;
   shift_start_at: string;
   shift_end_at: string;
+  is_outside_working_hours: boolean;
   business_time_zone: 'Asia/Ho_Chi_Minh';
 }
 
@@ -103,4 +114,18 @@ export interface ShiftOrderSheetDetailParams {
   search?: string;
   statusId?: string;
   categoryId?: string;
+}
+
+/** The shift instance the approver is working, taken from their Sheet context. */
+export interface ShiftOrderSheetIncomingParams {
+  workDate: string;
+  workShiftId: string;
+}
+
+/**
+ * A market's Sheet for that same shift instance, as seen by an approver in the
+ * supplying Area. `pending_order_count` is what still needs a decision.
+ */
+export interface IncomingShiftOrderSheet extends ShiftOrderSheetSummary {
+  pending_order_count: number;
 }

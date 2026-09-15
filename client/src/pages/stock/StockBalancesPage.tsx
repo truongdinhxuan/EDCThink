@@ -25,6 +25,7 @@ import type { PaginationParams } from '../../types/pagination.types';
 import type { StockBalance, StockBalanceListParams } from '../../types/stock-balances';
 import type { CreateStockAdjustmentInput } from '../../types/stock-transactions';
 import type { InventoryDiscrepancy } from '../../types/inventory-discrepancies';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 type StockBalanceQuery = StockBalanceListParams & PaginationParams;
 
@@ -40,6 +41,7 @@ const isLegacyStackBalance = (item: StockBalance) => isStackBalance(item)
   && (item.set_per_qty === null || item.stack_quantity === null);
 
 const StockBalancesPage = () => {
+  useDocumentTitle('Vật tư tồn kho');
   const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const canAdjust = hasPermission(PERMISSION_CODE.SUPPLY_STOCK_ADJUST);

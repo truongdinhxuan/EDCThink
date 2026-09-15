@@ -32,6 +32,7 @@ import { getWorkspacePath } from "../../constants/workspaces";
 import { useAuth } from "../../context/AuthContext";
 import { useServerLookup } from "../../hooks/useServerLookup";
 import { useCrudOffcanvas } from "../../hooks/useCrudOffcanvas";
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { queryKeys } from "../../lib/queryKeys";
 import type { StorageLocationOption } from "../../types/catalog";
 import type {
@@ -120,6 +121,9 @@ const OrderDetailPage = () => {
     queryFn: ({ signal }) => getOrder(id!, signal),
     enabled: Boolean(id),
   });
+  // Undefined until the Order loads, so the tab shows the app name instead of a
+  // placeholder that is about to be replaced by the real code.
+  useDocumentTitle(orderQuery.data?.code && `Order ${orderQuery.data.code}`);
   const orderMutation = useMutation({
     mutationFn: (operation: () => Promise<Order>) => operation(),
   });

@@ -29,6 +29,7 @@ import type {
   ShiftOrderSheetListParams,
   ShiftOrderSheetSummary,
 } from '../../types/shift-order-sheets';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
 
@@ -48,6 +49,7 @@ const formatDate = (value: string): string => new Intl.DateTimeFormat('vi-VN', {
 }).format(new Date(`${value}T00:00:00+07:00`));
 
 const ShiftOrderSheetsPage = () => {
+  useDocumentTitle('Phiếu order ca');
   const { user } = useAuth();
   const assignedAreaId = user?.publicData.area_id ?? '';
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -357,6 +359,9 @@ const ShiftOrderSheetsPage = () => {
             area: context.area,
             work_shift: context.work_shift,
             leader: sheet?.leader ?? null,
+            shift_start_at: context.shift_start_at,
+            shift_end_at: context.shift_end_at,
+            is_outside_working_hours: context.is_outside_working_hours,
           }}
           onShowHistory={openHistory}
         />

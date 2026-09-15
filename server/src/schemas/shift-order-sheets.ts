@@ -38,6 +38,18 @@ export const shiftOrderSheetDetailSchema = {
   },
 };
 
+export const shiftOrderSheetIncomingSchema = {
+  querystring: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['workDate', 'workShiftId'],
+    properties: {
+      workDate: { type: 'string', format: 'date' },
+      workShiftId: uuid,
+    },
+  },
+};
+
 export const shiftOrderSheetCurrentSchema = {
   querystring: {
     type: 'object',

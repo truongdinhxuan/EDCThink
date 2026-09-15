@@ -4,9 +4,12 @@ import { Navigate, type RouteObject } from 'react-router-dom';
 import { PermissionGuard } from '../components/PermissionGuard';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { PERMISSION_CODE, type PermissionCode } from '../constants/permissions';
-import { ROLE_CODES, type RoleCode } from '../constants/roles';
-import { ROLE_WORKSPACES } from '../constants/workspaces';
+import {
+  DEFAULT_WORKSPACE_BASE_PATH,
+  LEGACY_WORKSPACE_BASE_PATHS,
+} from '../constants/workspaces';
 import { ORDER_READ_PERMISSIONS } from '../constants/workspaceNavigation';
+import { LegacyRoleRedirect } from './LegacyRoleRedirect';
 
 const WorkspaceLayout = lazy(() => import('../layouts/workspace/WorkspaceLayout').then((module) => ({ default: module.WorkspaceLayout })));
 const RoleDashboardPage = lazy(() => import('../pages/dashboards/RoleDashboardPage'));
@@ -57,10 +60,10 @@ const guarded = (permissions: readonly PermissionCode[], element: ReactNode) => 
 //   );
 // };
 
-const createFeatureRoutes = (role?: RoleCode): RouteObject[] => [
+const createFeatureRoutes = (): RouteObject[] => [
   { index: true, element: <Navigate to="dashboard" replace /> },
-  { path: 'dashboard', element: <RoleDashboardPage workspaceRole={role} /> },
-  { path: 'dashboard/supply', element: guarded([PERMISSION_CODE.SUPPLY_DASHBOARD_READ], <RoleDashboardPage workspaceRole={role} />) },
+  { path: 'dashboard', element: <RoleDashboardPage /> },
+  { path: 'dashboard/supply', element: guarded([PERMISSION_CODE.SUPPLY_DASHBOARD_READ], <RoleDashboardPage />) },
   // { path: 'dashboard/milkrun', element: guarded([PERMISSION_CODE.MILKRUN_DASHBOARD_READ], <MilkrunDashboardPage />) },
   { path: 'supplies', element: guarded([PERMISSION_CODE.SUPPLY_CATALOG_READ], <SuppliesPage />) },
   { path: 'providers', element: guarded([PERMISSION_CODE.SUPPLY_CATALOG_READ], <ProvidersPage />) },
@@ -143,23 +146,23 @@ const createFeatureRoutes = (role?: RoleCode): RouteObject[] => [
   { path: '*', element: <Navigate to="/404" replace /> },
 ];
 
-const createWorkspaceRoute = (role: RoleCode): RouteObject => ({
-  element: <ProtectedRoute />,
-  children: [{
-    path: ROLE_WORKSPACES[role].basePath.slice(1),
-    element: <WorkspaceLayout />,
-    children: createFeatureRoutes(role),
-  }],
-});
-
 export const workspaceRoutes: RouteObject[] = [
-  ...ROLE_CODES.map(createWorkspaceRoute),
+  // One URL space for every role; visibility is resolved by PermissionGuard.
   {
     element: <ProtectedRoute />,
     children: [{
-      path: 'workspace',
+      path: DEFAULT_WORKSPACE_BASE_PATH.slice(1),
       element: <WorkspaceLayout />,
       children: createFeatureRoutes(),
     }],
   },
+  // Bookmarks and links pointing at the old role-prefixed URLs keep working.
+  // Both the bare prefix (/admin) and any sub-path (/admin/orders/42) redirect.
+  ...LEGACY_WORKSPACE_BASE_PATHS.flatMap((basePath): RouteObject[] => {
+    const segment = basePath.slice(1);
+    return [
+      { path: segment, element: <LegacyRoleRedirect /> },
+      { path: `${segment}/*`, element: <LegacyRoleRedirect /> },
+    ];
+  }),
 ];

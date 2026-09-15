@@ -1,14 +1,17 @@
 import type { FastifyInstance } from 'fastify';
 import type {
   ShiftOrderSheetDetailQuery,
+  ShiftOrderSheetIncomingQuery,
   ShiftOrderSheetListQuery,
 } from '../interfaces/shift-order-sheets';
 import { SHIFT_ORDER_SHEET_SORT_FIELDS } from '../schemas/shift-order-sheets';
 import type { OrderActor } from './orders.service';
 import {
-  AreaScopesService,
-  isAreaWithinEffectiveScope,
-} from './area-scopes.service';
+  canReadSheetArea,
+  resolveIncomingAreaIds,
+  resolveReadableAreaIds,
+} from '../domain/sheet-access';
+import { AreaScopesService } from './area-scopes.service';
 import {
   createShiftOrderSheetExportFilename,
   createShiftOrderSheetWorkbook,
@@ -101,6 +104,23 @@ interface ExportOrderRow {
 
 interface ExportSheetRow extends Omit<SheetRow, 'orders'> {
   orders: ExportOrderRow[];
+}
+
+interface IncomingStatusRow {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface IncomingOrderRow {
+  id: string;
+  is_deleted: boolean;
+  status_lookup: IncomingStatusRow | IncomingStatusRow[] | null;
+  order_items?: Array<{ id: string; is_deleted?: boolean }>;
+}
+
+interface IncomingSheetRow extends Omit<SheetRow, 'orders'> {
+  orders: IncomingOrderRow[];
 }
 
 export interface ShiftOrderSheetActor extends OrderActor {
@@ -217,6 +237,15 @@ const createSheetDetailSelect = (filters: SheetContentFilters): string => `
   )
 `;
 
+const SHEET_INCOMING_SELECT = `
+  ${SHEET_BASE_SELECT},
+  orders:orders!orders_shift_order_sheet_id_fkey(
+    id, is_deleted,
+    status_lookup:order_statuses!orders_status_id_fkey(id, code, name),
+    order_items(id, is_deleted)
+  )
+`;
+
 const SHEET_EXPORT_SELECT = `
   ${SHEET_BASE_SELECT},
   orders:orders!orders_shift_order_sheet_id_fkey(
@@ -303,11 +332,23 @@ export class ShiftOrderSheetsService {
     };
   }
 
+  private async readableAreaIds(actor: ShiftOrderSheetActor): Promise<string[]> {
+    const scopes = await this.areaScopes(actor).getEffectiveAreaTypeScopes();
+    return resolveReadableAreaIds(
+      actor,
+      scopes.flatMap((scope) => scope.areas.map((area) => area.id)),
+    );
+  }
+
   private async assertReadable(
     actor: ShiftOrderSheetActor,
     row: Pick<SheetRow, 'area_id'>,
   ): Promise<void> {
-    await this.areaScopes(actor).assertAreaWithinEffectiveScope(row.area_id);
+    const scopes = await this.areaScopes(actor).getEffectiveAreaTypeScopes();
+    const scopedAreaIds = scopes.flatMap((scope) => scope.areas.map((area) => area.id));
+    if (!canReadSheetArea(actor, scopedAreaIds, row.area_id)) {
+      fail(403, 'Phiếu Order Ca nằm ngoài phạm vi Area được cấp cho bạn');
+    }
   }
 
   async list(actor: ShiftOrderSheetActor, query: ShiftOrderSheetListQuery = {}) {
@@ -317,12 +358,14 @@ export class ShiftOrderSheetsService {
       defaultSortOrder: 'desc',
     });
 
-    const scopes = await this.areaScopes(actor).getEffectiveAreaTypeScopes();
-    const scopedAreaIds = scopes.flatMap((scope) => scope.areas.map((area) => area.id));
-    if (query.areaId && !isAreaWithinEffectiveScope(scopes, query.areaId)) {
-      fail(403, 'Phiếu Order Ca nằm ngoài Area Type Scope được cấp cho bạn');
+    // Area Type Scope is the ceiling; an actor without approval authority is
+    // pinned to their own Area on top of it, so history cannot leak a sibling
+    // market that merely shares the same Area Type.
+    const readableAreaIds = await this.readableAreaIds(actor);
+    if (query.areaId && !readableAreaIds.includes(query.areaId)) {
+      fail(403, 'Phiếu Order Ca nằm ngoài phạm vi Area được cấp cho bạn');
     }
-    if (scopedAreaIds.length === 0) return createPaginatedResult([], pagination, 0);
+    if (readableAreaIds.length === 0) return createPaginatedResult([], pagination, 0);
 
     const filters = normalizeContentFilters({
       search: pagination.search ?? undefined,
@@ -347,7 +390,7 @@ export class ShiftOrderSheetsService {
       request = request.ilike('orders.order_items.supply.code', `%${filters.search}%`);
     }
 
-    request = request.in('area_id', scopedAreaIds);
+    request = request.in('area_id', readableAreaIds);
     if (query.workDate) request = request.eq('work_date', query.workDate);
     if (query.workShiftId) request = request.eq('work_shift_id', query.workShiftId);
     if (query.leaderId) request = request.eq('leader_id', query.leaderId);
@@ -448,6 +491,9 @@ export class ShiftOrderSheetsService {
       },
       shift_start_at: shift.shift_start_at,
       shift_end_at: shift.shift_end_at,
+      // Resolved in Postgres against Asia/Ho_Chi_Minh with crosses_midnight
+      // already applied, so the client never has to redo shift arithmetic.
+      is_outside_working_hours: shift.is_overtime,
       business_time_zone: BUSINESS_TIME_ZONE,
     } as const;
 
@@ -466,6 +512,51 @@ export class ShiftOrderSheetsService {
 
     const row = data as unknown as SheetRow & { orders: Array<Record<string, unknown>> };
     return { context, sheet: this.normalizeDetail(row) };
+  }
+
+  /**
+   * Phiếu order từ các thị trường: the Sheets of the Areas that order out of the
+   * actor's own supplying Area, narrowed to a single shift instance.
+   *
+   * The shift instance (work_date + work_shift_id) comes from the caller's
+   * current Sheet context, so anything raised on another date or another shift
+   * is by definition an older Sheet and belongs in history rather than in the
+   * shift being worked right now.
+   */
+  async listIncoming(
+    actor: ShiftOrderSheetActor,
+    query: ShiftOrderSheetIncomingQuery,
+  ) {
+    const scopes = await this.areaScopes(actor).getEffectiveAreaTypeScopes();
+    const incomingAreaIds = resolveIncomingAreaIds(
+      actor,
+      scopes.flatMap((scope) => scope.areas.map((area) => area.id)),
+    );
+    if (incomingAreaIds.length === 0) return [];
+
+    const { data, error } = await this.db
+      .from('supply_shift_order_sheets')
+      .select(SHEET_INCOMING_SELECT)
+      .in('area_id', incomingAreaIds)
+      .eq('work_date', query.workDate)
+      .eq('work_shift_id', query.workShiftId)
+      .eq('is_deleted', false)
+      .eq('orders.is_deleted', false)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
+
+    if (error) databaseError(error, 'Không thể tải phiếu order từ các thị trường');
+    return ((data ?? []) as unknown as IncomingSheetRow[])
+      .map((row) => this.normalizeIncoming(row));
+  }
+
+  private normalizeIncoming(row: IncomingSheetRow) {
+    const pendingOrderCount = (row.orders ?? [])
+      .filter((order) => !order.is_deleted)
+      .filter((order) => firstRelation(order.status_lookup)?.code === 'PENDING')
+      .length;
+    const { orders: _orders, ...summary } = this.normalize(row as unknown as SheetRow);
+    return { ...summary, pending_order_count: pendingOrderCount };
   }
 
   async export(actor: ShiftOrderSheetActor, sheetId: string) {

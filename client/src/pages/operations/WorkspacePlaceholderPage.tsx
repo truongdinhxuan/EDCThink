@@ -1,4 +1,5 @@
 import { useParams } from "react-router-dom";
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 interface WorkspacePlaceholderPageProps {
   title: string;
@@ -6,6 +7,7 @@ interface WorkspacePlaceholderPageProps {
 }
 
 const WorkspacePlaceholderPage = ({ title, description }: WorkspacePlaceholderPageProps) => {
+  useDocumentTitle(title);
   const { id } = useParams<{ id: string }>();
 
   return (

@@ -13,8 +13,8 @@
     "build:ts": "npm run clean && tsc",
     "build": "npm run build:ts",
     "auth:bootstrap-admin": "npm run build:ts && node -r dotenv/config dist/scripts/bootstrap-admin-password.js",
-    "start": "fastify start --address 0.0.0.0 --log-level info dist/app.js",
-    "dev": "nodemon --watch \"./**/*.ts\" --ignore node_modules --ext ts --exec \"npm run build:ts && fastify start -l info -P dist/app.js\""
+    "start": "fastify start --options --address 0.0.0.0 --log-level info dist/app.js",
+    "dev": "nodemon --watch \"./**/*.ts\" --ignore node_modules --ext ts --exec \"npm run build:ts && fastify start --options -l info -P dist/app.js\""
   },
   "keywords": [],
   "author": "",
@@ -23,6 +23,7 @@
     "@fastify/autoload": "^6.0.0",
     "@fastify/cookie": "^11.1.2",
     "@fastify/cors": "^11.2.0",
+    "@fastify/helmet": "^13.1.1",
     "@fastify/jwt": "^10.2.1",
     "@fastify/rate-limit": "^11.2.0",
     "@fastify/sensible": "^6.0.0",

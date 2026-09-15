@@ -233,7 +233,6 @@ export const PageFilterRail = ({
           aria-expanded={mobileOpen}
         >
           <FontAwesomeIcon  icon={faFilter} aria-hidden="true" />
-          <FontAwesomeIcon icon={faFilter} aria-hidden="true" />
           Bộ lọc
         </button>
       </div>

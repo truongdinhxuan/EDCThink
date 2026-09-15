@@ -30,6 +30,7 @@ CreateSupplyCategoryInput,
 SupplyCategory,
 SupplyCategoryListParams,
 } from '../../types/supply-categories';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 type CategoryQuery = SupplyCategoryListParams & PaginationParams;
 const initialQuery: CategoryQuery = {
@@ -41,6 +42,7 @@ const initialQuery: CategoryQuery = {
 };
 
 const SupplyCategoriesPage = () => {
+  useDocumentTitle('Loại vật tư');
   const { openConfirm } = useCrudOffcanvas();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);

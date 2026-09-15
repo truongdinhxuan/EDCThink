@@ -15,6 +15,12 @@ export interface ShiftOrderSheetDetailQuery {
   categoryId?: string;
 }
 
+/** Shift instance the approver is currently working, taken from their Sheet context. */
+export interface ShiftOrderSheetIncomingQuery {
+  workDate: string;
+  workShiftId: string;
+}
+
 export interface ShiftOrderSheetRelation {
   id: string;
   code: string;
@@ -60,5 +66,7 @@ export interface CurrentShiftOrderSheetContext {
   work_shift: ShiftOrderSheetRelation;
   shift_start_at: string;
   shift_end_at: string;
+  /** Server verdict: now sits outside [shift_start_at, shift_end_at]. */
+  is_outside_working_hours: boolean;
   business_time_zone: 'Asia/Ho_Chi_Minh';
 }

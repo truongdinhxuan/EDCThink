@@ -1,3 +1,9 @@
+/**
+ * Role codes seeded by the backend. Kept as a reference/autocomplete aid only —
+ * never as an authorization source. Access is decided by permissions
+ * (`PermissionGuard` / `useAuth().hasPermission`), so a role the database adds
+ * later works without a frontend release.
+ */
 export const ROLE_CODE = {
   ADMIN: 'ADMIN',
   DATA_PACKING: 'DATA_PACKING',
@@ -6,9 +12,14 @@ export const ROLE_CODE = {
   MATERIAL_CONTROL: 'MATERIAL_CONTROL',
 } as const;
 
-export type RoleCode = (typeof ROLE_CODE)[keyof typeof ROLE_CODE];
+/**
+ * Any role code the backend defines. Intentionally `string` (not a union of the
+ * constants above) so new database roles are recognised dynamically.
+ */
+export type RoleCode = string;
 
-export const ROLE_CODES = Object.values(ROLE_CODE) as RoleCode[];
+/** The seeded role codes. Informational — do not branch authorization on this. */
+export const ROLE_CODES: RoleCode[] = Object.values(ROLE_CODE);
 
 const extractRoleCode = (value: unknown): string | null => {
   if (typeof value === 'string') return value;
@@ -20,9 +31,11 @@ const extractRoleCode = (value: unknown): string | null => {
   return null;
 };
 
+/**
+ * Reads the role code out of whatever shape the API returned (string,
+ * `{ code }`, or an array of either). Any non-empty code is accepted.
+ */
 export const resolveRoleCode = (value: unknown): RoleCode | null => {
   const candidate = extractRoleCode(value)?.trim();
-  return candidate && ROLE_CODES.includes(candidate as RoleCode)
-    ? candidate as RoleCode
-    : null;
+  return candidate ? candidate : null;
 };

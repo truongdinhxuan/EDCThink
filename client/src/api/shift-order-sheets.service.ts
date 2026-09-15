@@ -2,9 +2,11 @@ import axios, { type AxiosResponse } from 'axios';
 import instance from './http';
 import type { PaginatedResponse } from '../types/pagination.types';
 import type {
+  IncomingShiftOrderSheet,
   ShiftOrderSheetDetail,
   ShiftOrderSheetDetailParams,
   CurrentShiftOrderSheetResponse,
+  ShiftOrderSheetIncomingParams,
   ShiftOrderSheetListParams,
   ShiftOrderSheetSummary,
 } from '../types/shift-order-sheets';
@@ -54,6 +56,22 @@ export const getShiftOrderSheet = async (
     ApiEnvelope<ShiftOrderSheetDetail>,
     ApiEnvelope<ShiftOrderSheetDetail>
   >(`supply/shift-order-sheets/${id}`, { params, signal });
+  return response.data;
+};
+
+/**
+ * Market Sheets for one shift instance. The backend restricts this to the Areas
+ * that order out of the caller's own Area and requires approval authority, so no
+ * area filter is sent from here.
+ */
+export const listIncomingShiftOrderSheets = async (
+  params: ShiftOrderSheetIncomingParams,
+  signal?: AbortSignal,
+): Promise<IncomingShiftOrderSheet[]> => {
+  const response = await instance.get<
+    ApiEnvelope<IncomingShiftOrderSheet[]>,
+    ApiEnvelope<IncomingShiftOrderSheet[]>
+  >('supply/shift-order-sheets/incoming', { params, signal });
   return response.data;
 };
 

@@ -1,7 +1,10 @@
 import { Link } from "react-router-dom";
 import Beams from "../components/Backgrounds/Beams/Beams";
 import SpecularButton from "../components/common/SpecialButton/SpecialButton";
+import ShinyText from "../components/common/ShinyText/ShinyText";
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 const HomePage = () => {
+  useDocumentTitle();
   return (
     <div className="relative h-screen w-full overflow-hidden bg-slate-950 text-white">
       {/* Background layer */}
@@ -11,8 +14,22 @@ const HomePage = () => {
 
       {/* Content layer */}
       <div className="relative z-10 flex h-full flex-col items-center justify-center p-6 text-center">
-        <h1 className="mb-6 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-          Phiên bản thử nghiệm <span className="text-blue-400">EDCThink</span>
+        <h1 className="mb-6 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl items-center justify-center">
+          Phiên bản thử nghiệm{" "}
+          <span className="text-blue-400">
+            <ShinyText
+              text="EDCThink"
+              speed={2}
+              delay={0}
+              color="#54261b"
+              shineColor="#ffffff"
+              spread={120}
+              direction="left"
+              yoyo={false}
+              pauseOnHover={false}
+              disabled={false}
+            />
+          </span>
         </h1>
 
         {/* <p className="mb-10 max-w-2xl text-lg text-slate-300">
@@ -37,9 +54,8 @@ const HomePage = () => {
             followMouse
             proximity={250}
             autoAnimate={false}
-            onClick={() => console.log("clicked")}
           >
-Tới trang đăng nhập           
+            Tới trang đăng nhập
           </SpecularButton>
         </Link>
       </div>

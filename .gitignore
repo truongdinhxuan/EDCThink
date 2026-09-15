@@ -69,3 +69,11 @@ dist
 .codex-tmp
 
 .skills-lock.json
+
+.codex
+
+.claude
+
+.agents
+
+.vscode

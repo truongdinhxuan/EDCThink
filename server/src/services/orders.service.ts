@@ -248,6 +248,9 @@ function parseRpcDetails(details?: string): Record<string, unknown> | undefined 
   }
 }
 
+export const ORDER_OUTSIDE_WORK_SHIFT_MESSAGE =
+  'Không thể tạo Order do đã ngoài thời gian quy định của ca làm việc.';
+
 function createOrderRpcError(error: SupabaseErrorLike): never {
   const code = error.message ?? 'ORDER_CREATE_FAILED';
   const details = parseRpcDetails(error.details);
@@ -279,6 +282,10 @@ function createOrderRpcError(error: SupabaseErrorLike): never {
     ORDER_SHIFT_LEADER_NOT_FOUND: {
       status: 409,
       message: 'Không xác định được Tổ trưởng từ hierarchy managed_by.',
+    },
+    ORDER_OUTSIDE_WORK_SHIFT_WINDOW: {
+      status: 403,
+      message: ORDER_OUTSIDE_WORK_SHIFT_MESSAGE,
     },
     WORK_SHIFT_ASSIGNMENT_NOT_FOUND: {
       status: 409,
@@ -944,6 +951,35 @@ export class OrderService {
     });
   }
 
+  /**
+   * Refuses a create raised outside the nominal window of the requester's shift
+   * instance.
+   *
+   * The authoritative guard lives inside create_pending_order_with_items, where
+   * it runs in the same transaction as the inserts and therefore cannot be
+   * bypassed by calling the API directly. This copy exists only to fail fast,
+   * before the per-item supply/provider/stock reads are spent, and it reuses the
+   * same resolver and the same timestamp so the two can never disagree.
+   */
+  private async assertWithinWorkShiftWindow(
+    actorId: string,
+    at: string,
+  ): Promise<void> {
+    const { data, error } = await this.db.rpc('resolve_user_work_shift_instance', {
+      p_user_id: actorId,
+      p_at: at,
+    });
+    if (error) {
+      // Leave every other resolution failure to the transactional guard so this
+      // pre-check can never invent an error the real create would not raise.
+      return;
+    }
+    const shift = (data as Array<{ is_overtime: boolean }> | null)?.[0];
+    if (shift?.is_overtime) {
+      serviceError(403, ORDER_OUTSIDE_WORK_SHIFT_MESSAGE);
+    }
+  }
+
   async create(actor: OrderActor, body: CreateOrderBody) {
     if (!hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_CREATE)) {
       serviceError(403, 'Missing supply.order.create permission');
@@ -961,8 +997,9 @@ export class OrderService {
     if (body.to_area_id !== actor.areaId) {
       serviceError(400, 'to_area_id must equal the current user area_id');
     }
-    const items = await this.prepareOrderItems(body.order_list, sourceAreaId);
     const submittedAt = new Date().toISOString();
+    await this.assertWithinWorkShiftWindow(actor.id, submittedAt);
+    const items = await this.prepareOrderItems(body.order_list, sourceAreaId);
     const { data: orderId, error } = await this.db.rpc(
       'create_pending_order_with_items',
       {

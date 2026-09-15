@@ -1,11 +1,15 @@
 import { join } from 'node:path'
 import AutoLoad, { AutoloadPluginOptions } from '@fastify/autoload'
 import { FastifyPluginAsync, FastifyServerOptions } from 'fastify'
+import { getTrustProxyOption } from './config/server'
 export interface AppOptions extends FastifyServerOptions, Partial<AutoloadPluginOptions> {
 
 }
-// Pass --options via CLI arguments in command to enable these options.
+// Loaded by fastify-cli only when the start command passes --options.
 const options: AppOptions = {
+  // Decides what request.ip resolves to, which keys the rate limiter and fills
+  // auth_sessions.ip_address. See src/config/server.ts.
+  trustProxy: getTrustProxyOption(),
 }
 
 const app: FastifyPluginAsync<AppOptions> = async (

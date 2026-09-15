@@ -18,6 +18,7 @@ import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { queryKeys } from '../../lib/queryKeys';
 import type { PaginationParams } from '../../types/pagination.types';
 import type { CreateSupplyInput,Supply,SupplyListParams } from '../../types/supplies';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 type SupplyQuery = SupplyListParams & PaginationParams;
 
@@ -38,6 +39,7 @@ const loadProviders = async (signal: AbortSignal) =>
   )).data;
 
 const SuppliesPage = () => {
+  useDocumentTitle('Vật tư');
   const { openConfirm } = useCrudOffcanvas();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);

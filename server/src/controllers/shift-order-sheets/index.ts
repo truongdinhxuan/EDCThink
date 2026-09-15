@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type {
   ShiftOrderSheetDetailQuery,
+  ShiftOrderSheetIncomingQuery,
   ShiftOrderSheetListQuery,
 } from '../../interfaces/shift-order-sheets';
 import {
@@ -57,6 +58,12 @@ export const getShiftOrderSheet = (request: FastifyRequest, reply: FastifyReply)
     actorFrom(request),
     (request.params as { id: string }).id,
     request.query as ShiftOrderSheetDetailQuery,
+  ));
+
+export const listIncomingShiftOrderSheets = (request: FastifyRequest, reply: FastifyReply) =>
+  respond(request, reply, () => new ShiftOrderSheetsService(request.server).listIncoming(
+    actorFrom(request),
+    request.query as ShiftOrderSheetIncomingQuery,
   ));
 
 export const getCurrentShiftOrderSheet = (request: FastifyRequest, reply: FastifyReply) =>

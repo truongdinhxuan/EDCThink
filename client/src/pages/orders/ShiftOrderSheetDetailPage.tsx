@@ -7,6 +7,7 @@ import { CardSkeleton } from '../../components/common/skeleton';
 import { ShiftOrderSheetWorkspace } from '../../components/orders/ShiftOrderSheetWorkspace';
 import { getWorkspacePath } from '../../constants/workspaces';
 import { useAuth } from '../../context/AuthContext';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { queryKeys } from '../../lib/queryKeys';
 
 const ShiftOrderSheetDetailPage = () => {
@@ -18,6 +19,13 @@ const ShiftOrderSheetDetailPage = () => {
     queryFn: ({ signal }) => getShiftOrderSheet(id!, signal),
     enabled: Boolean(id),
   });
+
+  // Called before the early returns below so the hook order never changes.
+  // Undefined until the Sheet loads, so the tab shows the app name rather than
+  // a placeholder that is about to be replaced.
+  useDocumentTitle(query.data?.area && query.data.work_shift
+    ? `Phiếu order ca ${query.data.work_shift.code} · ${query.data.area.code}`
+    : undefined);
 
   if (query.isPending) return <CardSkeleton lines={8} label="Đang tải Phiếu Order Ca" />;
   if (query.isError || !query.data) return (

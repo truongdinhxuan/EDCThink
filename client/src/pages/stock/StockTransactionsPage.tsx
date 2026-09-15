@@ -24,6 +24,7 @@ import { queryKeys } from '../../lib/queryKeys';
 import type { PaginationParams } from '../../types/pagination.types';
 import type { CreateStockAdjustmentInput,StockTransaction,StockTransactionListParams,StockTransactionType } from '../../types/stock-transactions';
 import { STOCK_TRANSACTION_TYPES } from '../../types/stock-transactions';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 type StockTransactionQuery = StockTransactionListParams & PaginationParams;
 
@@ -39,6 +40,7 @@ const transactionTypeCode = (transaction: StockTransaction) =>
   (transaction.transaction_type?.code ?? 'UNKNOWN') as StockTransactionType;
 
 const StockTransactionsPage = () => {
+  useDocumentTitle('Giao dịch vật tư');
   const { hasPermission } = useAuth();
   const canAdjust = hasPermission(PERMISSION_CODE.SUPPLY_STOCK_ADJUST);
   const loader = useCallback((query: StockTransactionQuery, signal: AbortSignal) => listStockTransactions(query, signal), []);

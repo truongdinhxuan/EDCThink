@@ -167,7 +167,7 @@ test('T14-T16 Shift Sheet read is independent from Order create permission', () 
     /requirePermission\(PERMISSION_CODE\.SUPPLY_SHIFT_ORDER_SHEET_READ\)/,
   );
   assert.doesNotMatch(sheetRoute, /ORDER_READ_PERMISSIONS|SUPPLY_ORDER_CREATE/);
-  assert.match(sheetService, /request = request\.in\('area_id', scopedAreaIds\)/);
+  assert.match(sheetService, /request = request\.in\('area_id', readableAreaIds\)/);
 });
 
 test('T17 GET areas supports server-side areaTypeId filter without changing catalog permission', () => {

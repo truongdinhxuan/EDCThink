@@ -32,8 +32,15 @@ describe('order source and receiving area flow', () => {
     assert.match(orderService, /order\.to_area_id !== actor\.areaId/);
     assert.match(orderService, /isOrderAreaScoped\(actor\)/);
     assert.match(orderService, /request = request\.eq\('to_area_id', actor\.areaId\)/);
-    assert.match(orderAccess, /includesPermission\(access, PERMISSION_CODE\.SUPPLY_ORDER_CREATE\)/);
+    // Deny by default: approval authority is the ONLY thing that lifts the
+    // own-Area pin. Requiring SUPPLY_ORDER_CREATE here as well used to leave a
+    // role holding just supply.order.issue (or .allocate) readable but
+    // unpinned, so it saw every Area's Orders.
     assert.match(orderAccess, /!includesPermission\(access, PERMISSION_CODE\.SUPPLY_ORDER_APPROVE\)/);
+    assert.doesNotMatch(
+      orderAccess,
+      /isOrderAreaScoped[\s\S]*?&&\s*includesPermission\(access, PERMISSION_CODE\.SUPPLY_ORDER_CREATE\)/,
+    );
     assert.match(orderAccess, /order\.to_area_id === access\.areaId/);
     assert.match(
       orderDetailPage,

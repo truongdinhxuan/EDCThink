@@ -1,65 +1,74 @@
-import { ROLE_CODE, type RoleCode } from './roles';
+import type { RoleCode } from './roles';
 
-export interface RoleWorkspace {
-  role: RoleCode;
-  basePath: string;
-  dashboardLabel: string;
-  dashboardDescription: string;
-}
+/**
+ * Every authenticated user shares one workspace URL space. What a user may open
+ * inside it is decided by permissions (`PermissionGuard`), not by the URL, so
+ * there is no reason to fork the path per role.
+ */
+export const DEFAULT_WORKSPACE_BASE_PATH = '/workspace';
 
-export const ROLE_WORKSPACES: Record<RoleCode, RoleWorkspace> = {
-  [ROLE_CODE.ADMIN]: {
-    role: ROLE_CODE.ADMIN,
-    basePath: '/admin',
-    dashboardLabel: 'Admin dashboard',
-    dashboardDescription: 'Quản trị hệ thống, người dùng và toàn bộ nghiệp vụ.',
-  },
-  [ROLE_CODE.MATERIAL_LEADER]: {
-    role: ROLE_CODE.MATERIAL_LEADER,
-    basePath: '/teamlead',
-    dashboardLabel: 'Team leader dashboard',
-    dashboardDescription: 'Theo dõi order, tồn kho và hoạt động cấp vật tư.',
-  },
-  [ROLE_CODE.DATA_MATERIAL]: {
-    role: ROLE_CODE.DATA_MATERIAL,
-    basePath: '/datavt',
-    dashboardLabel: 'Data vật tư dashboard',
-    dashboardDescription: 'Tiếp nhận, duyệt và thực hiện nghiệp vụ cấp vật tư.',
-  },
-  [ROLE_CODE.DATA_PACKING]: {
-    role: ROLE_CODE.DATA_PACKING,
-    basePath: '/datadg',
-    dashboardLabel: 'Data đóng gói dashboard',
-    dashboardDescription: 'Tạo và theo dõi order của khu vực được phân công.',
-  },
-  [ROLE_CODE.MATERIAL_CONTROL]: {
-    role: ROLE_CODE.MATERIAL_CONTROL,
-    basePath: '/material-control',
-    dashboardLabel: 'Material Control dashboard',
-    dashboardDescription: 'Theo dõi, phê duyệt và phân tích hoạt động vật tư.',
-  },
-};
+/**
+ * Role-prefixed base paths shipped before the RBAC consolidation. Retained only
+ * so old links and bookmarks can be rewritten onto `/workspace/*` instead of
+ * dead-ending on the 404 page. Do not add new entries.
+ */
+export const LEGACY_WORKSPACE_BASE_PATHS = [
+  '/admin',
+  '/teamlead',
+  '/datavt',
+  '/datadg',
+  '/material-control',
+] as const;
 
-export const getRoleWorkspace = (
-  role: RoleCode | null | undefined,
-): RoleWorkspace | null => (role ? ROLE_WORKSPACES[role] : null);
-
+/**
+ * The workspace base path.
+ *
+ * @param _role Ignored. Accepted so existing call sites keep compiling while the
+ * role argument is removed from them incrementally.
+ * @deprecated Prefer `DEFAULT_WORKSPACE_BASE_PATH`.
+ */
 export const getRoleBasePath = (
-  role: RoleCode | null | undefined,
-): string => getRoleWorkspace(role)?.basePath ?? '/workspace';
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _role?: RoleCode | null,
+): string => DEFAULT_WORKSPACE_BASE_PATH;
 
+/**
+ * Landing page after login and the "back to dashboard" target.
+ *
+ * @param _role Ignored — see {@link getRoleBasePath}.
+ */
 export const getRoleHomePath = (
-  role: RoleCode | null | undefined,
-): string => {
-  const workspace = getRoleWorkspace(role);
-  return workspace ? `${workspace.basePath}/dashboard` : '/workspace/dashboard';
-};
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _role?: RoleCode | null,
+): string => `${DEFAULT_WORKSPACE_BASE_PATH}/dashboard`;
 
+/**
+ * Builds an absolute workspace URL from a route-relative path.
+ *
+ * @param _role Ignored — see {@link getRoleBasePath}.
+ */
 export const getWorkspacePath = (
-  role: RoleCode | null | undefined,
+  _role: RoleCode | null | undefined,
   relativePath = '',
 ): string => {
-  const basePath = getRoleBasePath(role);
   const normalizedPath = relativePath.replace(/^\/+/, '');
-  return normalizedPath ? `${basePath}/${normalizedPath}` : basePath;
+  return normalizedPath
+    ? `${DEFAULT_WORKSPACE_BASE_PATH}/${normalizedPath}`
+    : DEFAULT_WORKSPACE_BASE_PATH;
+};
+
+/**
+ * Rewrites a legacy role-prefixed pathname onto `/workspace/*`.
+ * Returns the pathname unchanged when it carries no legacy prefix.
+ *
+ * `/datadg/orders/42` -> `/workspace/orders/42`
+ * `/admin`            -> `/workspace`
+ */
+export const toWorkspacePathname = (pathname: string): string => {
+  const legacyBase = LEGACY_WORKSPACE_BASE_PATHS.find(
+    (base) => pathname === base || pathname.startsWith(`${base}/`),
+  );
+  return legacyBase
+    ? `${DEFAULT_WORKSPACE_BASE_PATH}${pathname.slice(legacyBase.length)}`
+    : pathname;
 };
