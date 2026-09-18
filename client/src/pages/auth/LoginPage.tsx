@@ -9,7 +9,7 @@ import { getRoleHomePath } from "../../constants/workspaces";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 
 interface ILoginFormInput {
-  vinfast_id: number;
+  vinfast_id: string;
   password: string;
 }
 
@@ -29,7 +29,7 @@ export const LoginPage = () => {
     formState: { errors, isSubmitting },
   } = useForm<ILoginFormInput>({
     defaultValues: {
-      vinfast_id: 0,
+      vinfast_id: "",
       password: "",
     },
   });
@@ -37,10 +37,10 @@ export const LoginPage = () => {
   const onSubmit = async (data: ILoginFormInput) => {
     const { vinfast_id, password } = data;
 
-    if (!Number.isInteger(vinfast_id) || !password) return;
+    if (!vinfast_id.trim() || !password) return;
 
     try {
-      const response = await login({ vinfast_id, password });
+      const response = await login({ vinfast_id: vinfast_id.trim(), password });
 
       loginContext(response);
 
@@ -92,18 +92,16 @@ export const LoginPage = () => {
                 VinFast ID
               </label>
               <input
-                type="number"
+                type="text"
                 inputMode="numeric"
+                autoComplete="username"
                 placeholder="Nhập VinFast ID"
                 className={`w-full rounded-xl border px-4 py-3 font-mono text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2
                   ${errors.vinfast_id
                     ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
                     : "border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"}`}
                 {...register("vinfast_id", {
-                  valueAsNumber: true,
-                  required: "VinFast ID là trường bắt buộc",
-                  validate: (value) =>
-                    Number.isInteger(value) || "VinFast ID phải là số nguyên",
+                  required: "Vui lòng nhập VinFast ID.",
                 })}
               />
               {errors.vinfast_id && (

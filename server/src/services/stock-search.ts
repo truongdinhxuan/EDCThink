@@ -15,9 +15,9 @@ export const resolveStockSearchReferences = async (
   search: string,
   includeCreators = false,
 ): Promise<StockSearchReferences> => {
-  const creatorFilter = /^-?\d+$/.test(search)
-    ? `first_name.ilike.*${search}*,last_name.ilike.*${search}*,vinfast_id.eq.${Number(search)}`
-    : `first_name.ilike.*${search}*,last_name.ilike.*${search}*`;
+  // vinfast_id is text, so it takes the same partial match as the name columns:
+  // a numeric cast would drop leading zeros and miss the codes that carry them.
+  const creatorFilter = `first_name.ilike.*${search}*,last_name.ilike.*${search}*,vinfast_id.ilike.*${search}*`;
   const [supplies, areas, locations, creators] = await Promise.all([
     db.from('supplies').select('id').or(
       `code.ilike.*${search}*,description.ilike.*${search}*`,

@@ -42,7 +42,7 @@ const authPayload = async (
 export const loginUser = async (request: FastifyRequest, reply: FastifyReply) => {
   const { vinfast_id, password } = request.body as LoginBody;
 
-  if (!Number.isInteger(vinfast_id) || !password) {
+  if (typeof vinfast_id !== 'string' || !vinfast_id.trim() || !password) {
     return reply.code(400).send({
       error: 'VinFast ID và mật khẩu là bắt buộc',
     });

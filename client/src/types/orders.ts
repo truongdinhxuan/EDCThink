@@ -30,7 +30,7 @@ export interface OrderAreaSummary {
 
 export interface OrderUserSummary {
   id: string;
-  vinfast_id: number;
+  vinfast_id: string;
   email: string;
   first_name: string;
   last_name: string;

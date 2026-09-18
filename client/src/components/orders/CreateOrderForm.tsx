@@ -411,7 +411,8 @@ export const CreateOrderForm = ({
               const qtyRegister = register(`order_list.${index}.quantity_requested`, {
                 valueAsNumber: true,
                 required: 'Nhập số lượng.',
-                min: { value: 0.000001, message: 'Phải lớn hơn 0.' },
+                min: { value: 1, message: 'Số lượng phải từ 1 trở lên.' },
+                validate: (val) => Number.isInteger(Number(val)) || 'Số lượng phải là số nguyên.',
               });
               return (
                 <div key={field.id} className="rounded-xl border border-slate-200 p-3">
@@ -451,18 +452,18 @@ export const CreateOrderForm = ({
 
                     {isStack ? (
                       <>
-                        <input type="hidden" {...register(`order_list.${index}.set_per_qty`, { required: 'Chọn SET/chồng.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} />
-                        <input type="hidden" {...register(`order_list.${index}.requested_stack_quantity`, { required: 'Nhập số chồng.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} />
+                        <input type="hidden" {...register(`order_list.${index}.set_per_qty`, { required: 'Chọn SET/chồng.', min: { value: 1, message: 'Phải từ 1 trở lên.' }, validate: (val) => Number.isInteger(Number(val)) || 'SET/chồng phải là số nguyên.' })} />
+                        <input type="hidden" {...register(`order_list.${index}.requested_stack_quantity`, { required: 'Nhập số chồng.', min: { value: 1, message: 'Phải từ 1 trở lên.' }, validate: (val) => Number.isInteger(Number(val)) || 'Số chồng phải là số nguyên.' })} />
                         <input type="hidden" {...register(`order_list.${index}.requested_total_set_quantity`)} />
-                        <input type="hidden" {...register(`order_list.${index}.quantity_requested`, { required: 'Tổng SET chưa hợp lệ.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} />
+                        <input type="hidden" {...register(`order_list.${index}.quantity_requested`, { required: 'Tổng SET chưa hợp lệ.', min: { value: 1, message: 'Phải từ 1 trở lên.' }, validate: (val) => Number.isInteger(Number(val)) || 'Tổng SET phải là số nguyên.' })} />
                       </>
                     ) : (
                       <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <span>Số lượng{unitLabel ? <span className="ml-1 normal-case text-slate-400">({unitLabel})</span> : null}</span>
                         <input
                           type="number"
-                          step="any"
-                          min="0.000001"
+                          step="1"
+                          min="1"
                           {...qtyRegister}
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800"
                         />

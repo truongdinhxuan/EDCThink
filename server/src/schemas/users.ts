@@ -29,7 +29,7 @@ export const loginSchema: FastifySchema = {
     additionalProperties: false,
     required: ['vinfast_id', 'password'],
     properties: {
-      vinfast_id: { type: 'integer' },
+      vinfast_id: { type: 'string', minLength: 1, maxLength: 50 },
       password: { type: 'string', minLength: 1, maxLength: 128 },
     },
   },
@@ -51,7 +51,7 @@ const userProfileProperties = {
   email: { type: 'string', format: 'email', maxLength: 320 },
   first_name: { type: 'string', minLength: 1, maxLength: 255 },
   last_name: { type: 'string', minLength: 1, maxLength: 255 },
-  vinfast_id: { type: 'integer' },
+  vinfast_id: { type: 'string', minLength: 1, maxLength: 50 },
   phone_number: nullableText,
   avatar_url: nullableText,
   area_id: uuid,

@@ -19,6 +19,49 @@ const ACTION_STATUSES: Record<OrderAction, readonly OrderStatus[]> = {
   cancel: ['PENDING'],
 };
 
+export const ORDER_STATUS_UPDATE_EXPIRED_MESSAGE =
+  'Không thể cập nhật trạng thái Order do đã quá thời hạn cho phép (kết thúc ca + 3 giờ).';
+
+/** How long after its shift ends an Order may still change status. */
+export const ORDER_STATUS_UPDATE_GRACE_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * The absolute instant a shift instance ends.
+ *
+ * Asia/Ho_Chi_Minh is a fixed UTC+7 with no DST, so pinning the offset is exact
+ * all year and makes the result independent of the server's own timezone. A
+ * shift flagged as crossing midnight ends on the following calendar day.
+ *
+ * Returns null when the pieces do not form a real instant, so callers can tell
+ * "no deadline" apart from "deadline passed".
+ */
+export const resolveShiftEndAt = (
+  workDate: string,
+  shift: { end_time: string; crosses_midnight?: boolean },
+): Date | null => {
+  const endAt = new Date(`${workDate}T${shift.end_time}+07:00`);
+  if (Number.isNaN(endAt.getTime())) return null;
+  if (shift.crosses_midnight) endAt.setUTCDate(endAt.getUTCDate() + 1);
+  return endAt;
+};
+
+/**
+ * Whether the window for changing an Order's status has closed.
+ *
+ * Unreadable shift data yields false on purpose: bad master data must not strand
+ * an Order that nobody can then approve, reject or cancel. The status machine
+ * and the permission checks still apply.
+ */
+export const isOrderStatusUpdateExpired = (
+  workDate: string,
+  shift: { end_time: string; crosses_midnight?: boolean },
+  now: Date = new Date(),
+): boolean => {
+  const endAt = resolveShiftEndAt(workDate, shift);
+  if (!endAt) return false;
+  return now.getTime() > endAt.getTime() + ORDER_STATUS_UPDATE_GRACE_MS;
+};
+
 export class OrderRuleError extends Error {
   constructor(message: string) {
     super(message);
@@ -59,6 +102,11 @@ export const assertPositiveQuantity = (quantity: unknown, field: string): number
   if (!Number.isFinite(value) || value <= 0) {
     throw new OrderRuleError(`${field} must be greater than 0`);
   }
+  // Supply is counted in whole units; a fraction here means the caller bypassed
+  // the request schema, so the rule layer refuses it too.
+  if (!Number.isInteger(value)) {
+    throw new OrderRuleError(`${field} phải là số nguyên dương`);
+  }
   return value;
 };
 
@@ -71,6 +119,9 @@ export const assertApprovedQuantity = (
     throw new OrderRuleError(
       'quantity_approved must be greater than or equal to 0',
     );
+  }
+  if (!Number.isInteger(value)) {
+    throw new OrderRuleError('quantity_approved phải là số nguyên');
   }
   return value;
 };

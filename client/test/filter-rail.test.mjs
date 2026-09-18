@@ -39,7 +39,8 @@ describe('Phase 3 shared Filter Rail contract', () => {
   it('T06/T19 keeps business filter values outside open and collapse state', () => {
     const rail = read('src/components/filters/PageFilterRail.tsx');
     const provider = read('src/components/filters/FilterRailProvider.tsx');
-    assert.match(rail, /const \[desktopCollapsed, setDesktopCollapsed\] = useState\(false\)/);
+    assert.match(rail, /const \[desktopCollapsed, setDesktopCollapsed\] = useState<boolean>\(readCollapsedPreference\)/);
+    assert.match(rail, /FILTER_RAIL_COLLAPSED_KEY = 'filterRail\.collapsed'/);
     assert.doesNotMatch(rail, /useState<.*search|setSearch|updateQuery|queryClient/);
     assert.doesNotMatch(provider, /search|filterValue|queryClient|invalidateQueries/);
   });

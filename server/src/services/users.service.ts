@@ -135,7 +135,7 @@ export class UsersService {
 
   private async assertUniqueFields(
     email: string,
-    vinfastId: number,
+    vinfastId: string,
     excludeId?: string,
   ): Promise<void> {
     let emailQuery = this.db
@@ -230,10 +230,10 @@ export class UsersService {
         `email.ilike.*${pagination.search}*`,
         `first_name.ilike.*${pagination.search}*`,
         `last_name.ilike.*${pagination.search}*`,
+        // vinfast_id is text now: match it partially like the other text columns
+        // instead of casting, which would drop leading zeros.
+        `vinfast_id.ilike.*${pagination.search}*`,
       ];
-      if (/^-?\d+$/.test(pagination.search)) {
-        conditions.push(`vinfast_id.eq.${Number(pagination.search)}`);
-      }
       request = request.or(conditions.join(','));
     }
     if (query.roleId) {
@@ -274,7 +274,7 @@ export class UsersService {
   }
 
   async authenticate(
-    vinfastId: number,
+    vinfastId: string,
     password: string,
   ): Promise<UserProfileRecord> {
     const { data, error } = await this.db
@@ -432,7 +432,7 @@ export class UsersService {
     if (Object.keys(payload).length === 0) userFail(400, 'Không có dữ liệu để cập nhật');
 
     const nextEmail = (payload.email as string | undefined) ?? currentUser.email;
-    const nextVinfastId = (payload.vinfast_id as number | undefined) ?? currentUser.vinfast_id;
+    const nextVinfastId = (payload.vinfast_id as string | undefined) ?? currentUser.vinfast_id;
     if (nextEmail !== currentUser.email || nextVinfastId !== currentUser.vinfast_id) {
       await this.assertUniqueFields(nextEmail, nextVinfastId, id);
     }

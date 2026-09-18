@@ -6,7 +6,7 @@ import app from '../../dist/app.js';
 import { hashPassword } from '../../dist/utils/password.js';
 import { UsersService } from '../../dist/services/users.service.js';
 
-const vinfastId = 969800002;
+const vinfastId = '969800002';
 const initialPassword = 'AuthPhase1!';
 const origin = process.env.ORIGIN_URL;
 const secret = process.env.APP_JWT_SECRET;
@@ -311,7 +311,7 @@ try {
     url: '/auth/login',
     remoteAddress: '10.1.0.7',
     headers: { origin },
-    payload: { vinfast_id: 123456789, password: 'WrongPassword1!' },
+    payload: { vinfast_id: '123456789', password: 'WrongPassword1!' },
   });
   assert.equal(unknownUser.statusCode, 401, unknownUser.body);
   assert.equal(unknownUser.json().error, wrongPassword.json().error);

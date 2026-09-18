@@ -65,3 +65,6 @@ test/types/index.js
 dist
 
 .env
+.env.example
+
+.codex-tmp

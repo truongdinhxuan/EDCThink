@@ -33,7 +33,7 @@ const loadAreas = async (signal: AbortSignal) =>
     { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
     signal,
   )).data;
-const numberFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 });
+const numberFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
 const dateFormatter = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
 const transactionTypeClass = (type: StockTransactionType) => type.endsWith('_IN') || type === 'RECEIVE' || type === 'IMPORT' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700';
 const transactionTypeCode = (transaction: StockTransaction) =>

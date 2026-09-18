@@ -13,7 +13,7 @@ export type AreaSummary = Pick<Area, 'id' | 'code' | 'name'>;
 
 export interface UserRecord {
   id: string;
-  vinfast_id: number;
+  vinfast_id: string;
   email: string;
   phone_number: string | null;
   avatar_url: string | null;
@@ -68,7 +68,7 @@ export interface CreateUserInput {
   password: string;
   first_name: string;
   last_name: string;
-  vinfast_id: number;
+  vinfast_id: string;
   phone_number?: string | null;
   avatar_url?: string | null;
   role_ids: string[];

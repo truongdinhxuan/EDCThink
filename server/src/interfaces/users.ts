@@ -19,7 +19,7 @@ export const USER_COLUMNS = [
 ] as const;
 
 export interface LoginBody {
-  vinfast_id: number;
+  vinfast_id: string;
   password: string;
 }
 
@@ -34,7 +34,7 @@ export interface CreateUserBody {
   password: string;
   first_name: string;
   last_name: string;
-  vinfast_id: number;
+  vinfast_id: string;
   phone_number?: string | null;
   avatar_url?: string | null;
   role_ids: string[];
@@ -46,7 +46,7 @@ export interface UpdateUserBody {
   email?: string;
   first_name?: string;
   last_name?: string;
-  vinfast_id?: number;
+  vinfast_id?: string;
   phone_number?: string | null;
   avatar_url?: string | null;
   area_id?: string;

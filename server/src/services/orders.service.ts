@@ -20,6 +20,8 @@ import {
   assertPositiveQuantity,
   assertRejectedReason,
   calculateStockAvailability,
+  isOrderStatusUpdateExpired,
+  ORDER_STATUS_UPDATE_EXPIRED_MESSAGE,
   OrderRuleError,
 } from '../domain/orderRules';
 import { hasPermission } from './authorization.service';
@@ -112,7 +114,7 @@ interface OrderItemAllocationData {
 
 interface InventoryDiscrepancyUserData {
   id: string;
-  vinfast_id: number;
+  vinfast_id: string;
   first_name: string;
   last_name: string;
 }
@@ -168,6 +170,18 @@ interface OrderData {
   };
   order_items: OrderItemData[];
   [key: string]: unknown;
+}
+
+/** The slice of the Order's Sheet that decides the status-update deadline. */
+interface ShiftSheetWindow {
+  work_date?: string;
+  work_shift?: {
+    end_time?: string;
+    crosses_midnight?: boolean;
+  } | Array<{
+    end_time?: string;
+    crosses_midnight?: boolean;
+  }> | null;
 }
 
 interface SupabaseErrorLike {
@@ -1038,8 +1052,39 @@ export class OrderService {
     return order;
   }
 
+  /**
+   * Refuses a status change raised more than three hours after the shift the
+   * Order belongs to has ended.
+   *
+   * The shift comes from the Order's own Sheet, already loaded by
+   * ORDER_DETAIL_SELECT, so this costs no extra read. An Order with no Sheet has
+   * no shift to age against and is left alone.
+   */
+  private assertWithinStatusUpdateWindow(order: OrderData): void {
+    const sheet = firstRelation(
+      (order.shift_order_sheet ?? null) as ShiftSheetWindow | ShiftSheetWindow[] | null,
+    );
+    const shift = firstRelation(sheet?.work_shift ?? null);
+    const workDate = sheet?.work_date;
+    const endTime = shift?.end_time;
+    if (!workDate || !endTime) return;
+
+    if (isOrderStatusUpdateExpired(workDate, {
+      end_time: endTime,
+      crosses_midnight: shift?.crosses_midnight,
+    })) {
+      serviceError(
+        403,
+        ORDER_STATUS_UPDATE_EXPIRED_MESSAGE,
+        undefined,
+        'ORDER_STATUS_UPDATE_WINDOW_EXPIRED',
+      );
+    }
+  }
+
   async patch(actor: OrderActor, orderId: string, body: PatchOrderBody) {
     const order = await this.findOrder(orderId);
+    this.assertWithinStatusUpdateWindow(order);
     this.assertPackingOwner(actor, order);
     const currentStatus = this.statusCode(order);
     try {
@@ -1146,6 +1191,7 @@ export class OrderService {
       serviceError(403, 'Missing supply.order.approve permission');
     }
     const order = await this.findOrder(orderId);
+    this.assertWithinStatusUpdateWindow(order);
     try {
       assertOrderActionAllowed(this.statusCode(order), 'approve');
     } catch (error) {
@@ -1201,6 +1247,9 @@ export class OrderService {
     if (!hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_ALLOCATE)) {
       serviceError(403, 'Missing supply.order.allocate permission');
     }
+    // Reads the Order up front purely to test the deadline; the RPC below
+    // mutates it, so the copy returned at the end is fetched again anyway.
+    this.assertWithinStatusUpdateWindow(await this.findOrder(orderId));
     const { error } = await this.db.rpc('allocate_stack_order', {
       p_order_id: orderId,
       p_actor_id: actor.id,
@@ -1240,6 +1289,7 @@ export class OrderService {
     if (!allocation || allocationItem?.order_id !== orderId) {
       serviceError(404, 'Allocation not found for this Order');
     }
+    this.assertWithinStatusUpdateWindow(await this.findOrder(orderId));
 
     const { data: confirmation, error } = await this.db.rpc(
       'confirm_stack_allocation_actual',
@@ -1263,6 +1313,7 @@ export class OrderService {
       serviceError(403, 'Missing supply.order.approve permission');
     }
     const order = await this.findOrder(orderId);
+    this.assertWithinStatusUpdateWindow(order);
     try {
       assertOrderActionAllowed(this.statusCode(order), 'reject');
       const rejectedReason = assertRejectedReason(body?.rejected_reason);
@@ -1286,6 +1337,7 @@ export class OrderService {
       serviceError(403, 'Missing supply.order.issue permission');
     }
     const order = await this.findOrder(orderId);
+    this.assertWithinStatusUpdateWindow(order);
     try {
       const currentStatus = this.statusCode(order);
       if (['ISSUED', 'RECEIVED', 'COMPLETED'].includes(currentStatus)) {
@@ -1343,6 +1395,7 @@ export class OrderService {
 
   async receive(actor: OrderActor, orderId: string, body: ReceiveOrderBody) {
     const order = await this.findOrder(orderId);
+    this.assertWithinStatusUpdateWindow(order);
     this.assertPackingOwner(actor, order);
     try {
       assertOrderActionAllowed(this.statusCode(order), 'receive');
@@ -1369,6 +1422,7 @@ export class OrderService {
       serviceError(403, 'Missing supply.order.issue permission');
     }
     const order = await this.findOrder(orderId);
+    this.assertWithinStatusUpdateWindow(order);
     try {
       assertOrderActionAllowed(this.statusCode(order), 'complete');
     } catch (error) {
@@ -1394,6 +1448,7 @@ export class OrderService {
 
   async cancel(actor: OrderActor, orderId: string, body: CancelOrderBody) {
     const order = await this.findOrder(orderId);
+    this.assertWithinStatusUpdateWindow(order);
     this.assertPackingOwner(actor, order);
     try {
       const currentStatus = this.statusCode(order);

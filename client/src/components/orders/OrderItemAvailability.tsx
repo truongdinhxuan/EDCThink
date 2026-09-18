@@ -11,7 +11,7 @@ interface OrderItemAvailabilityProps {
 }
 
 const quantityFormatter = new Intl.NumberFormat('vi-VN', {
-  maximumFractionDigits: 6,
+  maximumFractionDigits: 0,
 });
 
 /**

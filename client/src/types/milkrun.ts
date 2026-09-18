@@ -34,7 +34,7 @@ export interface MilkrunTripStatus extends MilkrunLookup {
 
 export interface MilkrunDriverSummary {
   id: string;
-  vinfast_id: number;
+  vinfast_id: string;
   first_name: string;
   last_name: string;
   email: string;

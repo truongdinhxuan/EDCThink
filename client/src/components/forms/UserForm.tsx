@@ -11,7 +11,7 @@ export interface UserFormValues {
   confirm_password: string;
   first_name: string;
   last_name: string;
-  vinfast_id: number;
+  vinfast_id: string;
   phone_number: string;
   avatar_url: string;
   role_ids: string[];
@@ -52,7 +52,7 @@ export const UserForm = ({ user, roleIds, canAssignRoles, references, busy, onSa
       confirm_password: '',
       first_name: user?.first_name ?? '',
       last_name: user?.last_name ?? '',
-      vinfast_id: user?.vinfast_id ?? 0,
+      vinfast_id: user?.vinfast_id ?? '',
       phone_number: user?.phone_number ?? '',
       avatar_url: user?.avatar_url ?? '',
       role_ids: roleIds,
@@ -90,7 +90,7 @@ export const UserForm = ({ user, roleIds, canAssignRoles, references, busy, onSa
         </label>
         <label className={labelClassName}>
           <span>VinFast ID</span>
-          <input type="number" {...register('vinfast_id', { required: 'Vui lòng nhập VinFast ID.', valueAsNumber: true, validate: (value) => Number.isInteger(value) || 'VinFast ID phải là số nguyên.' })} className={inputClassName} />
+          <input type="text" inputMode="numeric" {...register('vinfast_id', { required: 'Vui lòng nhập VinFast ID.' })} className={inputClassName} />
           <FieldError message={errors.vinfast_id?.message} />
         </label>
         {!user && (

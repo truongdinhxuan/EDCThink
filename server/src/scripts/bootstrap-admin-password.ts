@@ -20,7 +20,7 @@ interface AdminUserRoleRelation {
 
 interface BootstrapAdmin {
   id: string;
-  vinfast_id: number;
+  vinfast_id: string;
   is_active: boolean;
   is_verified: boolean;
   is_deleted: boolean;
@@ -36,12 +36,12 @@ const requiredEnvironment = (name: string): string => {
 const main = async () => {
   const supabaseUrl = requiredEnvironment('SUPABASE_URL');
   const serviceRoleKey = requiredEnvironment('SUPABASE_SERVICE_ROLE_KEY');
-  const vinfastIdText = requiredEnvironment('BOOTSTRAP_ADMIN_VINFAST_ID');
   const password = requiredEnvironment('BOOTSTRAP_ADMIN_PASSWORD');
-  const vinfastId = Number(vinfastIdText);
+  // vinfast_id is an employee code, not a number: keep it as the text it is.
+  const vinfastId = requiredEnvironment('BOOTSTRAP_ADMIN_VINFAST_ID').trim();
 
-  if (!Number.isInteger(vinfastId)) {
-    throw new Error('BOOTSTRAP_ADMIN_VINFAST_ID must be an integer');
+  if (!vinfastId) {
+    throw new Error('BOOTSTRAP_ADMIN_VINFAST_ID must not be blank');
   }
   if (!isStrongPassword(password)) {
     throw new Error(PASSWORD_RULE_MESSAGE);

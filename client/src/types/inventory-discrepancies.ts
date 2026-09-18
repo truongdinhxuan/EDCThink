@@ -4,7 +4,7 @@ export type InventoryDiscrepancyStatus = 'OPEN' | 'RESOLVED';
 
 export interface DiscrepancyUserSummary {
   id: string;
-  vinfast_id: number;
+  vinfast_id: string;
   first_name: string;
   last_name: string;
 }

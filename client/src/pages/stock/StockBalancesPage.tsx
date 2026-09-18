@@ -34,7 +34,7 @@ const loadAreas = async (signal: AbortSignal) =>
     { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
     signal,
   )).data;
-const numberFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 });
+const numberFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
 const dateFormatter = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
 const isStackBalance = (item: StockBalance) => item.supply?.category?.code === 'KIEN_SAT_TC';
 const isLegacyStackBalance = (item: StockBalance) => isStackBalance(item)

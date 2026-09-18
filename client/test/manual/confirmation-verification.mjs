@@ -113,7 +113,7 @@ const cleanup = async () => {
 };
 
 try {
-  if (!resumePrefix) assert.equal(rows(`select id from public.users where vinfast_id in (${vinfast},${vinfast+1})`).length, 0, 'Fixture VinFast ID already exists; do not overwrite');
+  if (!resumePrefix) assert.equal(rows(`select id from public.users where vinfast_id in (${q(String(vinfast))},${q(String(vinfast + 1))})`).length, 0, 'Fixture VinFast ID already exists; do not overwrite');
   const source = rows("select id from public.areas where code='VTDG' and is_active and not is_deleted")[0];
   const area = authorizationRepair ? {id:ids.area} : rows("select id from public.areas where code='EDC_LOGISTICS' and is_active and not is_deleted")[0];
   const shift = rows("select id from public.work_shifts where code='S1' and is_active and not is_deleted")[0];
@@ -133,8 +133,8 @@ try {
       ids[key] = found[0].id;
     }
     for (const [key, roleKey] of [['actor','actorRole'],['reader','readerRole']]) {
-      const fixtureVinfastId = key === 'actor' ? vinfast : vinfast + 1;
-      const found = rows(`select id from public.users where role_id=${q(ids[roleKey])} and vinfast_id=${fixtureVinfastId}`);
+      const fixtureVinfastId = String(key === 'actor' ? vinfast : vinfast + 1);
+      const found = rows(`select id from public.users where role_id=${q(ids[roleKey])} and vinfast_id=${q(fixtureVinfastId)}`);
       assert.equal(found.length, 1); ids[key] = found[0].id;
     }
     ids.balance = rows(`select id from public.stock_balances where supply_id=${q(ids.supply)}`)[0].id;
@@ -150,8 +150,8 @@ try {
     insert into public.role_permissions(role_id,permission_id)
       select ${q(ids.readerRole)},id from public.permissions where code in ('admin.role.read','admin.user.read','supply.catalog.read','milkrun.shop.read',${q(authorizationRepair ? 'supply.order.approve' : 'supply.order.create')});
     insert into public.users(id,vinfast_id,email,role_id,area_id,first_name,last_name,is_verified)
-      values (${q(ids.actor)},${vinfast},'p4verify-actor@example.test',${q(ids.actorRole)},${q(area.id)},'P4VERIFY','Actor',true),
-      (${q(ids.reader)},${vinfast+1},'p4verify-reader@example.test',${q(ids.readerRole)},${q(area.id)},'P4VERIFY','Reader',true);
+      values (${q(ids.actor)},${q(String(vinfast))},'p4verify-actor@example.test',${q(ids.actorRole)},${q(area.id)},'P4VERIFY','Actor',true),
+      (${q(ids.reader)},${q(String(vinfast + 1))},'p4verify-reader@example.test',${q(ids.readerRole)},${q(area.id)},'P4VERIFY','Reader',true);
     insert into public.user_credentials(user_id,password_hash) values (${q(ids.actor)},${q(hashed)}),(${q(ids.reader)},${q(hashed)});
     ${authorizationRepair ? `update public.users set managed_by_user_id=${q(ids.reader)} where id=${q(ids.actor)};
       insert into public.user_work_shift_assignments(user_id,work_shift_id,effective_from,assigned_by) values (${q(ids.actor)},${q(shift.id)},now()-interval '2 days',${q(ids.reader)});` : ''}

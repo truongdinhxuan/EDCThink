@@ -104,8 +104,8 @@ export const OrderStackFields = ({
         Số chồng
         <input
           type="number"
-          step="any"
-          min="0.000001"
+          step="1"
+          min="1"
           value={requestedStackQuantity ?? ''}
           onChange={(event) => onRequestedStackQuantityChange(
             event.target.value ? Number(event.target.value) : undefined,

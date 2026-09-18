@@ -88,7 +88,7 @@ const normalizeBoolean = (
 const displayName = (user: {
   first_name?: string | null;
   last_name?: string | null;
-  vinfast_id?: number | null;
+  vinfast_id?: string | null;
 } | null): string => {
   if (!user) return '';
   const name = `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim();
@@ -294,9 +294,9 @@ export class NotificationsService {
         id: string; code: string; name: string;
       } | Array<{ id: string; code: string; name: string }> | null);
       const creator = firstRelation(notification.creator as {
-        id: string; vinfast_id: number; first_name: string; last_name: string;
+        id: string; vinfast_id: string; first_name: string; last_name: string;
       } | Array<{
-        id: string; vinfast_id: number; first_name: string; last_name: string;
+        id: string; vinfast_id: string; first_name: string; last_name: string;
       }> | null);
       const entity = notification.entity_type === 'order'
         ? orderById.get(notification.entity_id) ?? null

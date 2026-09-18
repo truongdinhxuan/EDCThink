@@ -215,7 +215,7 @@ try {
     is_deleted: false,
   }));
   const userValues = userRows.map((user) => `(
-    '${user.id}', ${user.vinfast_id}, '${user.email}', '${user.role_id}',
+    '${user.id}', '${user.vinfast_id}', '${user.email}', '${user.role_id}',
     '${user.area_id}', '${user.first_name}', '${user.last_name}', true, true, false
   )`).join(',');
   runLocalSql(`

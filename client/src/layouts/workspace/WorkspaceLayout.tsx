@@ -23,7 +23,7 @@ const WorkspaceLayoutContent = ({
   setMobileSidebarOpenLocationKey: (value: string | null) => void;
 }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() =>
-    localStorage.getItem("vf.sidebar.collapsed") === "true"
+    localStorage.getItem("sidebar.collapsed") === "true"
   );
   const isMobileSidebarOpen = mobileSidebarOpenLocationKey === locationKey;
   const { closeFilterRail } = useFilterRail();
@@ -67,7 +67,7 @@ const WorkspaceLayoutContent = ({
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("vf.sidebar.collapsed", String(isSidebarCollapsed));
+    localStorage.setItem("sidebar.collapsed", String(isSidebarCollapsed));
   }, [isSidebarCollapsed]);
 
   useEffect(() => {

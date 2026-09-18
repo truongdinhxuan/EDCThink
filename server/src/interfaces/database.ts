@@ -91,7 +91,7 @@ export interface RoleAreaTypeScopeRecord {
 
 export interface UserRecord {
   id: string;
-  vinfast_id: number;
+  vinfast_id: string;
   email: string;
   phone_number: string | null;
   avatar_url: string | null;

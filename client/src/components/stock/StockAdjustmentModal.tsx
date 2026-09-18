@@ -226,12 +226,12 @@ export const StockAdjustmentModal = ({
                 <span>Số chồng</span>
                 <input
                   type="number"
-                  min="0"
-                  step="any"
+                  min="1"
+                  step="1"
                   {...register('stack_quantity', {
                     valueAsNumber: true,
                     required: 'Vui lòng nhập số chồng.',
-                    validate: (value) => (typeof value === 'number' && value > 0) || 'Số chồng phải lớn hơn 0.',
+                    validate: (value) => (typeof value === 'number' && Number.isInteger(value) && value > 0) || 'Số chồng phải là số nguyên lớn hơn 0.',
                   })}
                   className={inputClassName}
                 />
@@ -241,12 +241,12 @@ export const StockAdjustmentModal = ({
                 <span>SET / chồng</span>
                 <input
                   type="number"
-                  min="0"
-                  step="any"
+                  min="1"
+                  step="1"
                   {...register('set_per_qty', {
                     valueAsNumber: true,
                     required: 'Vui lòng nhập số SET trên mỗi chồng.',
-                    validate: (value) => (typeof value === 'number' && value > 0) || 'SET / chồng phải lớn hơn 0.',
+                    validate: (value) => (typeof value === 'number' && Number.isInteger(value) && value > 0) || 'SET / chồng phải là số nguyên lớn hơn 0.',
                   })}
                   className={inputClassName}
                 />
@@ -269,7 +269,7 @@ export const StockAdjustmentModal = ({
           ) : (
             <label className={labelClassName}>
               <span>Số lượng</span>
-              <input type="number" min="0" step="any" {...register('quantity', { valueAsNumber: true, required: 'Vui lòng nhập số lượng.', validate: (value) => (typeof value === 'number' && value > 0) || 'Số lượng phải lớn hơn 0.' })} className={inputClassName} />
+              <input type="number" min="1" step="1" {...register('quantity', { valueAsNumber: true, required: 'Vui lòng nhập số lượng.', validate: (value) => (typeof value === 'number' && Number.isInteger(value) && value > 0) || 'Số lượng phải là số nguyên lớn hơn 0.' })} className={inputClassName} />
               <FieldError message={errors.quantity?.message} />
             </label>
           )}
