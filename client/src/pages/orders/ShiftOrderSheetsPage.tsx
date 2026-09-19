@@ -29,6 +29,7 @@ import type {
   ShiftOrderSheetListParams,
   ShiftOrderSheetSummary,
 } from '../../types/shift-order-sheets';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
 
@@ -48,6 +49,7 @@ const formatDate = (value: string): string => new Intl.DateTimeFormat('vi-VN', {
 }).format(new Date(`${value}T00:00:00+07:00`));
 
 const ShiftOrderSheetsPage = () => {
+  useDocumentTitle('Phiếu order ca');
   const { user } = useAuth();
   const assignedAreaId = user?.publicData.area_id ?? '';
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -161,6 +163,13 @@ const ShiftOrderSheetsPage = () => {
     && !filters.statusId
     && !filters.categoryId;
 
+  // These filters narrow the Orders embedded in each Sheet row, so the counts
+  // the API returns become "how many matched" rather than "how many there are".
+  // The heading says which one the reader is looking at.
+  const contentFilterActive = Boolean(
+    detailParams.search || filters.statusId || filters.categoryId,
+  );
+
   const historyColumns = useMemo<Column<ShiftOrderSheetSummary>[]>(() => [
     {
       header: 'Ngày',
@@ -177,8 +186,16 @@ const ShiftOrderSheetsPage = () => {
       accessor: 'area_id',
       render: (sheet) => sheet.area ? `${sheet.area.code} — ${sheet.area.name}` : '—',
     },
-    { header: 'Số Order', accessor: 'order_count', render: (sheet) => sheet.order_count },
-    { header: 'Số mã', accessor: 'item_count', render: (sheet) => sheet.item_count },
+    {
+      header: contentFilterActive ? 'Order khớp lọc' : 'Số Order',
+      accessor: 'order_count',
+      render: (sheet) => sheet.order_count,
+    },
+    {
+      header: contentFilterActive ? 'Mã khớp lọc' : 'Số mã',
+      accessor: 'item_count',
+      render: (sheet) => sheet.item_count,
+    },
     {
       header: 'Thao tác',
       accessor: 'id',
@@ -188,7 +205,7 @@ const ShiftOrderSheetsPage = () => {
         </button>
       ),
     },
-  ], []);
+  ], [contentFilterActive]);
 
   const filterRail = (
     <PageFilterRail
@@ -357,6 +374,9 @@ const ShiftOrderSheetsPage = () => {
             area: context.area,
             work_shift: context.work_shift,
             leader: sheet?.leader ?? null,
+            shift_start_at: context.shift_start_at,
+            shift_end_at: context.shift_end_at,
+            is_outside_working_hours: context.is_outside_working_hours,
           }}
           onShowHistory={openHistory}
         />

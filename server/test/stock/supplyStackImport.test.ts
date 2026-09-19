@@ -73,8 +73,8 @@ describe('Supply stack Phase 2 IMPORT contract', () => {
     assert.match(adjustmentService, /rpc\('apply_stock_adjustment_v4'/);
     assert.match(adjustmentService, /p_stack_quantity: body\.stack_quantity \?\? null/);
     assert.match(adjustmentService, /p_set_per_qty: body\.set_per_qty \?\? null/);
-    assert.match(adjustmentSchema, /stack_quantity: \{ type: 'number', exclusiveMinimum: 0 \}/);
-    assert.match(adjustmentSchema, /set_per_qty: \{ type: 'number', exclusiveMinimum: 0 \}/);
+    assert.match(adjustmentSchema, /stack_quantity: \{ type: 'integer', minimum: 1 \}/);
+    assert.match(adjustmentSchema, /set_per_qty: \{ type: 'integer', minimum: 1 \}/);
     assert.match(balanceService, /set_per_qty, stack_quantity, total_set_quantity/);
     assert.match(transactionService, /set_per_qty, stack_quantity, before_stack_quantity, after_stack_quantity/);
   });

@@ -79,6 +79,8 @@ export const queryKeys = {
     current: ['shift-order-sheets', 'current'] as const,
     histories: ['shift-order-sheets', 'history'] as const,
     history: (query: QueryParameters = {}) => ['shift-order-sheets', 'history', query] as const,
+    incomings: ['shift-order-sheets', 'incoming'] as const,
+    incoming: (query: QueryParameters = {}) => ['shift-order-sheets', 'incoming', query] as const,
   },
   notifications: resourceKeys('notifications'),
   orderStatuses: resourceKeys('order-statuses'),

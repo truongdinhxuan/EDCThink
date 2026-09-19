@@ -110,9 +110,9 @@ export const stockAdjustmentCreateSchema: FastifySchema = {
         enum: [...STOCK_ADJUSTMENT_TYPES],
       },
       adjustment_reason_id: uuid,
-      quantity: { type: 'number', exclusiveMinimum: 0 },
-      stack_quantity: { type: 'number', exclusiveMinimum: 0 },
-      set_per_qty: { type: 'number', exclusiveMinimum: 0 },
+      quantity: { type: 'integer', minimum: 1 },
+      stack_quantity: { type: 'integer', minimum: 1 },
+      set_per_qty: { type: 'integer', minimum: 1 },
       reason: { type: 'string', minLength: 1, maxLength: 2000 },
       reason_note: { type: 'string', minLength: 1, maxLength: 2000 },
       note: {

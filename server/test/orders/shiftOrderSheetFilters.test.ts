@@ -35,9 +35,13 @@ describe('Phase 5 Shift Order Sheet relational filters', () => {
 
   it('T01-T05/T15-T16 keeps Area Type Scope as the server authorization boundary', () => {
     assert.match(service, /getEffectiveAreaTypeScopes\(\)/);
-    assert.match(service, /request = request\.in\('area_id', scopedAreaIds\)/);
-    assert.match(service, /if \(scopedAreaIds\.length === 0\) return createPaginatedResult/);
-    assert.match(service, /isAreaWithinEffectiveScope\(scopes, query\.areaId\)/);
+    // Area Type Scope is still the ceiling; resolveReadableAreaIds intersects it
+    // with the actor's own Area whenever they lack approval authority, so a
+    // sibling market sharing the same Area Type never leaks into history.
+    assert.match(service, /request = request\.in\('area_id', readableAreaIds\)/);
+    assert.match(service, /if \(readableAreaIds\.length === 0\) return createPaginatedResult/);
+    assert.match(service, /query\.areaId && !readableAreaIds\.includes\(query\.areaId\)/);
+    assert.match(service, /resolveReadableAreaIds\(/);
     assert.match(service, /await this\.assertReadable\(actor, row\)/g);
   });
 

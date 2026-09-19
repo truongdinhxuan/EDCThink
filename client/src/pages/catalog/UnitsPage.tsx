@@ -34,6 +34,7 @@ import { queryKeys } from '../../lib/queryKeys';
 import type { CrudOffcanvasMode } from '../../types/offcanvas.types';
 import type { PaginationParams } from '../../types/pagination.types';
 import type { CreateUnitInput, Unit, UnitListParams } from '../../types/units';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 type UnitQuery = UnitListParams & PaginationParams;
 type UnitDrawerMode = Extract<CrudOffcanvasMode, 'create' | 'view' | 'edit'>;
@@ -70,6 +71,7 @@ const getDrawerTitle = (mode: UnitDrawerMode): string => {
 };
 
 const UnitsPage = () => {
+  useDocumentTitle('Đơn vị');
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);
   const canUpdate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE);

@@ -20,6 +20,8 @@ import {
   assertPositiveQuantity,
   assertRejectedReason,
   calculateStockAvailability,
+  isOrderStatusUpdateExpired,
+  ORDER_STATUS_UPDATE_EXPIRED_MESSAGE,
   OrderRuleError,
 } from '../domain/orderRules';
 import { hasPermission } from './authorization.service';
@@ -112,7 +114,7 @@ interface OrderItemAllocationData {
 
 interface InventoryDiscrepancyUserData {
   id: string;
-  vinfast_id: number;
+  vinfast_id: string;
   first_name: string;
   last_name: string;
 }
@@ -168,6 +170,18 @@ interface OrderData {
   };
   order_items: OrderItemData[];
   [key: string]: unknown;
+}
+
+/** The slice of the Order's Sheet that decides the status-update deadline. */
+interface ShiftSheetWindow {
+  work_date?: string;
+  work_shift?: {
+    end_time?: string;
+    crosses_midnight?: boolean;
+  } | Array<{
+    end_time?: string;
+    crosses_midnight?: boolean;
+  }> | null;
 }
 
 interface SupabaseErrorLike {
@@ -248,6 +262,9 @@ function parseRpcDetails(details?: string): Record<string, unknown> | undefined 
   }
 }
 
+export const ORDER_OUTSIDE_WORK_SHIFT_MESSAGE =
+  'Không thể tạo Order do đã ngoài thời gian quy định của ca làm việc.';
+
 function createOrderRpcError(error: SupabaseErrorLike): never {
   const code = error.message ?? 'ORDER_CREATE_FAILED';
   const details = parseRpcDetails(error.details);
@@ -279,6 +296,10 @@ function createOrderRpcError(error: SupabaseErrorLike): never {
     ORDER_SHIFT_LEADER_NOT_FOUND: {
       status: 409,
       message: 'Không xác định được Tổ trưởng từ hierarchy managed_by.',
+    },
+    ORDER_OUTSIDE_WORK_SHIFT_WINDOW: {
+      status: 403,
+      message: ORDER_OUTSIDE_WORK_SHIFT_MESSAGE,
     },
     WORK_SHIFT_ASSIGNMENT_NOT_FOUND: {
       status: 409,
@@ -944,6 +965,35 @@ export class OrderService {
     });
   }
 
+  /**
+   * Refuses a create raised outside the nominal window of the requester's shift
+   * instance.
+   *
+   * The authoritative guard lives inside create_pending_order_with_items, where
+   * it runs in the same transaction as the inserts and therefore cannot be
+   * bypassed by calling the API directly. This copy exists only to fail fast,
+   * before the per-item supply/provider/stock reads are spent, and it reuses the
+   * same resolver and the same timestamp so the two can never disagree.
+   */
+  private async assertWithinWorkShiftWindow(
+    actorId: string,
+    at: string,
+  ): Promise<void> {
+    const { data, error } = await this.db.rpc('resolve_user_work_shift_instance', {
+      p_user_id: actorId,
+      p_at: at,
+    });
+    if (error) {
+      // Leave every other resolution failure to the transactional guard so this
+      // pre-check can never invent an error the real create would not raise.
+      return;
+    }
+    const shift = (data as Array<{ is_overtime: boolean }> | null)?.[0];
+    if (shift?.is_overtime) {
+      serviceError(403, ORDER_OUTSIDE_WORK_SHIFT_MESSAGE);
+    }
+  }
+
   async create(actor: OrderActor, body: CreateOrderBody) {
     if (!hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_CREATE)) {
       serviceError(403, 'Missing supply.order.create permission');
@@ -961,8 +1011,9 @@ export class OrderService {
     if (body.to_area_id !== actor.areaId) {
       serviceError(400, 'to_area_id must equal the current user area_id');
     }
-    const items = await this.prepareOrderItems(body.order_list, sourceAreaId);
     const submittedAt = new Date().toISOString();
+    await this.assertWithinWorkShiftWindow(actor.id, submittedAt);
+    const items = await this.prepareOrderItems(body.order_list, sourceAreaId);
     const { data: orderId, error } = await this.db.rpc(
       'create_pending_order_with_items',
       {
@@ -1001,8 +1052,39 @@ export class OrderService {
     return order;
   }
 
+  /**
+   * Refuses a status change raised more than three hours after the shift the
+   * Order belongs to has ended.
+   *
+   * The shift comes from the Order's own Sheet, already loaded by
+   * ORDER_DETAIL_SELECT, so this costs no extra read. An Order with no Sheet has
+   * no shift to age against and is left alone.
+   */
+  private assertWithinStatusUpdateWindow(order: OrderData): void {
+    const sheet = firstRelation(
+      (order.shift_order_sheet ?? null) as ShiftSheetWindow | ShiftSheetWindow[] | null,
+    );
+    const shift = firstRelation(sheet?.work_shift ?? null);
+    const workDate = sheet?.work_date;
+    const endTime = shift?.end_time;
+    if (!workDate || !endTime) return;
+
+    if (isOrderStatusUpdateExpired(workDate, {
+      end_time: endTime,
+      crosses_midnight: shift?.crosses_midnight,
+    })) {
+      serviceError(
+        403,
+        ORDER_STATUS_UPDATE_EXPIRED_MESSAGE,
+        undefined,
+        'ORDER_STATUS_UPDATE_WINDOW_EXPIRED',
+      );
+    }
+  }
+
   async patch(actor: OrderActor, orderId: string, body: PatchOrderBody) {
     const order = await this.findOrder(orderId);
+    this.assertWithinStatusUpdateWindow(order);
     this.assertPackingOwner(actor, order);
     const currentStatus = this.statusCode(order);
     try {
@@ -1109,6 +1191,7 @@ export class OrderService {
       serviceError(403, 'Missing supply.order.approve permission');
     }
     const order = await this.findOrder(orderId);
+    this.assertWithinStatusUpdateWindow(order);
     try {
       assertOrderActionAllowed(this.statusCode(order), 'approve');
     } catch (error) {
@@ -1164,6 +1247,9 @@ export class OrderService {
     if (!hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_ALLOCATE)) {
       serviceError(403, 'Missing supply.order.allocate permission');
     }
+    // Reads the Order up front purely to test the deadline; the RPC below
+    // mutates it, so the copy returned at the end is fetched again anyway.
+    this.assertWithinStatusUpdateWindow(await this.findOrder(orderId));
     const { error } = await this.db.rpc('allocate_stack_order', {
       p_order_id: orderId,
       p_actor_id: actor.id,
@@ -1203,6 +1289,7 @@ export class OrderService {
     if (!allocation || allocationItem?.order_id !== orderId) {
       serviceError(404, 'Allocation not found for this Order');
     }
+    this.assertWithinStatusUpdateWindow(await this.findOrder(orderId));
 
     const { data: confirmation, error } = await this.db.rpc(
       'confirm_stack_allocation_actual',
@@ -1226,6 +1313,7 @@ export class OrderService {
       serviceError(403, 'Missing supply.order.approve permission');
     }
     const order = await this.findOrder(orderId);
+    this.assertWithinStatusUpdateWindow(order);
     try {
       assertOrderActionAllowed(this.statusCode(order), 'reject');
       const rejectedReason = assertRejectedReason(body?.rejected_reason);
@@ -1249,6 +1337,7 @@ export class OrderService {
       serviceError(403, 'Missing supply.order.issue permission');
     }
     const order = await this.findOrder(orderId);
+    this.assertWithinStatusUpdateWindow(order);
     try {
       const currentStatus = this.statusCode(order);
       if (['ISSUED', 'RECEIVED', 'COMPLETED'].includes(currentStatus)) {
@@ -1306,6 +1395,7 @@ export class OrderService {
 
   async receive(actor: OrderActor, orderId: string, body: ReceiveOrderBody) {
     const order = await this.findOrder(orderId);
+    this.assertWithinStatusUpdateWindow(order);
     this.assertPackingOwner(actor, order);
     try {
       assertOrderActionAllowed(this.statusCode(order), 'receive');
@@ -1332,6 +1422,7 @@ export class OrderService {
       serviceError(403, 'Missing supply.order.issue permission');
     }
     const order = await this.findOrder(orderId);
+    this.assertWithinStatusUpdateWindow(order);
     try {
       assertOrderActionAllowed(this.statusCode(order), 'complete');
     } catch (error) {
@@ -1357,6 +1448,7 @@ export class OrderService {
 
   async cancel(actor: OrderActor, orderId: string, body: CancelOrderBody) {
     const order = await this.findOrder(orderId);
+    this.assertWithinStatusUpdateWindow(order);
     this.assertPackingOwner(actor, order);
     try {
       const currentStatus = this.statusCode(order);

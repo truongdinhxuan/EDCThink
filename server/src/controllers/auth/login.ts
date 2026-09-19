@@ -42,7 +42,7 @@ const authPayload = async (
 export const loginUser = async (request: FastifyRequest, reply: FastifyReply) => {
   const { vinfast_id, password } = request.body as LoginBody;
 
-  if (!Number.isInteger(vinfast_id) || !password) {
+  if (typeof vinfast_id !== 'string' || !vinfast_id.trim() || !password) {
     return reply.code(400).send({
       error: 'VinFast ID và mật khẩu là bắt buộc',
     });
@@ -73,7 +73,7 @@ export const loginUser = async (request: FastifyRequest, reply: FastifyReply) =>
         ...payload,
       });
     } catch (error) {
-      await sessions.revokeCurrent(session.refreshToken);
+      await sessions.revokeSession(session.sessionId);
       throw error;
     }
   } catch (error) {
@@ -106,10 +106,14 @@ export const refreshSession = async (
         session.userId,
         session.sessionId,
       );
-      setRefreshCookie(reply, session.refreshToken, session.expiresAt);
+      // A grace-window replay must not touch the cookie: the rotation it lost to
+      // already stored a newer token in the same browser.
+      if (session.rotated) {
+        setRefreshCookie(reply, session.refreshToken, session.expiresAt);
+      }
       return reply.code(200).send(payload);
     } catch (error) {
-      await sessions.revokeCurrent(session.refreshToken);
+      await sessions.revokeSession(session.sessionId);
       throw error;
     }
   } catch (error) {

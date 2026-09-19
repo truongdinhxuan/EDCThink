@@ -7,7 +7,12 @@ interface ErrorResponse<TDetails = unknown> {
   details?: TDetails;
 }
 
+/** Backend refuses a status change once the Order's shift ended over 3h ago. */
+export const ORDER_STATUS_UPDATE_WINDOW_EXPIRED = 'ORDER_STATUS_UPDATE_WINDOW_EXPIRED';
+
 const businessErrorMessages: Record<string, string> = {
+  [ORDER_STATUS_UPDATE_WINDOW_EXPIRED]:
+    "Đã quá thời hạn cho phép cập nhật trạng thái Order (kết thúc ca + 3 giờ). Không thể tiếp tục thao tác trên Order này.",
   STACK_ALLOCATIONS_NOT_CONFIRMED:
     "Cần xác nhận thực tế cho tất cả vị trí phân bổ trước khi xuất hàng.",
   STACK_ISSUE_ALLOCATION_INCOMPLETE:

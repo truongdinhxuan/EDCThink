@@ -27,9 +27,16 @@ export const hasOrderReadPermission = (access: OrderReadAccess): boolean =>
   access.isSystemAdmin
   || ORDER_READ_PERMISSIONS.some((permission) => includesPermission(access, permission));
 
+/**
+ * Whether the actor only sees Orders addressed to their own Area.
+ *
+ * Deny by default. This used to also require SUPPLY_ORDER_CREATE, which meant a
+ * role holding only `supply.order.issue` or `supply.order.allocate` passed
+ * hasOrderReadPermission but matched no pinning rule, and so read every Area's
+ * Orders. Approval authority is now the single condition that widens the view.
+ */
 export const isOrderAreaScoped = (access: OrderReadAccess): boolean =>
   !access.isSystemAdmin
-  && includesPermission(access, PERMISSION_CODE.SUPPLY_ORDER_CREATE)
   && !includesPermission(access, PERMISSION_CODE.SUPPLY_ORDER_APPROVE);
 
 export const canReadOrder = (

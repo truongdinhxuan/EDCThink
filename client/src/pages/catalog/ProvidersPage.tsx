@@ -30,6 +30,7 @@ CreateProviderInput,
 Provider,
 ProviderListParams,
 } from '../../types/providers';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 const UNKNOWN_PROVIDER_CODE = 'UNKNOW';
 
@@ -69,6 +70,7 @@ const formatDate = (value: string): string => {
 };
 
 const ProvidersPage = () => {
+  useDocumentTitle('Nhà cung cấp');
   const { openConfirm } = useCrudOffcanvas();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);

@@ -32,7 +32,9 @@ describe('Supply stack Phase 2 frontend', () => {
   it('keeps dynamic positive numeric inputs instead of a fixed stack-size dropdown', () => {
     assert.match(modal, /register\('set_per_qty'/);
     assert.match(modal, /type="number"/);
-    assert.match(modal, /step="any"/);
+    // Stack sizes stay free-form, but supply is counted in whole units only.
+    assert.match(modal, /step="1"/);
+    assert.doesNotMatch(modal, /step="any"/);
     assert.doesNotMatch(modal, /\[8,\s*9,\s*10,\s*11\]/);
   });
 

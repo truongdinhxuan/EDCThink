@@ -8,7 +8,7 @@ interface StockAvailabilityWarningProps {
 }
 
 const quantityFormatter = new Intl.NumberFormat("vi-VN", {
-  maximumFractionDigits: 6,
+  maximumFractionDigits: 0,
 });
 
 export const StockAvailabilityWarning = ({

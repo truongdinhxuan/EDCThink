@@ -27,6 +27,7 @@ import {
   type OrderListParams,
   type OrderStatus,
 } from '../../types/orders';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 type OrderQuery = OrderListParams & PaginationParams;
 
@@ -48,6 +49,7 @@ const formatDate = (value: string): string => {
 };
 
 const OrdersListPage = () => {
+  useDocumentTitle('Order lịch sử');
   const { role, hasPermission } = useAuth();
   const ordersPath = getWorkspacePath(role, 'orders');
   const createOrderPath = getWorkspacePath(role, 'orders/create');

@@ -1,14 +1,18 @@
 import type { FastifyInstance } from 'fastify';
 import type {
   ShiftOrderSheetDetailQuery,
+  ShiftOrderSheetIncomingQuery,
   ShiftOrderSheetListQuery,
 } from '../interfaces/shift-order-sheets';
 import { SHIFT_ORDER_SHEET_SORT_FIELDS } from '../schemas/shift-order-sheets';
 import type { OrderActor } from './orders.service';
 import {
-  AreaScopesService,
-  isAreaWithinEffectiveScope,
-} from './area-scopes.service';
+  canReadSheetArea,
+  resolveIncomingAreaIds,
+  resolveReadableAreaIds,
+} from '../domain/sheet-access';
+import { resolveShiftEndAt, resolveShiftStartAt } from '../domain/orderRules';
+import { AreaScopesService } from './area-scopes.service';
 import {
   createShiftOrderSheetExportFilename,
   createShiftOrderSheetWorkbook,
@@ -80,6 +84,7 @@ interface ExportItemRow {
   id: string;
   created_at: string;
   quantity_requested: number | string;
+  quantity_approved: number | string | null;
   quantity_issued: number | string | null;
   set_per_qty: number | string | null;
   requested_stack_quantity: number | string | null;
@@ -87,6 +92,7 @@ interface ExportItemRow {
   is_deleted: boolean;
   supply: unknown;
   provider: unknown;
+  unit: unknown;
 }
 
 interface ExportOrderRow {
@@ -96,11 +102,34 @@ interface ExportOrderRow {
   issued_at: string | null;
   note: string | null;
   is_deleted: boolean;
+  status_lookup: ExportStatusRow | ExportStatusRow[] | null;
   order_items?: ExportItemRow[];
+}
+
+interface ExportStatusRow {
+  code: string;
+  name: string | null;
 }
 
 interface ExportSheetRow extends Omit<SheetRow, 'orders'> {
   orders: ExportOrderRow[];
+}
+
+interface IncomingStatusRow {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface IncomingOrderRow {
+  id: string;
+  is_deleted: boolean;
+  status_lookup: IncomingStatusRow | IncomingStatusRow[] | null;
+  order_items?: Array<{ id: string; is_deleted?: boolean }>;
+}
+
+interface IncomingSheetRow extends Omit<SheetRow, 'orders'> {
+  orders: IncomingOrderRow[];
 }
 
 export interface ShiftOrderSheetActor extends OrderActor {
@@ -128,14 +157,15 @@ const firstRelation = <T>(value: T | T[] | null): T | null =>
 
 const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
 
+// Shift arithmetic (fixed +07:00, crosses_midnight) belongs to the domain layer
+// and is shared with the Order status-update deadline, so it is not redone here.
 const shiftBounds = (workDate: string, shift: EmbeddedShift | null) => {
   if (!shift) return { shift_start_at: '', shift_end_at: '' };
-  const startDate = new Date(`${workDate}T${shift.start_time}+07:00`);
-  const endDate = new Date(`${workDate}T${shift.end_time}+07:00`);
-  if (shift.crosses_midnight) endDate.setUTCDate(endDate.getUTCDate() + 1);
+  const startAt = resolveShiftStartAt(workDate, shift);
+  const endAt = resolveShiftEndAt(workDate, shift);
   return {
-    shift_start_at: startDate.toISOString(),
-    shift_end_at: endDate.toISOString(),
+    shift_start_at: startAt?.toISOString() ?? '',
+    shift_end_at: endAt?.toISOString() ?? '',
   };
 };
 
@@ -217,18 +247,29 @@ const createSheetDetailSelect = (filters: SheetContentFilters): string => `
   )
 `;
 
+const SHEET_INCOMING_SELECT = `
+  ${SHEET_BASE_SELECT},
+  orders:orders!orders_shift_order_sheet_id_fkey(
+    id, is_deleted,
+    status_lookup:order_statuses!orders_status_id_fkey(id, code, name),
+    order_items(id, is_deleted)
+  )
+`;
+
 const SHEET_EXPORT_SELECT = `
   ${SHEET_BASE_SELECT},
   orders:orders!orders_shift_order_sheet_id_fkey(
     id, code, submitted_at, issued_at, note, is_deleted,
+    status_lookup:order_statuses!orders_status_id_fkey(id, code, name),
     order_items(
-      id, created_at, quantity_requested, quantity_issued,
+      id, created_at, quantity_requested, quantity_approved, quantity_issued,
       set_per_qty, requested_stack_quantity, note, is_deleted,
       supply:supplies!order_items_supply_id_fkey(
         id, code, description,
         category:supply_categories!supplies_category_id_fkey(id, code)
       ),
-      provider:providers!order_items_provider_id_fkey(id, code, name)
+      provider:providers!order_items_provider_id_fkey(id, code, name),
+      unit:units!order_items_unit_id_fkey(id, code, symbol)
     )
   )
 `;
@@ -303,11 +344,23 @@ export class ShiftOrderSheetsService {
     };
   }
 
+  private async readableAreaIds(actor: ShiftOrderSheetActor): Promise<string[]> {
+    const scopes = await this.areaScopes(actor).getEffectiveAreaTypeScopes();
+    return resolveReadableAreaIds(
+      actor,
+      scopes.flatMap((scope) => scope.areas.map((area) => area.id)),
+    );
+  }
+
   private async assertReadable(
     actor: ShiftOrderSheetActor,
     row: Pick<SheetRow, 'area_id'>,
   ): Promise<void> {
-    await this.areaScopes(actor).assertAreaWithinEffectiveScope(row.area_id);
+    const scopes = await this.areaScopes(actor).getEffectiveAreaTypeScopes();
+    const scopedAreaIds = scopes.flatMap((scope) => scope.areas.map((area) => area.id));
+    if (!canReadSheetArea(actor, scopedAreaIds, row.area_id)) {
+      fail(403, 'Phiếu Order Ca nằm ngoài phạm vi Area được cấp cho bạn');
+    }
   }
 
   async list(actor: ShiftOrderSheetActor, query: ShiftOrderSheetListQuery = {}) {
@@ -317,12 +370,14 @@ export class ShiftOrderSheetsService {
       defaultSortOrder: 'desc',
     });
 
-    const scopes = await this.areaScopes(actor).getEffectiveAreaTypeScopes();
-    const scopedAreaIds = scopes.flatMap((scope) => scope.areas.map((area) => area.id));
-    if (query.areaId && !isAreaWithinEffectiveScope(scopes, query.areaId)) {
-      fail(403, 'Phiếu Order Ca nằm ngoài Area Type Scope được cấp cho bạn');
+    // Area Type Scope is the ceiling; an actor without approval authority is
+    // pinned to their own Area on top of it, so history cannot leak a sibling
+    // market that merely shares the same Area Type.
+    const readableAreaIds = await this.readableAreaIds(actor);
+    if (query.areaId && !readableAreaIds.includes(query.areaId)) {
+      fail(403, 'Phiếu Order Ca nằm ngoài phạm vi Area được cấp cho bạn');
     }
-    if (scopedAreaIds.length === 0) return createPaginatedResult([], pagination, 0);
+    if (readableAreaIds.length === 0) return createPaginatedResult([], pagination, 0);
 
     const filters = normalizeContentFilters({
       search: pagination.search ?? undefined,
@@ -347,7 +402,7 @@ export class ShiftOrderSheetsService {
       request = request.ilike('orders.order_items.supply.code', `%${filters.search}%`);
     }
 
-    request = request.in('area_id', scopedAreaIds);
+    request = request.in('area_id', readableAreaIds);
     if (query.workDate) request = request.eq('work_date', query.workDate);
     if (query.workShiftId) request = request.eq('work_shift_id', query.workShiftId);
     if (query.leaderId) request = request.eq('leader_id', query.leaderId);
@@ -448,6 +503,9 @@ export class ShiftOrderSheetsService {
       },
       shift_start_at: shift.shift_start_at,
       shift_end_at: shift.shift_end_at,
+      // Resolved in Postgres against Asia/Ho_Chi_Minh with crosses_midnight
+      // already applied, so the client never has to redo shift arithmetic.
+      is_outside_working_hours: shift.is_overtime,
       business_time_zone: BUSINESS_TIME_ZONE,
     } as const;
 
@@ -466,6 +524,51 @@ export class ShiftOrderSheetsService {
 
     const row = data as unknown as SheetRow & { orders: Array<Record<string, unknown>> };
     return { context, sheet: this.normalizeDetail(row) };
+  }
+
+  /**
+   * Phiếu order từ các thị trường: the Sheets of the Areas that order out of the
+   * actor's own supplying Area, narrowed to a single shift instance.
+   *
+   * The shift instance (work_date + work_shift_id) comes from the caller's
+   * current Sheet context, so anything raised on another date or another shift
+   * is by definition an older Sheet and belongs in history rather than in the
+   * shift being worked right now.
+   */
+  async listIncoming(
+    actor: ShiftOrderSheetActor,
+    query: ShiftOrderSheetIncomingQuery,
+  ) {
+    const scopes = await this.areaScopes(actor).getEffectiveAreaTypeScopes();
+    const incomingAreaIds = resolveIncomingAreaIds(
+      actor,
+      scopes.flatMap((scope) => scope.areas.map((area) => area.id)),
+    );
+    if (incomingAreaIds.length === 0) return [];
+
+    const { data, error } = await this.db
+      .from('supply_shift_order_sheets')
+      .select(SHEET_INCOMING_SELECT)
+      .in('area_id', incomingAreaIds)
+      .eq('work_date', query.workDate)
+      .eq('work_shift_id', query.workShiftId)
+      .eq('is_deleted', false)
+      .eq('orders.is_deleted', false)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
+
+    if (error) databaseError(error, 'Không thể tải phiếu order từ các thị trường');
+    return ((data ?? []) as unknown as IncomingSheetRow[])
+      .map((row) => this.normalizeIncoming(row));
+  }
+
+  private normalizeIncoming(row: IncomingSheetRow) {
+    const pendingOrderCount = (row.orders ?? [])
+      .filter((order) => !order.is_deleted)
+      .filter((order) => firstRelation(order.status_lookup)?.code === 'PENDING')
+      .length;
+    const { orders: _orders, ...summary } = this.normalize(row as unknown as SheetRow);
+    return { ...summary, pending_order_count: pendingOrderCount };
   }
 
   async export(actor: ShiftOrderSheetActor, sheetId: string) {
@@ -500,6 +603,7 @@ export class ShiftOrderSheetsService {
           issued_at: order.issued_at,
           note: order.note,
           is_deleted: order.is_deleted,
+          status: firstRelation(order.status_lookup),
           order_items: (order.order_items ?? [])
             .filter((item) => !item.is_deleted)
             .map((item): ShiftOrderSheetExportItem => {
@@ -509,6 +613,10 @@ export class ShiftOrderSheetsService {
               const provider = firstRelation(
                 item.provider as ExportRelation | ExportRelation[] | null,
               );
+              const unit = firstRelation(
+                item.unit as { code: string; symbol: string | null }
+                  | Array<{ code: string; symbol: string | null }> | null,
+              );
               const category = supply
                 ? firstRelation(supply.category as ExportRelation | ExportRelation[] | null)
                 : null;
@@ -516,6 +624,7 @@ export class ShiftOrderSheetsService {
                 id: item.id,
                 created_at: item.created_at,
                 quantity_requested: item.quantity_requested,
+                quantity_approved: item.quantity_approved,
                 quantity_issued: item.quantity_issued,
                 set_per_qty: item.set_per_qty,
                 requested_stack_quantity: item.requested_stack_quantity,
@@ -529,6 +638,7 @@ export class ShiftOrderSheetsService {
                   code: provider.code,
                   name: provider.name ?? '',
                 } : null,
+                unit: unit ? { code: unit.code, symbol: unit.symbol ?? null } : null,
               };
             }),
         })),

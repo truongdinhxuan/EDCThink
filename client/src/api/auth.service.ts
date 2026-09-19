@@ -2,7 +2,7 @@ import type { LoginResponse, UserMessageResponse } from "../types/users";
 import instance from "./http";
 
 export interface LoginInput {
-    vinfast_id: number;
+    vinfast_id: string;
     password: string;
 }
 

@@ -24,6 +24,7 @@ import { queryKeys } from '../../lib/queryKeys';
 import type { PaginationParams } from '../../types/pagination.types';
 import type { CreateStockAdjustmentInput,StockTransaction,StockTransactionListParams,StockTransactionType } from '../../types/stock-transactions';
 import { STOCK_TRANSACTION_TYPES } from '../../types/stock-transactions';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 type StockTransactionQuery = StockTransactionListParams & PaginationParams;
 
@@ -32,13 +33,14 @@ const loadAreas = async (signal: AbortSignal) =>
     { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
     signal,
   )).data;
-const numberFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 });
+const numberFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
 const dateFormatter = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
 const transactionTypeClass = (type: StockTransactionType) => type.endsWith('_IN') || type === 'RECEIVE' || type === 'IMPORT' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700';
 const transactionTypeCode = (transaction: StockTransaction) =>
   (transaction.transaction_type?.code ?? 'UNKNOWN') as StockTransactionType;
 
 const StockTransactionsPage = () => {
+  useDocumentTitle('Giao dịch vật tư');
   const { hasPermission } = useAuth();
   const canAdjust = hasPermission(PERMISSION_CODE.SUPPLY_STOCK_ADJUST);
   const loader = useCallback((query: StockTransactionQuery, signal: AbortSignal) => listStockTransactions(query, signal), []);

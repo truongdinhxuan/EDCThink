@@ -59,7 +59,7 @@ describe('Supply stack Phase 3 create and replace (T-007 to T-015)', () => {
   it('keeps normal and KIEN_SAT_SPECIAL on normal quantity mode (T-011/T-012)', () => {
     assert.match(migration, /if v_category_code = 'KIEN_SAT_TC' then/);
     assert.match(migration, /Stack fields are only allowed for KIEN_SAT_TC/);
-    assert.match(orderSchema, /quantity_requested: \{ type: 'number', exclusiveMinimum: 0 \}/);
+    assert.match(orderSchema, /quantity_requested: \{ type: 'integer', minimum: 1 \}/);
     assert.doesNotMatch(migration, /KIEN_SAT_SPECIAL[\s\S]*set_per_qty/);
   });
 

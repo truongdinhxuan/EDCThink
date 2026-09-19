@@ -43,7 +43,7 @@ const user = {
   email: 'units@example.test',
   publicData: {
     id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    vinfast_id: 900001,
+    vinfast_id: '900001',
     email: 'units@example.test',
     phone_number: null,
     avatar_url: null,

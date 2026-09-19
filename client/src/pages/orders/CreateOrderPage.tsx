@@ -7,10 +7,12 @@ import { CreateOrderForm } from '../../components/orders/CreateOrderForm';
 import { getWorkspacePath } from '../../constants/workspaces';
 import { useAuth } from '../../context/AuthContext';
 import { queryKeys } from '../../lib/queryKeys';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 const LEGACY_CREATE_FORM_ID = 'create-order-page-form';
 
 const CreateOrderPage = () => {
+  useDocumentTitle('Tạo order');
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();

@@ -38,7 +38,7 @@ describe('Order direct-PENDING Phase 1 contract', () => {
 
     const quantitySchema = orderApproveSchema.body.properties.items.items
       .properties.quantity_approved;
-    assert.deepEqual(quantitySchema, { type: 'number', minimum: 0 });
+    assert.deepEqual(quantitySchema, { type: 'integer', minimum: 0 });
     assert.equal('maximum' in quantitySchema, false);
     assert.equal('exclusiveMinimum' in quantitySchema, false);
   });

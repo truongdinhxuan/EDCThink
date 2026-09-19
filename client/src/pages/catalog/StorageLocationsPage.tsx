@@ -16,6 +16,7 @@ import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { queryKeys } from '../../lib/queryKeys';
 import type { PaginationParams } from '../../types/pagination.types';
 import type { CreateStorageLocationInput,StorageLocation,StorageLocationListParams } from '../../types/storage-locations';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 type StorageLocationQuery = StorageLocationListParams & PaginationParams;
 
@@ -26,6 +27,7 @@ const loadAreas = async (signal: AbortSignal) =>
   )).data;
 
 const StorageLocationsPage = () => {
+  useDocumentTitle('Khu vực lưu kho');
   const { openConfirm } = useCrudOffcanvas();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);

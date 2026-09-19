@@ -25,6 +25,7 @@ import type { PaginationParams } from '../../types/pagination.types';
 import type { StockBalance, StockBalanceListParams } from '../../types/stock-balances';
 import type { CreateStockAdjustmentInput } from '../../types/stock-transactions';
 import type { InventoryDiscrepancy } from '../../types/inventory-discrepancies';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 type StockBalanceQuery = StockBalanceListParams & PaginationParams;
 
@@ -33,13 +34,14 @@ const loadAreas = async (signal: AbortSignal) =>
     { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
     signal,
   )).data;
-const numberFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 });
+const numberFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
 const dateFormatter = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
 const isStackBalance = (item: StockBalance) => item.supply?.category?.code === 'KIEN_SAT_TC';
 const isLegacyStackBalance = (item: StockBalance) => isStackBalance(item)
   && (item.set_per_qty === null || item.stack_quantity === null);
 
 const StockBalancesPage = () => {
+  useDocumentTitle('Vật tư tồn kho');
   const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const canAdjust = hasPermission(PERMISSION_CODE.SUPPLY_STOCK_ADJUST);

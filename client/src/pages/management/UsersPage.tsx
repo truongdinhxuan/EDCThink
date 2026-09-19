@@ -28,6 +28,7 @@ import { useServerLookup } from '../../hooks/useServerLookup';
 import { queryKeys } from '../../lib/queryKeys';
 import type { PaginationParams } from '../../types/pagination.types';
 import type { CreateUserInput,UpdateUserInput,UserListParams,UserProfile } from '../../types/users';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 type UserQuery = UserListParams & PaginationParams;
 
@@ -49,6 +50,7 @@ const getRoleName = (user: UserProfile): string => {
 };
 
 const UsersPage = () => {
+  useDocumentTitle('Users');
   const { openConfirm } = useCrudOffcanvas();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.ADMIN_USER_CREATE)

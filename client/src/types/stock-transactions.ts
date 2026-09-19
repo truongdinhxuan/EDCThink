@@ -64,7 +64,7 @@ export interface StockTransaction {
     id: string;
     first_name: string;
     last_name: string;
-    vinfast_id: number;
+    vinfast_id: string;
   } | null;
   discrepancy?: {
     id: string;

@@ -2,9 +2,11 @@ import axios, { type AxiosResponse } from 'axios';
 import instance from './http';
 import type { PaginatedResponse } from '../types/pagination.types';
 import type {
+  IncomingShiftOrderSheet,
   ShiftOrderSheetDetail,
   ShiftOrderSheetDetailParams,
   CurrentShiftOrderSheetResponse,
+  ShiftOrderSheetIncomingParams,
   ShiftOrderSheetListParams,
   ShiftOrderSheetSummary,
 } from '../types/shift-order-sheets';
@@ -37,6 +39,23 @@ const exportErrorMessage = (status?: number): string => {
   return 'Không thể tạo file Excel. Vui lòng thử lại.';
 };
 
+/**
+ * A failed download still carries a JSON body, but responseType 'blob' hands it
+ * back as a Blob, so the server's own explanation has to be read out of it.
+ * Without this the caller only ever sees the generic fallback and has no idea
+ * which Order needs fixing.
+ */
+const readBlobErrorMessage = async (data: unknown): Promise<string | null> => {
+  if (!(data instanceof Blob)) return null;
+  try {
+    const parsed: unknown = JSON.parse(await data.text());
+    const message = (parsed as { error?: unknown } | null)?.error;
+    return typeof message === 'string' && message.trim() ? message : null;
+  } catch {
+    return null;
+  }
+};
+
 export const listShiftOrderSheets = (
   params: ShiftOrderSheetListParams,
   signal?: AbortSignal,
@@ -54,6 +73,22 @@ export const getShiftOrderSheet = async (
     ApiEnvelope<ShiftOrderSheetDetail>,
     ApiEnvelope<ShiftOrderSheetDetail>
   >(`supply/shift-order-sheets/${id}`, { params, signal });
+  return response.data;
+};
+
+/**
+ * Market Sheets for one shift instance. The backend restricts this to the Areas
+ * that order out of the caller's own Area and requires approval authority, so no
+ * area filter is sent from here.
+ */
+export const listIncomingShiftOrderSheets = async (
+  params: ShiftOrderSheetIncomingParams,
+  signal?: AbortSignal,
+): Promise<IncomingShiftOrderSheet[]> => {
+  const response = await instance.get<
+    ApiEnvelope<IncomingShiftOrderSheet[]>,
+    ApiEnvelope<IncomingShiftOrderSheet[]>
+  >('supply/shift-order-sheets/incoming', { params, signal });
   return response.data;
 };
 
@@ -81,7 +116,11 @@ export const exportShiftOrderSheet = async (
     };
   } catch (error) {
     if (axios.isAxiosError(error)) {
-      throw new Error(exportErrorMessage(error.response?.status), { cause: error });
+      const serverMessage = await readBlobErrorMessage(error.response?.data);
+      throw new Error(
+        serverMessage ?? exportErrorMessage(error.response?.status),
+        { cause: error },
+      );
     }
     throw error;
   }

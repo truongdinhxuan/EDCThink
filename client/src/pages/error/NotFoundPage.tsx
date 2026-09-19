@@ -2,8 +2,10 @@ import { Link } from 'react-router-dom';
 import { InfoButton } from '../../components/common/Button';
 import { getRoleHomePath } from '../../constants/workspaces';
 import { useAuth } from '../../context/AuthContext';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 const NotFoundPage = () => {
+  useDocumentTitle('Không tìm thấy trang');
   const { user, role } = useAuth();
   const destination = user ? getRoleHomePath(role) : '/auth/login';
 

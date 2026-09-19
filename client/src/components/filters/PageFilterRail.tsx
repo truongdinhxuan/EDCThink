@@ -107,6 +107,27 @@ const FilterRailContent = ({
   </>
 );
 
+const FILTER_RAIL_COLLAPSED_KEY = 'filterRail.collapsed';
+
+// Storage can be unavailable (private mode, blocked site data). Reading it in a
+// state initializer means a throw would take down every page with a rail, so the
+// preference degrades to "expanded" instead.
+const readCollapsedPreference = (): boolean => {
+  try {
+    return localStorage.getItem(FILTER_RAIL_COLLAPSED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+const writeCollapsedPreference = (collapsed: boolean): void => {
+  try {
+    localStorage.setItem(FILTER_RAIL_COLLAPSED_KEY, String(collapsed));
+  } catch {
+    // A rail that cannot remember its width is still a usable rail.
+  }
+};
+
 export const PageFilterRail = ({
   title = 'Bộ lọc',
   children,
@@ -117,7 +138,7 @@ export const PageFilterRail = ({
   const railId = `page-filter-${reactId.replace(/:/g, '')}`;
   const panelId = `${railId}-drawer`;
   const titleId = `${railId}-title`;
-  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
+  const [desktopCollapsed, setDesktopCollapsed] = useState<boolean>(readCollapsedPreference);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const mobilePanelRef = useRef<HTMLDivElement>(null);
   const wasMobileOpen = useRef(false);
@@ -130,6 +151,10 @@ export const PageFilterRail = ({
   const mobileOpen = activeRailId === railId;
 
   useBodyScrollLock(mobileOpen, `${railId}-mobile-drawer`);
+
+  useEffect(() => {
+    writeCollapsedPreference(desktopCollapsed);
+  }, [desktopCollapsed]);
 
   useEffect(() => {
     if (mobilePanelRef.current) mobilePanelRef.current.inert = !mobileOpen;
@@ -233,7 +258,6 @@ export const PageFilterRail = ({
           aria-expanded={mobileOpen}
         >
           <FontAwesomeIcon  icon={faFilter} aria-hidden="true" />
-          <FontAwesomeIcon icon={faFilter} aria-hidden="true" />
           Bộ lọc
         </button>
       </div>

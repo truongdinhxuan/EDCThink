@@ -1,7 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createRef, useCallback, useMemo, useState, type MouseEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { getApiErrorCode, getApiErrorDetails, getApiErrorMessage } from "../../api/errors";
+import {
+  getApiErrorCode,
+  getApiErrorDetails,
+  getApiErrorMessage,
+  ORDER_STATUS_UPDATE_WINDOW_EXPIRED,
+} from "../../api/errors";
 import { listStorageLocations } from "../../api/storage-locations.service";
 import {
   approveOrder,
@@ -32,7 +37,10 @@ import { getWorkspacePath } from "../../constants/workspaces";
 import { useAuth } from "../../context/AuthContext";
 import { useServerLookup } from "../../hooks/useServerLookup";
 import { useCrudOffcanvas } from "../../hooks/useCrudOffcanvas";
+import { useDeadlinePassed } from "../../hooks/useDeadlinePassed";
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { queryKeys } from "../../lib/queryKeys";
+import { resolveStatusUpdateCutoff } from "../../utils/workShiftWindow";
 import type { StorageLocationOption } from "../../types/catalog";
 import type {
   Order,
@@ -120,6 +128,9 @@ const OrderDetailPage = () => {
     queryFn: ({ signal }) => getOrder(id!, signal),
     enabled: Boolean(id),
   });
+  // Undefined until the Order loads, so the tab shows the app name instead of a
+  // placeholder that is about to be replaced by the real code.
+  useDocumentTitle(orderQuery.data?.code && `Order ${orderQuery.data.code}`);
   const orderMutation = useMutation({
     mutationFn: (operation: () => Promise<Order>) => operation(),
   });
@@ -148,6 +159,19 @@ const OrderDetailPage = () => {
   const [stackIssueErrorDetails, setStackIssueErrorDetails] =
     useState<StackIssueStockConflictDetails | null>(null);
   const mutating = orderMutation.isPending || confirmationMutation.isPending;
+  // Status changes close three hours after the Order's shift ends. The backend
+  // refuses them regardless; this only keeps the operator from filling in a
+  // panel that is going to be rejected.
+  const statusUpdateCutoff = resolveStatusUpdateCutoff(
+    order?.shift_order_sheet?.work_date,
+    order?.shift_order_sheet?.work_shift,
+  );
+  const deadlinePassed = useDeadlinePassed(statusUpdateCutoff);
+  // Set when the backend refuses on its own clock, so a client whose data or
+  // clock disagreed still locks down immediately.
+  const [serverRefusedAsExpired, setServerRefusedAsExpired] = useState(false);
+  const isStatusUpdateExpired = deadlinePassed || serverRefusedAsExpired;
+  const actionsLocked = mutating || isStatusUpdateExpired;
   const [panel, setPanel] = useState<ActionPanel>(null);
   const [itemValues, setItemValues] = useState<ItemValues>({});
   const [confirmationTarget, setConfirmationTarget] = useState<{
@@ -295,6 +319,9 @@ const OrderDetailPage = () => {
       return updated;
     } catch (requestError) {
       const message = getApiErrorMessage(requestError, "Không thể cập nhật order.");
+      if (getApiErrorCode(requestError) === ORDER_STATUS_UPDATE_WINDOW_EXPIRED) {
+        setServerRefusedAsExpired(true);
+      }
       setActionError(message);
       onError?.(requestError);
       if (throwOnError) throw new Error(message, { cause: requestError });
@@ -382,6 +409,10 @@ const OrderDetailPage = () => {
       setActionError('Số chồng thực tế phải lớn hơn hoặc bằng 0.');
       return;
     }
+    if (!Number.isInteger(actual)) {
+      setActionError('Số chồng phải là số nguyên.');
+      return;
+    }
     if (actual > confirmationTarget.allocation.expected_stack_quantity) {
       setActionError('Số chồng thực tế không được vượt số chồng dự kiến.');
       return;
@@ -448,12 +479,12 @@ const OrderDetailPage = () => {
       quantity_approved: Number(itemValues[item.id]?.quantity),
     }));
     const invalid = approvals.some((approval, index) =>
-      !Number.isFinite(approval.quantity_approved) ||
+      !Number.isInteger(approval.quantity_approved) ||
       approval.quantity_approved <= 0 ||
       approval.quantity_approved > Number(items[index].quantity_requested),
     );
     if (invalid) {
-      setActionError("Số duyệt của mỗi dòng phải lớn hơn 0 và không vượt số lượng yêu cầu.");
+      setActionError("Số duyệt của mỗi dòng phải là số nguyên lớn hơn 0 và không vượt số lượng yêu cầu.");
       return;
     }
     void runMutation(() => approveOrder(id, { items: approvals }));
@@ -465,10 +496,20 @@ const OrderDetailPage = () => {
       setActionError("Chưa xác nhận đầy đủ số chồng thực tế trước khi xuất hàng.");
       return;
     }
+    // A typed-but-fractional quantity must be reported, not silently skipped as
+    // an empty row would be: supply is issued in whole units only.
+    const hasFractionalQuantity = normalIssueItems.some((item) => {
+      const quantity = Number(itemValues[item.id]?.quantity);
+      return Number.isFinite(quantity) && !Number.isInteger(quantity);
+    });
+    if (hasFractionalQuantity) {
+      setActionError("Số lượng cấp phải là số nguyên.");
+      return;
+    }
     const selected = normalIssueItems.flatMap((item) => {
       const values = itemValues[item.id];
       const quantity = Number(values?.quantity);
-      if (!Number.isFinite(quantity) || quantity <= 0) return [];
+      if (!Number.isInteger(quantity) || quantity <= 0) return [];
       return [{ item, quantity, storageLocationId: values?.storageLocationId?.trim() ?? "" }];
     });
     if (selected.length === 0 && stackItems.length === 0) {
@@ -611,27 +652,38 @@ const OrderDetailPage = () => {
             <p className="mt-1 text-xs text-slate-500">Backend vẫn là lớp kiểm tra quyền cuối cùng.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {canApprove && <button type="button" title="Thao tác này chưa làm thay đổi tồn kho" onClick={() => openPanel("approve")} className={InfoButton}>Xác nhận</button>}
-            {canApprove && <button type="button" title="Từ chối yêu cầu" onClick={openRejectConfirmation} className={ErrorButton}>Từ chối</button>}
-            {canAllocate && <button type="button" title="Tạo đề xuất vị trí; không trừ hoặc giữ tồn kho" disabled={mutating} onClick={() => void runMutation(() => allocateOrder(id), false, (error) => setAllocationErrorDetails(getApiErrorDetails<StackAllocationErrorDetails>(error)))} className={InfoButton}>Phân bổ vị trí</button>}
+            {canApprove && <button type="button" title="Thao tác này chưa làm thay đổi tồn kho" disabled={actionsLocked} onClick={() => openPanel("approve")} className={InfoButton}>Xác nhận</button>}
+            {canApprove && <button type="button" title="Từ chối yêu cầu" disabled={actionsLocked} onClick={openRejectConfirmation} className={ErrorButton}>Từ chối</button>}
+            {canAllocate && <button type="button" title="Tạo đề xuất vị trí; không trừ hoặc giữ tồn kho" disabled={actionsLocked} onClick={() => void runMutation(() => allocateOrder(id), false, (error) => setAllocationErrorDetails(getApiErrorDetails<StackAllocationErrorDetails>(error)))} className={InfoButton}>Phân bổ vị trí</button>}
             {hasIssueAction && (
               <button
                 type="button"
                 title={canIssue
                   ? "Issue mới trừ tồn và tạo StockTransactions"
                   : "Chưa xác nhận đủ số chồng thực tế"}
-                disabled={!canIssue || mutating}
+                disabled={!canIssue || actionsLocked}
                 onClick={openIssuePanel}
                 className={VioletButton}
               >
                 Xuất hàng
               </button>
             )}
-            {canReceive && <button type="button" disabled={mutating} onClick={() => void runMutation(() => receiveOrder(id))} className={CyanButton}>Đã nhận hàng</button>}
-            {canComplete && <button type="button" disabled={mutating} onClick={() => void runMutation(() => completeOrder(id))} className={SuccessButton}>Hoàn thành</button>}
-            {canCancel && <button type="button" onClick={openCancelConfirmation} className={SecondaryButton}>Hủy order</button>}
+            {canReceive && <button type="button" disabled={actionsLocked} onClick={() => void runMutation(() => receiveOrder(id))} className={CyanButton}>Đã nhận hàng</button>}
+            {canComplete && <button type="button" disabled={actionsLocked} onClick={() => void runMutation(() => completeOrder(id))} className={SuccessButton}>Hoàn thành</button>}
+            {canCancel && <button type="button" disabled={actionsLocked} onClick={openCancelConfirmation} className={SecondaryButton}>Hủy order</button>}
           </div>
         </div>
+        {isStatusUpdateExpired && (
+          <div role="alert" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="font-bold">
+              Đã quá thời hạn cho phép cập nhật trạng thái Order (kết thúc ca + 3 giờ).
+            </p>
+            <p className="mt-1">
+              Không thể tiếp tục thao tác trên Order này.
+              {statusUpdateCutoff && ` Hạn cuối: ${formatDate(statusUpdateCutoff.toISOString())}.`}
+            </p>
+          </div>
+        )}
         {!hasActions && <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Không có thao tác phù hợp với role và trạng thái hiện tại.</p>}
         {mutating && <p className="mt-4 text-sm font-semibold text-blue-600">Đang cập nhật order...</p>}
         {actionError && <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{actionError}</div>}
@@ -737,7 +789,7 @@ const OrderDetailPage = () => {
                     ))}
                   </select>
                 )}
-                <input type="number" min="0" step="any" max={itemRemaining(item)} value={itemValues[item.id]?.quantity ?? ""} onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity: event.target.value } }))} placeholder="Số lượng cấp" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                <input type="number" min="1" step="1" max={itemRemaining(item)} value={itemValues[item.id]?.quantity ?? ""} onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity: event.target.value } }))} placeholder="Số lượng cấp" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
               </div>
             ))}
           </div>
@@ -922,7 +974,7 @@ const OrderDetailPage = () => {
                 type="number"
                 min="0"
                 max={confirmationTarget.allocation.expected_stack_quantity}
-                step="any"
+                step="1"
                 value={actualStackQuantity}
                 onChange={(event) => setActualStackQuantity(event.target.value)}
                 className={inputClassName}
@@ -973,7 +1025,7 @@ const PanelButtons = ({ disabled, onCancel, onConfirm, confirmLabel, danger = fa
 );
 
 const QuantityRow = ({ item, label, value, max, onChange }: { item: OrderItem; label: string; value: string; max: number; onChange: (value: string) => void }) => (
-  <div className={`grid gap-3 rounded-xl border p-3 text-sm md:grid-cols-[1fr_180px] md:items-center ${item.has_stock_shortage ? "border-amber-300 bg-amber-50/70" : "border-slate-200"}`}><div><strong className="block text-slate-800">{item.supply?.code ?? 'Vật tư'}</strong><span className="text-xs text-slate-500">Yêu cầu: {item.quantity_requested}</span><div className="mt-2"><StockAvailabilityWarning item={item} /></div></div><label><span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span><input type="number" min="0.000001" max={max} step="any" value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2" /></label></div>
+  <div className={`grid gap-3 rounded-xl border p-3 text-sm md:grid-cols-[1fr_180px] md:items-center ${item.has_stock_shortage ? "border-amber-300 bg-amber-50/70" : "border-slate-200"}`}><div><strong className="block text-slate-800">{item.supply?.code ?? 'Vật tư'}</strong><span className="text-xs text-slate-500">Yêu cầu: {item.quantity_requested}</span><div className="mt-2"><StockAvailabilityWarning item={item} /></div></div><label><span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span><input type="number" min="0" max={max} step="1" value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2" /></label></div>
 );
 
 const AllocationErrorDetails = ({

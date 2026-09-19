@@ -120,7 +120,11 @@ describe('Supply stack Phase 6 issue UX', () => {
 
   it('keeps discrepancy display warning-only and disables issue until Stack is ready', () => {
     assert.match(orderDetail, /stackItemsNotReady\.length === 0/);
-    assert.match(orderDetail, /disabled=\{!canIssue \|\| mutating\}/);
+    // actionsLocked folds `mutating` together with the shift+3h status window,
+    // so Issue stays blocked while a mutation is in flight and after the window
+    // has closed, on top of the Stack readiness check.
+    assert.match(orderDetail, /disabled=\{!canIssue \|\| actionsLocked\}/);
+    assert.match(orderDetail, /const actionsLocked = mutating \|\| isStatusUpdateExpired/);
     assert.match(orderDetail, /Cần kiểm kê/);
   });
 

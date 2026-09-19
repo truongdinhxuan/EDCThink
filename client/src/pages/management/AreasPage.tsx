@@ -23,11 +23,13 @@ import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { queryKeys } from '../../lib/queryKeys';
 import type { Area,AreaListParams,CreateAreaInput } from '../../types/areas';
 import type { PaginationParams } from '../../types/pagination.types';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 type AreaQuery = AreaListParams & PaginationParams;
 const initialQuery: AreaQuery = { page: 1, pageSize: 20, isActive: true, sortBy: 'code', sortOrder: 'asc' };
 
 const AreasPage = () => {
+  useDocumentTitle('Khu vực');
   const { openConfirm } = useCrudOffcanvas();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_AREA_CREATE);
