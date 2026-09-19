@@ -11,6 +11,7 @@ import {
   resolveIncomingAreaIds,
   resolveReadableAreaIds,
 } from '../domain/sheet-access';
+import { resolveShiftEndAt, resolveShiftStartAt } from '../domain/orderRules';
 import { AreaScopesService } from './area-scopes.service';
 import {
   createShiftOrderSheetExportFilename,
@@ -83,6 +84,7 @@ interface ExportItemRow {
   id: string;
   created_at: string;
   quantity_requested: number | string;
+  quantity_approved: number | string | null;
   quantity_issued: number | string | null;
   set_per_qty: number | string | null;
   requested_stack_quantity: number | string | null;
@@ -90,6 +92,7 @@ interface ExportItemRow {
   is_deleted: boolean;
   supply: unknown;
   provider: unknown;
+  unit: unknown;
 }
 
 interface ExportOrderRow {
@@ -99,7 +102,13 @@ interface ExportOrderRow {
   issued_at: string | null;
   note: string | null;
   is_deleted: boolean;
+  status_lookup: ExportStatusRow | ExportStatusRow[] | null;
   order_items?: ExportItemRow[];
+}
+
+interface ExportStatusRow {
+  code: string;
+  name: string | null;
 }
 
 interface ExportSheetRow extends Omit<SheetRow, 'orders'> {
@@ -148,14 +157,15 @@ const firstRelation = <T>(value: T | T[] | null): T | null =>
 
 const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
 
+// Shift arithmetic (fixed +07:00, crosses_midnight) belongs to the domain layer
+// and is shared with the Order status-update deadline, so it is not redone here.
 const shiftBounds = (workDate: string, shift: EmbeddedShift | null) => {
   if (!shift) return { shift_start_at: '', shift_end_at: '' };
-  const startDate = new Date(`${workDate}T${shift.start_time}+07:00`);
-  const endDate = new Date(`${workDate}T${shift.end_time}+07:00`);
-  if (shift.crosses_midnight) endDate.setUTCDate(endDate.getUTCDate() + 1);
+  const startAt = resolveShiftStartAt(workDate, shift);
+  const endAt = resolveShiftEndAt(workDate, shift);
   return {
-    shift_start_at: startDate.toISOString(),
-    shift_end_at: endDate.toISOString(),
+    shift_start_at: startAt?.toISOString() ?? '',
+    shift_end_at: endAt?.toISOString() ?? '',
   };
 };
 
@@ -250,14 +260,16 @@ const SHEET_EXPORT_SELECT = `
   ${SHEET_BASE_SELECT},
   orders:orders!orders_shift_order_sheet_id_fkey(
     id, code, submitted_at, issued_at, note, is_deleted,
+    status_lookup:order_statuses!orders_status_id_fkey(id, code, name),
     order_items(
-      id, created_at, quantity_requested, quantity_issued,
+      id, created_at, quantity_requested, quantity_approved, quantity_issued,
       set_per_qty, requested_stack_quantity, note, is_deleted,
       supply:supplies!order_items_supply_id_fkey(
         id, code, description,
         category:supply_categories!supplies_category_id_fkey(id, code)
       ),
-      provider:providers!order_items_provider_id_fkey(id, code, name)
+      provider:providers!order_items_provider_id_fkey(id, code, name),
+      unit:units!order_items_unit_id_fkey(id, code, symbol)
     )
   )
 `;
@@ -591,6 +603,7 @@ export class ShiftOrderSheetsService {
           issued_at: order.issued_at,
           note: order.note,
           is_deleted: order.is_deleted,
+          status: firstRelation(order.status_lookup),
           order_items: (order.order_items ?? [])
             .filter((item) => !item.is_deleted)
             .map((item): ShiftOrderSheetExportItem => {
@@ -600,6 +613,10 @@ export class ShiftOrderSheetsService {
               const provider = firstRelation(
                 item.provider as ExportRelation | ExportRelation[] | null,
               );
+              const unit = firstRelation(
+                item.unit as { code: string; symbol: string | null }
+                  | Array<{ code: string; symbol: string | null }> | null,
+              );
               const category = supply
                 ? firstRelation(supply.category as ExportRelation | ExportRelation[] | null)
                 : null;
@@ -607,6 +624,7 @@ export class ShiftOrderSheetsService {
                 id: item.id,
                 created_at: item.created_at,
                 quantity_requested: item.quantity_requested,
+                quantity_approved: item.quantity_approved,
                 quantity_issued: item.quantity_issued,
                 set_per_qty: item.set_per_qty,
                 requested_stack_quantity: item.requested_stack_quantity,
@@ -620,6 +638,7 @@ export class ShiftOrderSheetsService {
                   code: provider.code,
                   name: provider.name ?? '',
                 } : null,
+                unit: unit ? { code: unit.code, symbol: unit.symbol ?? null } : null,
               };
             }),
         })),

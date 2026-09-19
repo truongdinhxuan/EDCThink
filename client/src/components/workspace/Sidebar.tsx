@@ -67,7 +67,7 @@ const Sidebar = ({
       id="sidebar"
       className={`transition-all duration-200 ease-in-out fixed inset-y-0 left-0 flex h-screen w-72 max-w-[calc(100vw-1rem)] shrink-0 flex-col overflow-hidden border-r border-slate-100 bg-white shadow-2xl md:relative md:inset-y-auto md:m-3 md:h-auto md:max-w-none md:self-stretch md:translate-x-0 md:visible md:rounded-3xl lg:m-4
         ${isMobileSidebarOpen ? "visible translate-x-0" : "invisible -translate-x-full"}
-        ${isSidebarCollapsed ? "md:w-[4.5rem]" : "md:w-64"}`}
+        ${isSidebarCollapsed ? "md:w-18" : "md:w-64"}`}
       style={{ zIndex: APP_LAYER.navigation }}
     >
       <div className={`w-full shrink-0 pb-4 pt-5 ${isSidebarCollapsed ? "px-3 md:px-2" : "px-5"}`}>

@@ -35,6 +35,18 @@ export const ORDER_STATUS_UPDATE_GRACE_MS = 3 * 60 * 60 * 1000;
  * Returns null when the pieces do not form a real instant, so callers can tell
  * "no deadline" apart from "deadline passed".
  */
+/**
+ * The absolute instant a shift instance starts. Same fixed-offset reasoning as
+ * resolveShiftEndAt, kept beside it so shift arithmetic lives in one place.
+ */
+export const resolveShiftStartAt = (
+  workDate: string,
+  shift: { start_time: string },
+): Date | null => {
+  const startAt = new Date(`${workDate}T${shift.start_time}+07:00`);
+  return Number.isNaN(startAt.getTime()) ? null : startAt;
+};
+
 export const resolveShiftEndAt = (
   workDate: string,
   shift: { end_time: string; crosses_midnight?: boolean },
