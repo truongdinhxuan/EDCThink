@@ -5,7 +5,9 @@ import { describe, it } from 'node:test';
 
 const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 
-const page = read('src/pages/orders/ShiftOrderSheetsPage.tsx');
+// The filters belong to the archive; the current Sheet has nothing to filter.
+const page = read('src/pages/orders/ShiftOrderSheetHistoryPage.tsx');
+const currentPage = read('src/pages/orders/ShiftOrderSheetsPage.tsx');
 const api = read('src/api/shift-order-sheets.service.ts');
 const areaScopeApi = read('src/api/area-scopes.service.ts');
 const areaScopeTypes = read('src/types/area-scopes.ts');
@@ -52,6 +54,19 @@ describe('Phase 5 Shift Order Sheet Filter Rail', () => {
     assert.match(api, /\{ params, signal \}/);
     assert.match(page, /getShiftOrderSheet\(selectedHistoryId!, signal, detailParams\)/);
     assert.doesNotMatch(page, /\.filter\(|\.slice\(/);
+  });
+
+  it('keeps the rail on the archive route and off the current Sheet', () => {
+    // One `historyOpen` flag used to pick between two unrelated screens on one
+    // URL, which mounted the rail over a Sheet it could not filter.
+    assert.match(routes, /path: 'shift-order-sheets\/history'/);
+    assert.match(routes, /ShiftOrderSheetHistoryPage/);
+    assert.doesNotMatch(currentPage, /PageFilterRail|PageFilterLayout|FilterField/);
+    assert.doesNotMatch(currentPage, /setFilters|useDebounce/);
+    // The state, not the word: both files still name the old flag in prose.
+    for (const source of [page, currentPage]) {
+      assert.doesNotMatch(source, /setHistoryOpen\(|useState\(false\)/);
+    }
   });
 
   it('uses the dedicated read permission for menu, routes and export UX', () => {

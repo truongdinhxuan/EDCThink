@@ -152,12 +152,12 @@ const WORKSPACE_NAVIGATION: readonly WorkspaceNavigationCatalogDefinition[] = [
   //   ],
   // },
   {
-    label: 'Administration',
+    label: 'Tài khoản và phân quyền',
     groups: [{
-      label: 'System',
+      label: 'Hệ thống',
       items: [
-        { path: 'users', label: 'Users', icon: faUsers, permission: PERMISSION_CODE.ADMIN_USER_READ },
-        { path: 'roles', label: 'Roles', icon: faUserShield, permission: PERMISSION_CODE.ADMIN_ROLE_READ },
+        { path: 'users', label: 'Người dùng', icon: faUsers, permission: PERMISSION_CODE.ADMIN_USER_READ },
+        { path: 'roles', label: 'Vai trò', icon: faUserShield, permission: PERMISSION_CODE.ADMIN_ROLE_READ },
         { path: 'areas', label: 'Khu vực', icon: faWarehouse, permission: PERMISSION_CODE.SUPPLY_AREA_READ },
       ],
     }],

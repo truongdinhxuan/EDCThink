@@ -10,6 +10,7 @@ import {
 } from '../constants/workspaces';
 import { ORDER_READ_PERMISSIONS } from '../constants/workspaceNavigation';
 import { LegacyRoleRedirect } from './LegacyRoleRedirect';
+import SupplyDashboardPage from '../pages/dashboards/SupplyDashboardPage';
 
 const WorkspaceLayout = lazy(() => import('../layouts/workspace/WorkspaceLayout').then((module) => ({ default: module.WorkspaceLayout })));
 const RoleDashboardPage = lazy(() => import('../pages/dashboards/RoleDashboardPage'));
@@ -39,6 +40,7 @@ const OrdersListPage = lazy(() => import('../pages/orders/OrdersListPage'));
 const CreateOrderPage = lazy(() => import('../pages/orders/CreateOrderPage'));
 const OrderDetailPage = lazy(() => import('../pages/orders/OrderDetailPage'));
 const ShiftOrderSheetsPage = lazy(() => import('../pages/orders/ShiftOrderSheetsPage'));
+const ShiftOrderSheetHistoryPage = lazy(() => import('../pages/orders/ShiftOrderSheetHistoryPage'));
 const ShiftOrderSheetDetailPage = lazy(() => import('../pages/orders/ShiftOrderSheetDetailPage'));
 
 const guarded = (permissions: readonly PermissionCode[], element: ReactNode) => (
@@ -63,7 +65,6 @@ const guarded = (permissions: readonly PermissionCode[], element: ReactNode) => 
 const createFeatureRoutes = (): RouteObject[] => [
   { index: true, element: <Navigate to="dashboard" replace /> },
   { path: 'dashboard', element: <RoleDashboardPage /> },
-  { path: 'dashboard/supply', element: guarded([PERMISSION_CODE.SUPPLY_DASHBOARD_READ], <RoleDashboardPage />) },
   // { path: 'dashboard/milkrun', element: guarded([PERMISSION_CODE.MILKRUN_DASHBOARD_READ], <MilkrunDashboardPage />) },
   { path: 'supplies', element: guarded([PERMISSION_CODE.SUPPLY_CATALOG_READ], <SuppliesPage />) },
   { path: 'providers', element: guarded([PERMISSION_CODE.SUPPLY_CATALOG_READ], <ProvidersPage />) },
@@ -75,13 +76,22 @@ const createFeatureRoutes = (): RouteObject[] => [
   { path: 'orders/create', element: guarded([PERMISSION_CODE.SUPPLY_ORDER_CREATE], <CreateOrderPage />) },
   { path: 'orders/:id', element: guarded(ORDER_READ_PERMISSIONS, <OrderDetailPage />) },
   { path: 'shift-order-sheets', element: guarded([PERMISSION_CODE.SUPPLY_SHIFT_ORDER_SHEET_READ], <ShiftOrderSheetsPage />) },
+  // Declared above ':id' for the reader's sake; React Router ranks the static
+  // segment higher either way, so 'history' is never read as a Sheet id.
+  { path: 'shift-order-sheets/history', element: guarded([PERMISSION_CODE.SUPPLY_SHIFT_ORDER_SHEET_READ], <ShiftOrderSheetHistoryPage />) },
   { path: 'shift-order-sheets/:id', element: guarded([PERMISSION_CODE.SUPPLY_SHIFT_ORDER_SHEET_READ], <ShiftOrderSheetDetailPage />) },
   { path: 'stock-balances', element: guarded([PERMISSION_CODE.SUPPLY_STOCK_READ], <StockBalancesPage />) },
   { path: 'stock-transactions', element: guarded([PERMISSION_CODE.SUPPLY_STOCK_READ], <StockTransactionsPage />) },
   {
+    path: 'dashboard/supply',
+    element: guarded([PERMISSION_CODE.SUPPLY_DASHBOARD_READ], (
+      <WorkspacePlaceholderPage title="Dashboard" description="Theo dõi tình trạng vật tư." />
+    )),
+  },
+  {
     path: 'stock-adjustments',
-    element: guarded([PERMISSION_CODE.SUPPLY_STOCK_ADJUST], (
-      <WorkspacePlaceholderPage title="Stock adjustments" description="Điều chỉnh tồn ngoài order và bắt buộc nhập lý do." />
+    element: guarded([PERMISSION_CODE.SUPPLY_DASHBOARD_READ], (
+      <WorkspacePlaceholderPage title="Điều chỉnh giao dịch" description="Điều chỉnh tồn kho và bắt buộc nhập lý do." />
     )),
   },
   // {

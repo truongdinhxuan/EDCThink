@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { listAreas } from '../../api/areas.service';
 import { listOrders } from '../../api/orders.service';
 import { getWorkShifts } from '../../api/work-shifts.service';
 import { InfoButton, TextButton } from '../../components/common/Button';
@@ -17,6 +16,7 @@ import { OrderStatusBadge } from '../../components/orders/OrderStatusBadge';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { getWorkspacePath } from '../../constants/workspaces';
 import { useAuth } from '../../context/AuthContext';
+import { useAreaLookup } from '../../hooks/useAreaLookup';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { queryKeys } from '../../lib/queryKeys';
@@ -68,20 +68,15 @@ const OrdersListPage = () => {
   const resourceSearch = resource.query.search;
   const updateResourceQuery = resource.updateQuery;
 
-  const areasQuery = useQuery({
-    queryKey: queryKeys.areas.lookup({ pageSize: 100, isActive: true }),
-    queryFn: ({ signal }) => listAreas(
-      { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
-      signal,
-    ),
-    staleTime: 10 * 60 * 1000,
-  });
+  // Shared hook, not a local useQuery: this screen used to cache the paginated
+  // envelope under the same key the other screens cache the array under.
+  const areaLookup = useAreaLookup();
   const workShiftsQuery = useQuery({
     queryKey: queryKeys.workShifts.lookup(),
     queryFn: ({ signal }) => getWorkShifts(signal),
     staleTime: 10 * 60 * 1000,
   });
-  const areaOptions = useMemo(() => areasQuery.data?.data ?? [], [areasQuery.data]);
+  const areaOptions = areaLookup.items;
   const workShiftOptions = useMemo(
     () => workShiftsQuery.data ?? [],
     [workShiftsQuery.data],
@@ -162,7 +157,6 @@ const OrdersListPage = () => {
     <PageFilterLayout
       rail={(
         <PageFilterRail
-          title="Bộ lọc Order lịch sử"
           onReset={resetFilters}
           resetDisabled={filtersAreDefault}
         >
@@ -197,10 +191,10 @@ const OrdersListPage = () => {
                   areaId: event.target.value || undefined,
                 })}
                 className={inputClassName}
-                disabled={areasQuery.isPending || Boolean(areasQuery.error)}
+                disabled={areaLookup.loading || Boolean(areaLookup.error)}
               >
                 <option value="">
-                  {areasQuery.error ? 'Không tải được khu vực' : 'Tất cả khu vực'}
+                  {areaLookup.error ? 'Không tải được khu vực' : 'Tất cả khu vực'}
                 </option>
                 {areaOptions.map((area) => (
                   <option key={area.id} value={area.id}>
@@ -281,13 +275,7 @@ const OrdersListPage = () => {
       <section className="min-w-0 space-y-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
-              Order management
-            </p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">Order lịch sử</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Tra cứu Order theo trạng thái, khu vực, ca làm việc và thời gian.
-            </p>
+            <h1 className="mt-1 text-2xl font-bold text-slate-900">Lịch sử order</h1>
           </div>
           {hasPermission(PERMISSION_CODE.SUPPLY_ORDER_CREATE) && (
             <Link to={createOrderPath} className={InfoButton}>Tạo order</Link>

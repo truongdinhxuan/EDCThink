@@ -38,7 +38,7 @@ export const DrawerFormFooter = ({
       type="button"
       disabled={isSubmitting}
       onClick={onCancel}
-      className={`${SecondaryButton} min-h-11 w-full sm:w-auto`}
+      className={`${SecondaryButton} min-h-9 w-full px-4 text-sm sm:min-h-10 sm:w-auto`}
     >
       {cancelLabel}
     </button>
@@ -48,7 +48,7 @@ export const DrawerFormFooter = ({
         form={formId}
         disabled={isSubmitting || isDisabled}
         onClick={formId ? undefined : onSubmit}
-        className={`${InfoButton} min-h-11 w-full sm:w-auto`}
+        className={`${InfoButton} min-h-9 w-full px-4 text-sm sm:min-h-10 sm:w-auto`}
       >
         {isSubmitting ? submittingLabel : submitLabel}
       </button>

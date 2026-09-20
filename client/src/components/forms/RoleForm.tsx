@@ -22,7 +22,7 @@ export const RoleForm = ({ role, busy, onSave }: {
     },
   });
   return (
-    <CrudDrawerForm isDirty={isDirty} busy={busy} submitLabel={role ? 'Lưu thay đổi' : 'Tạo role'} onSubmit={handleSubmit(onSave)} className="space-y-4">
+    <CrudDrawerForm isDirty={isDirty} busy={busy} onSubmit={handleSubmit(onSave)} className="space-y-4">
       <label className={labelClassName}>
         <span>Code</span>
         <input {...register('code', {

@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import { useCallback,useEffect,useState } from 'react';
-import { listAreas } from '../../api/areas.service';
 import { getApiErrorMessage } from '../../api/errors';
 import { createStockAdjustment,getStockTransaction,listStockTransactions } from '../../api/stock-transactions.service';
 import { listStorageLocations } from '../../api/storage-locations.service';
@@ -15,7 +14,7 @@ import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
 import { StockAdjustmentModal } from '../../components/stock/StockAdjustmentModal';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
-import { useCrudResource } from '../../hooks/useCrudResource';
+import { useAreaLookup } from '../../hooks/useAreaLookup';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { useProviderLookup } from '../../hooks/useProviderLookup';
@@ -28,11 +27,6 @@ import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 type StockTransactionQuery = StockTransactionListParams & PaginationParams;
 
-const loadAreas = async (signal: AbortSignal) =>
-  (await listAreas(
-    { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
-    signal,
-  )).data;
 const numberFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
 const dateFormatter = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
 const transactionTypeClass = (type: StockTransactionType) => type.endsWith('_IN') || type === 'RECEIVE' || type === 'IMPORT' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700';
@@ -40,25 +34,21 @@ const transactionTypeCode = (transaction: StockTransaction) =>
   (transaction.transaction_type?.code ?? 'UNKNOWN') as StockTransactionType;
 
 const StockTransactionsPage = () => {
-  useDocumentTitle('Giao dịch vật tư');
+  useDocumentTitle('Biến động tồn kho');
   const { hasPermission } = useAuth();
   const canAdjust = hasPermission(PERMISSION_CODE.SUPPLY_STOCK_ADJUST);
   const loader = useCallback((query: StockTransactionQuery, signal: AbortSignal) => listStockTransactions(query, signal), []);
   const resource = usePaginatedResource<StockTransaction, StockTransactionQuery>({
     loader,
     initialQuery: { page: 1, pageSize: 20, sortBy: 'created_at', sortOrder: 'desc' },
-    loadErrorMessage: 'Không thể tải stock transactions.',
+    loadErrorMessage: 'Không thể tải lịch sử biến động tồn kho.',
     queryKey: queryKeys.stockTransactions.lists,
     invalidateQueryKeys: [
       queryKeys.stockBalances.all,
       queryKeys.supplyStackOptions.all,
     ],
   });
-  const areas = useCrudResource(
-    loadAreas,
-    'Không thể tải danh sách khu vực.',
-    queryKeys.areas.lookup({ pageSize: 100, isActive: true }),
-  );
+  const areas = useAreaLookup();
   const providers = useProviderLookup();
   const supplyLoader = useCallback(
     (search: string | undefined, signal: AbortSignal) => listSupplies(
@@ -171,7 +161,7 @@ const StockTransactionsPage = () => {
     && !resource.query.dateTo;
 
   return <PageFilterLayout rail={(
-    <PageFilterRail title="Bộ lọc giao dịch tồn" onReset={resetFilters} resetDisabled={filtersAreDefault}>
+    <PageFilterRail onReset={resetFilters} resetDisabled={filtersAreDefault}>
       <FilterSection>
         <FilterField label="Tìm kiếm"><input type="search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Tìm transaction, vật tư, lý do..." className={inputClassName} /></FilterField>
         <FilterField label="Tìm vật tư"><input type="search" value={supplies.search} onChange={(event) => supplies.setSearch(event.target.value)} placeholder="Tìm vật tư trên server..." className={inputClassName} /></FilterField>
@@ -190,10 +180,10 @@ const StockTransactionsPage = () => {
       {[supplies.error, providers.error, areas.error, locations.error].some(Boolean) && <p role="alert" className="text-xs text-amber-700">Một số bộ lọc không tải được. Danh sách transaction vẫn được hiển thị.</p>}
     </PageFilterRail>
   )}><div className="min-w-0 space-y-6">
-    <CrudPageHeader title="Stock transactions" description="Audit log bất biến của mọi biến động tồn kho." createLabel="Tạo adjustment" onCreate={canAdjust ? () => setAdjustmentOpen(true) : undefined} />
+    <CrudPageHeader title="Lịch sử biến động tồn kho" onCreate={canAdjust ? () => setAdjustmentOpen(true) : undefined} />
     <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
-    {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} hideInternalSearch pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có transaction phù hợp với bộ lọc." />}
-    {detailId && <PrimaryCrudDrawer mode="view" title="Chi tiết stock transaction" onClose={() => setDetailId(null)}>{detailQuery.isPending ? <CardSkeleton lines={6} label="Đang tải chi tiết transaction" /> : detailQuery.isError ? <ErrorState message={getApiErrorMessage(detailQuery.error, 'Không thể tải chi tiết transaction.')} onRetry={() => void detailQuery.refetch()} /> : detail ? <CrudEntityView fields={detailFields.map(([label, value]) => ({ label, value }))} /> : null}</PrimaryCrudDrawer>}
+    {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} hideInternalSearch pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có biến động nào phù hợp với bộ lọc." />}
+    {detailId && <PrimaryCrudDrawer mode="view" title="Chi tiết biến động tồn kho" onClose={() => setDetailId(null)}>{detailQuery.isPending ? <CardSkeleton lines={6} label="Đang tải chi tiết biến động" /> : detailQuery.isError ? <ErrorState message={getApiErrorMessage(detailQuery.error, 'Không thể tải chi tiết biến động.')} onRetry={() => void detailQuery.refetch()} /> : detail ? <CrudEntityView fields={detailFields.map(([label, value]) => ({ label, value }))} /> : null}</PrimaryCrudDrawer>}
     {adjustmentOpen && canAdjust && <StockAdjustmentModal busy={resource.mutating} onClose={() => setAdjustmentOpen(false)} onSubmit={createAdjustment} />}
   </div></PageFilterLayout>;
 };

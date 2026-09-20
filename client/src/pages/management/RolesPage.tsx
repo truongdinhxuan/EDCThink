@@ -1,19 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
-import { useCallback,useEffect,useState,type MouseEvent } from 'react';
+import { useCallback,useEffect,useState } from 'react';
 import { listAreaTypes } from '../../api/area-types.service';
 import { listPermissions } from '../../api/permissions.service';
 import {
 createRole,deleteRole,getRoleAreaTypeScopes,getRolePermissions,listRoles,
 replaceRoleAreaTypeScopes,replaceRolePermissions,updateRole,
 } from '../../api/roles.service';
-import { TextButton } from '../../components/common/Button';
 import { DataTable,type Column } from '../../components/common/DataTable';
 import { CrudEntityView } from '../../components/crud/CrudEntityView';
 import {
-CrudFeedbackToast,CrudModal,CrudPageHeader,ErrorState,
-FormActions,
+CrudFeedbackToast,CrudPageHeader,ErrorState,
 inputClassName,RowActions,StatusBadge
 } from '../../components/crud/CrudPrimitives';
+import { CrudDrawerForm } from '../../components/crud/CrudDrawerForm';
 import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
 import { FilterField,FilterSection,PageFilterLayout,PageFilterRail } from '../../components/filters';
 import { RoleForm,type RoleFormValues } from '../../components/forms/RoleForm';
@@ -29,11 +28,14 @@ import type { Permission } from '../../types/permissions';
 import type { CreateRoleInput,Role,RoleListParams,UpdateRoleInput } from '../../types/roles';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
+const sameIds = (left: string[], right: string[]): boolean =>
+  left.length === right.length && [...left].sort().join() === [...right].sort().join();
+
 type RoleQuery = RoleListParams & PaginationParams;
 const initialQuery: RoleQuery = { page: 1, pageSize: 20, sortBy: 'code', sortOrder: 'asc' };
 
 const RolesPage = () => {
-  useDocumentTitle('Roles');
+  useDocumentTitle('Vai trò');
   const { openConfirm } = useCrudOffcanvas();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.ADMIN_ROLE_CREATE);
@@ -41,7 +43,7 @@ const RolesPage = () => {
   const canAssign = hasPermission(PERMISSION_CODE.ADMIN_ROLE_ASSIGN_PERMISSION);
   const loader = useCallback((query: RoleQuery, signal: AbortSignal) => listRoles(query, signal), []);
   const resource = usePaginatedResource<Role, RoleQuery>({
-    loader, initialQuery, loadErrorMessage: 'Không thể tải danh sách role.',
+    loader, initialQuery, loadErrorMessage: 'Không thể tải danh sách vai trò.',
     queryKey: queryKeys.roles.lists,
     invalidateQueryKeys: [
       queryKeys.users.all,
@@ -63,6 +65,8 @@ const RolesPage = () => {
   const [permissionTarget, setPermissionTarget] = useState<Role | null>(null);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([]);
+  // The drawer guards unsaved work, which needs something to compare against.
+  const [loadedPermissionIds, setLoadedPermissionIds] = useState<string[]>([]);
   const [permissionLoading, setPermissionLoading] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [areaScopeTarget, setAreaScopeTarget] = useState<Role | null>(null);
@@ -108,8 +112,8 @@ const RolesPage = () => {
       };
       const ok = await resource.runMutation(
         editing ? () => updateRole(editing.id, input satisfies UpdateRoleInput) : () => createRole(input),
-        editing ? 'Đã cập nhật role.' : 'Đã tạo role.',
-        editing ? 'Không thể cập nhật role.' : 'Không thể tạo role.',
+        editing ? 'Đã cập nhật vai trò.' : 'Đã tạo vai trò.',
+        editing ? 'Không thể cập nhật vai trò.' : 'Không thể tạo vai trò.',
         { throwOnError: true },
       );
       if (ok) setFormOpen(false);
@@ -118,17 +122,17 @@ const RolesPage = () => {
     }
   };
 
-  const confirmDelete = (role: Role, event: MouseEvent<HTMLButtonElement>) => openConfirm({
-    title: 'Xóa role?',
-    description: `Role “${role.name}” chỉ được xóa khi chưa được sử dụng.`,
-    confirmLabel: 'Xóa role',
+  const confirmDelete = (role: Role, trigger: HTMLElement | null) => openConfirm({
+    title: 'Xóa vai trò?',
+    description: `Vai trò “${role.name}” chỉ được xóa khi chưa được sử dụng.`,
+    confirmLabel: 'Xóa vai trò',
     cancelLabel: 'Quay lại',
     variant: 'danger',
-    triggerElement: event.currentTarget,
+    triggerElement: trigger,
     onConfirm: () => resource.runMutation(
       () => deleteRole(role.id),
-      'Đã xóa role.',
-      'Không thể xóa role.',
+      'Đã xóa vai trò.',
+      'Không thể xóa vai trò.',
       { removeCurrentItem: true, throwOnError: true },
     ),
   });
@@ -143,9 +147,11 @@ const RolesPage = () => {
         getRolePermissions(target.id),
       ]);
       setPermissions(catalog.data);
-      setSelectedPermissionIds(assigned.map((permission) => permission.id));
+      const assignedIds = assigned.map((permission) => permission.id);
+      setSelectedPermissionIds(assignedIds);
+      setLoadedPermissionIds(assignedIds);
     } catch {
-      setPermissionError('Không thể tải permission matrix.');
+      setPermissionError('Không thể tải loại phân quyền này.');
     } finally {
       setPermissionLoading(false);
     }
@@ -165,15 +171,18 @@ const RolesPage = () => {
     { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (item) => <StatusBadge active={item.is_active && !item.is_deleted} /> },
     ...[{
       header: 'Thao tác', accessor: 'actions', render: (item: Role) => (
-        <div className="flex justify-end gap-2">
-          {canAssign && <button type="button" className={TextButton} onClick={() => void openPermissionMatrix(item)}>Permissions</button>}
-          <button type="button" className={TextButton} onClick={() => openAreaTypeScopes(item)}>Area Types</button>
-          <RowActions
-            onView={() => openView(item)} onEdit={canUpdate ? () => { setEditing(item); setViewing(false); setFormError(null); setFormOpen(true); } : undefined}
-            onDelete={!canUpdate || item.is_system ? undefined : (event) => confirmDelete(item, event)}
-            deleteLabel="Xóa"
-          />
-        </div>
+        <RowActions
+          ariaLabel={`Thao tác cho ${item.code}`}
+          onView={() => openView(item)} onEdit={canUpdate ? () => { setEditing(item); setViewing(false); setFormError(null); setFormOpen(true); } : undefined}
+          onDelete={!canUpdate || item.is_system ? undefined : (trigger) => confirmDelete(item, trigger)}
+          deleteLabel="Xóa"
+          extraItems={[
+            ...(canAssign
+              ? [{ label: 'Set quyền', onSelect: () => void openPermissionMatrix(item) }]
+              : []),
+            { label: 'Set khu vực', onSelect: () => openAreaTypeScopes(item) },
+          ]}
+        />
       ),
     }],
   ];
@@ -184,13 +193,13 @@ const RolesPage = () => {
 
   return (
     <PageFilterLayout rail={(
-      <PageFilterRail title="Bộ lọc role" onReset={resetFilters} resetDisabled={search.length === 0}>
+      <PageFilterRail onReset={resetFilters} resetDisabled={search.length === 0}>
         <FilterSection>
           <FilterField label="Tìm kiếm"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm code, tên hoặc mô tả..." className={inputClassName} /></FilterField>
         </FilterSection>
       </PageFilterRail>
     )}><div className="min-w-0 space-y-6">
-      <CrudPageHeader title="Roles" description="Role động và permission matrix theo catalog hệ thống." createLabel="Thêm role" onCreate={canCreate ? () => { setEditing(null); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} />
+      <CrudPageHeader title="Quản lý vai trò" onCreate={canCreate ? () => { setEditing(null); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
       {resource.error ? <ErrorState message={resource.error} onRetry={() => void resource.reload()} /> : (
         <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id}
@@ -198,10 +207,10 @@ const RolesPage = () => {
           pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize}
           sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder}
           onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })}
-          emptyText="Không có role phù hợp." />
+          emptyText="Không có vai trò phù hợp." />
       )}
       {formOpen && (viewing || (editing ? canUpdate : canCreate)) && (
-        <PrimaryCrudDrawer mode={viewing ? 'view' : editing ? 'edit' : 'create'} size="md" onEdit={viewing && canUpdate ? () => setViewing(false) : undefined} error={formError} title={viewing ? 'Chi tiết role' : (editing ? 'Chỉnh sửa role' : 'Tạo role')} busy={resource.mutating} onClose={() => setFormOpen(false)}>
+        <PrimaryCrudDrawer mode={viewing ? 'view' : editing ? 'edit' : 'create'} size="md" onEdit={viewing && canUpdate ? () => setViewing(false) : undefined} error={formError} title={viewing ? 'Chi tiết vai trò' : (editing ? 'Chỉnh sửa vai trò' : 'Tạo vai trò')} busy={resource.mutating} onClose={() => setFormOpen(false)}>
           {viewing && editing ? <CrudEntityView fields={[
             { label: 'Mã', value: editing.code },
             { label: 'Tên', value: editing.name },
@@ -214,14 +223,29 @@ const RolesPage = () => {
         </PrimaryCrudDrawer>
       )}
       {permissionTarget && canAssign && (
-        <CrudModal title={`Permissions — ${permissionTarget.name}`} busy={resource.mutating || permissionLoading} onClose={() => setPermissionTarget(null)}>
+        <PrimaryCrudDrawer
+          mode="edit"
+          size="lg"
+          title={`Menu quyền cho vai trò ${permissionTarget.name}`}
+          busy={resource.mutating || permissionLoading}
+          onClose={() => setPermissionTarget(null)}
+        >
           {permissionError ? <ErrorState message={permissionError} onRetry={() => void openPermissionMatrix(permissionTarget)} /> : permissionLoading ? (
-            <p className="py-8 text-center text-sm text-slate-500">Đang tải permission matrix...</p>
+            <p className="py-8 text-center text-sm text-slate-500">Đang tải...</p>
           ) : (
-            <form className="space-y-5" onSubmit={(event) => {
-              event.preventDefault();
-              void resource.runMutation(() => replaceRolePermissions(permissionTarget.id, selectedPermissionIds), 'Đã cập nhật permission của role.', 'Không thể cập nhật permission của role.').then((ok) => { if (ok) setPermissionTarget(null); });
-            }}>
+            <CrudDrawerForm
+              isDirty={!sameIds(selectedPermissionIds, loadedPermissionIds)}
+              busy={resource.mutating}
+              className="space-y-5"
+              onSubmit={async () => {
+                const ok = await resource.runMutation(
+                  () => replaceRolePermissions(permissionTarget.id, selectedPermissionIds),
+                  'Đã cập nhật phân quyền của vai trò.',
+                  'Không thể cập nhật phân quyền của vai trò.',
+                );
+                if (ok) setPermissionTarget(null);
+              }}
+            >
               {[...new Set(permissions.map((permission) => permission.module))].map((module) => (
                 <fieldset key={module} className="rounded-xl border border-slate-200 p-4">
                   <legend className="px-2 text-sm font-bold text-slate-800">{module}</legend>
@@ -231,26 +255,30 @@ const RolesPage = () => {
                         <input type="checkbox" checked={selectedPermissionIds.includes(permission.id)}
                           onChange={(event) => setSelectedPermissionIds((current) => event.target.checked ? [...current, permission.id] : current.filter((id) => id !== permission.id))}
                           className="mt-1 h-4 w-4 rounded border-slate-300" />
-                        <span><span className="block text-sm font-semibold text-slate-800">{permission.name}</span><span className="block text-xs text-slate-500">{permission.code}</span></span>
+                        <span className="block text-sm font-semibold text-slate-800">{permission.name}</span>
                       </label>
                     ))}
                   </div>
                 </fieldset>
               ))}
-              <FormActions busy={resource.mutating} onCancel={() => setPermissionTarget(null)} submitLabel="Lưu permissions" />
-            </form>
+            </CrudDrawerForm>
           )}
-        </CrudModal>
+        </PrimaryCrudDrawer>
       )}
       {areaScopeTarget && (
-        <CrudModal
-          title={`Area Type Access — ${areaScopeTarget.name}`}
+        <PrimaryCrudDrawer
+          // Read-only for the system ADMIN bypass and for anyone without update
+          // rights: the footer then offers Đóng instead of a save nobody can do.
+          mode={canUpdate && !isSystemAdminTarget ? 'edit' : 'view'}
+          size="md"
+          title={`Chọn khu vực cho ${areaScopeTarget.name}`}
           busy={resource.mutating || areaScopeLoading}
+          error={areaScopeError}
           onClose={() => setAreaScopeTarget(null)}
         >
-          {areaScopeError || areaScopeLoadError ? (
+          {areaScopeLoadError ? (
             <ErrorState
-              message={areaScopeError ?? 'Không thể tải cấu hình Area Type Scope.'}
+              message="Không thể tải loại khu vực."
               onRetry={() => {
                 setAreaScopeError(null);
                 void areaTypesQuery.refetch();
@@ -258,12 +286,12 @@ const RolesPage = () => {
               }}
             />
           ) : areaScopeLoading ? (
-            <p className="py-8 text-center text-sm text-slate-500">Đang tải Area Type Scope...</p>
+            <p className="py-8 text-center text-sm text-slate-500">Đang tải loại khu vực...</p>
           ) : isSystemAdminTarget ? (
             <div className="space-y-4">
               <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-                <p className="font-bold">Toàn bộ Area Type (System Admin)</p>
-                <p className="mt-1">Quyền này là system bypass; không tạo mapping PACKING, LOGISTICS hoặc SHOP.</p>
+                <p className="font-bold">Toàn bộ loại khu vực (System Admin)</p>
+                <p className="mt-1">Quyền này là bypass; không tạo mapping PACKING, LOGISTICS hoặc SHOP.</p>
               </div>
               <div className="space-y-2">
                 {areaTypes.map((areaType) => (
@@ -274,36 +302,56 @@ const RolesPage = () => {
                 ))}
               </div>
             </div>
+          ) : !canUpdate ? (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-500">Bạn chỉ có quyền xem cấu hình này.</p>
+              <div className="space-y-2">
+                {areaTypes
+                  .filter((areaType) => selectedAreaTypeIds.includes(areaType.id))
+                  .map((areaType) => (
+                    <div key={areaType.id} className="rounded-lg border border-slate-200 px-3 py-2">
+                      <span className="text-sm font-semibold text-slate-800">{areaType.name}</span>
+                      <span className="ml-2 text-xs text-slate-500">{areaType.code}</span>
+                    </div>
+                  ))}
+                {selectedAreaTypeIds.length === 0 && (
+                  <p className="text-sm text-slate-500">Vai trò này chưa được cấp loại khu vực nào.</p>
+                )}
+              </div>
+            </div>
           ) : (
-            <form className="space-y-5" onSubmit={(event) => {
-              event.preventDefault();
-              if (!canUpdate) return;
-              setAreaScopeError(null);
-              void resource.runMutation(
-                () => replaceRoleAreaTypeScopes(areaScopeTarget.id, selectedAreaTypeIds),
-                'Đã cập nhật Area Type Scope của role.',
-                'Không thể cập nhật Area Type Scope của role.',
-                { throwOnError: true },
-              ).then((ok) => {
-                if (ok) setAreaScopeTarget(null);
-              }).catch((error: unknown) => {
-                setAreaScopeError(error instanceof Error
-                  ? error.message
-                  : 'Không thể cập nhật Area Type Scope của role.');
-              });
-            }}>
+            <CrudDrawerForm
+              isDirty={!sameIds(
+                selectedAreaTypeIds,
+                roleAreaTypeScopesQuery.data?.map((areaType) => areaType.id) ?? [],
+              )}
+              busy={resource.mutating}
+              className="space-y-5"
+              onSubmit={async () => {
+                setAreaScopeError(null);
+                try {
+                  const ok = await resource.runMutation(
+                    () => replaceRoleAreaTypeScopes(areaScopeTarget.id, selectedAreaTypeIds),
+                    'Đã cập nhật khu vực của vai trò.',
+                    'Không thể cập nhật khu vực của vai trò.',
+                    { throwOnError: true },
+                  );
+                  if (ok) setAreaScopeTarget(null);
+                } catch (error: unknown) {
+                  setAreaScopeError(error instanceof Error
+                    ? error.message
+                    : 'Không thể cập nhật khu vực của vai trò.');
+                }
+              }}
+            >
               <fieldset className="rounded-xl border border-slate-200 p-4">
-                <legend className="px-2 text-sm font-bold text-slate-800">Area Type Access</legend>
-                <p className="mb-3 text-xs text-slate-500">
-                  Scope hiệu lực của user là hợp của tất cả Role đang hoạt động.
-                </p>
+                <legend className="px-2 text-sm font-bold text-slate-800">Quyền truy cập loại khu vực</legend>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {areaTypes.map((areaType) => (
                     <label key={areaType.id} className="flex items-start gap-3 rounded-lg p-2 hover:bg-slate-50">
                       <input
                         type="checkbox"
                         checked={selectedAreaTypeIds.includes(areaType.id)}
-                        disabled={!canUpdate}
                         onChange={(event) => setAreaTypeSelection({
                           roleId: areaScopeTarget.id,
                           ids: event.target.checked
@@ -314,7 +362,6 @@ const RolesPage = () => {
                       />
                       <span>
                         <span className="block text-sm font-semibold text-slate-800">{areaType.name}</span>
-                        <span className="block text-xs text-slate-500">{areaType.code}</span>
                         {areaType.description && (
                           <span className="mt-1 block text-xs text-slate-500">{areaType.description}</span>
                         )}
@@ -323,21 +370,12 @@ const RolesPage = () => {
                   ))}
                 </div>
                 {areaTypes.length === 0 && (
-                  <p className="text-sm text-slate-500">Không có Area Type đang hoạt động.</p>
+                  <p className="text-sm text-slate-500">Không có loại khu vực nào đang hoạt động.</p>
                 )}
               </fieldset>
-              {canUpdate ? (
-                <FormActions
-                  busy={resource.mutating}
-                  onCancel={() => setAreaScopeTarget(null)}
-                  submitLabel="Lưu Area Type Scope"
-                />
-              ) : (
-                <p className="text-sm text-slate-500">Bạn chỉ có quyền xem cấu hình này.</p>
-              )}
-            </form>
+            </CrudDrawerForm>
           )}
-        </CrudModal>
+        </PrimaryCrudDrawer>
       )}
     </div></PageFilterLayout>
   );

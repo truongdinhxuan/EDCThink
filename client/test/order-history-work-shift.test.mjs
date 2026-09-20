@@ -7,6 +7,7 @@ const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 const page = read('src/pages/orders/OrdersListPage.tsx');
 const types = read('src/types/orders.ts');
 const navigation = read('src/constants/workspaceNavigation.ts');
+const areaLookup = read('src/hooks/useAreaLookup.ts');
 
 describe('Order History Work Shift UI', () => {
   it('uses the shared filter rail and keeps DataTable search hidden', () => {
@@ -39,8 +40,11 @@ describe('Order History Work Shift UI', () => {
   });
 
   it('respects the backend pageSize maximum for Area lookup', () => {
-    assert.match(page, /pageSize: 100/);
-    assert.doesNotMatch(page, /pageSize: 200/);
+    // The Area query moved into a shared hook so that every screen caches the
+    // same shape under the same key; the page size rule moved with it.
+    assert.match(areaLookup, /pageSize: 100/);
+    assert.doesNotMatch(areaLookup, /pageSize: 200/);
+    assert.match(page, /useAreaLookup\(\)/);
   });
 
   it('uses the approved Order history wording in navigation and page title', () => {

@@ -9,7 +9,7 @@ vehicle: MilkrunVehicle; users: UserProfile[]; loading: boolean; failed: boolean
 onSave: (values: AssignmentFormValues) => Promise<void>;
 }) => {
 const { register, handleSubmit, formState: { isDirty } } = useForm<AssignmentFormValues>({ defaultValues: { driver_id: vehicle.driver_id ?? '' } });
-return (<CrudDrawerForm isDirty={isDirty} busy={busy} submitDisabled={loading || failed} submitLabel="Lưu phân công" onSubmit={handleSubmit(onSave)}>
+return (<CrudDrawerForm isDirty={isDirty} busy={busy} submitDisabled={loading || failed} onSubmit={handleSubmit(onSave)}>
             <label className={labelClassName}>
               Tài xế
               <select {...register('driver_id')} className={inputClassName} disabled={loading || failed}>

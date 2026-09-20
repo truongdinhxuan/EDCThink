@@ -80,7 +80,7 @@ describe('Shift Order Sheet workspace sections', () => {
 
 describe('Approver navigation flow', () => {
   it('step 1: each market row offers "Xem phiếu" into that Sheet', () => {
-    assert.match(incoming, /getWorkspacePath\(role, 'shift-order-sheets'\)/);
+    assert.match(incoming, /getWorkspacePath\(role, SHIFT_ORDER_SHEET_PATH\)/);
     assert.match(incoming, /<Link\s+to=\{`\$\{sheetsPath\}\/\$\{sheet\.id\}`\}[\s\S]*?Xem phiếu/);
   });
 

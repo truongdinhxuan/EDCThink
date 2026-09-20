@@ -22,7 +22,7 @@ export const AreaForm = ({ area, areaTypes, areaTypesLoading, areaTypesError, bu
     },
   });
   return (
-    <CrudDrawerForm isDirty={isDirty} busy={busy} submitLabel={area ? 'Lưu thay đổi' : 'Tạo khu vực'} onSubmit={handleSubmit(onSave)} className="space-y-4">
+    <CrudDrawerForm isDirty={isDirty} busy={busy} onSubmit={handleSubmit(onSave)} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <label className={labelClassName}>
           <span>Mã khu vực</span>

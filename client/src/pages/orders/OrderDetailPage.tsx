@@ -20,15 +20,27 @@ import {
   rejectOrder,
 } from "../../api/orders.service";
 import {
-  CyanButton,
   ErrorButton,
+  getButtonClassName,
   InfoButton,
   SecondaryButton,
-  SuccessButton,
   TextButton,
-  VioletButton,
 } from "../../components/common/Button";
 import { CardSkeleton, SelectSkeleton } from "../../components/common/skeleton";
+
+/**
+ * The status-action row can show up to seven buttons at once, and which ones
+ * depends on status and permissions. At the default size they wrap onto a third
+ * line on a 1366px screen and push the item table below the fold, so this row
+ * alone drops a step. Every other button on the page keeps the normal size.
+ */
+const ACTION_INFO = getButtonClassName({ variant: "info", size: "sm" });
+const ACTION_ERROR = getButtonClassName({ variant: "error", size: "sm" });
+const ACTION_VIOLET = getButtonClassName({ variant: "violet", size: "sm" });
+const ACTION_CYAN = getButtonClassName({ variant: "cyan", size: "sm" });
+const ACTION_SUCCESS = getButtonClassName({ variant: "success", size: "sm" });
+const ACTION_SECONDARY = getButtonClassName({ variant: "secondary", size: "sm" });
+
 import { OrderStatusBadge } from "../../components/orders/OrderStatusBadge";
 import { StockAvailabilityWarning } from "../../components/orders/StockAvailabilityWarning";
 import { CrudModal, FieldError, inputClassName, labelClassName } from "../../components/crud/CrudPrimitives";
@@ -645,16 +657,16 @@ const OrderDetailPage = () => {
         </div>
       )}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm sm:p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-bold text-slate-900">Thao tác theo trạng thái và quyền</h2>
+            <h2 className="text-sm font-bold text-slate-900">Thao tác theo trạng thái và quyền</h2>
             <p className="mt-1 text-xs text-slate-500">Backend vẫn là lớp kiểm tra quyền cuối cùng.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {canApprove && <button type="button" title="Thao tác này chưa làm thay đổi tồn kho" disabled={actionsLocked} onClick={() => openPanel("approve")} className={InfoButton}>Xác nhận</button>}
-            {canApprove && <button type="button" title="Từ chối yêu cầu" disabled={actionsLocked} onClick={openRejectConfirmation} className={ErrorButton}>Từ chối</button>}
-            {canAllocate && <button type="button" title="Tạo đề xuất vị trí; không trừ hoặc giữ tồn kho" disabled={actionsLocked} onClick={() => void runMutation(() => allocateOrder(id), false, (error) => setAllocationErrorDetails(getApiErrorDetails<StackAllocationErrorDetails>(error)))} className={InfoButton}>Phân bổ vị trí</button>}
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
+            {canApprove && <button type="button" title="Thao tác này chưa làm thay đổi tồn kho" disabled={actionsLocked} onClick={() => openPanel("approve")} className={ACTION_INFO}>Xác nhận</button>}
+            {canApprove && <button type="button" title="Từ chối yêu cầu" disabled={actionsLocked} onClick={openRejectConfirmation} className={ACTION_ERROR}>Từ chối</button>}
+            {canAllocate && <button type="button" title="Tạo đề xuất vị trí; không trừ hoặc giữ tồn kho" disabled={actionsLocked} onClick={() => void runMutation(() => allocateOrder(id), false, (error) => setAllocationErrorDetails(getApiErrorDetails<StackAllocationErrorDetails>(error)))} className={ACTION_INFO}>Phân bổ vị trí</button>}
             {hasIssueAction && (
               <button
                 type="button"
@@ -663,14 +675,14 @@ const OrderDetailPage = () => {
                   : "Chưa xác nhận đủ số chồng thực tế"}
                 disabled={!canIssue || actionsLocked}
                 onClick={openIssuePanel}
-                className={VioletButton}
+                className={ACTION_VIOLET}
               >
                 Xuất hàng
               </button>
             )}
-            {canReceive && <button type="button" disabled={actionsLocked} onClick={() => void runMutation(() => receiveOrder(id))} className={CyanButton}>Đã nhận hàng</button>}
-            {canComplete && <button type="button" disabled={actionsLocked} onClick={() => void runMutation(() => completeOrder(id))} className={SuccessButton}>Hoàn thành</button>}
-            {canCancel && <button type="button" disabled={actionsLocked} onClick={openCancelConfirmation} className={SecondaryButton}>Hủy order</button>}
+            {canReceive && <button type="button" disabled={actionsLocked} onClick={() => void runMutation(() => receiveOrder(id))} className={ACTION_CYAN}>Đã nhận hàng</button>}
+            {canComplete && <button type="button" disabled={actionsLocked} onClick={() => void runMutation(() => completeOrder(id))} className={ACTION_SUCCESS}>Hoàn thành</button>}
+            {canCancel && <button type="button" disabled={actionsLocked} onClick={openCancelConfirmation} className={ACTION_SECONDARY}>Hủy order</button>}
           </div>
         </div>
         {isStatusUpdateExpired && (

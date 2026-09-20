@@ -28,7 +28,7 @@ const Header = ({
 }: HeaderProps) => {
   return (
      <header
-       className="mx-3 mt-3 flex min-h-14 min-w-0 shrink-0 items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 shadow-lg backdrop-blur-xl sm:mx-4 sm:mt-4 sm:min-h-16 sm:px-4 md:mx-6 lg:mx-8"
+       className="mx-3 mt-3 flex min-h-13 min-w-0 shrink-0 items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 shadow-lg backdrop-blur-xl sm:mx-4 sm:mt-4 sm:min-h-14 sm:px-4 md:mx-6 lg:mx-5 xl:mx-6"
        style={{ zIndex: APP_LAYER.header }}
      >
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">

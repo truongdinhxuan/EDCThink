@@ -1,4 +1,4 @@
-import { useCallback,useEffect,useState,type MouseEvent } from 'react';
+import { useCallback,useEffect,useState } from 'react';
 import { getProviders } from '../../api/providers.service';
 import { createSupply,deactivateSupply,listSupplies,updateSupply } from '../../api/supplies.service';
 import { listSupplyCategories } from '../../api/supply-categories.service';
@@ -106,13 +106,13 @@ const SuppliesPage = () => {
     }
   };
 
-  const confirmDeactivate = (item: Supply, event: MouseEvent<HTMLButtonElement>) => openConfirm({
+  const confirmDeactivate = (item: Supply, trigger: HTMLElement | null) => openConfirm({
     title: 'Ngừng sử dụng vật tư?',
     description: `Vật tư “${item.code}” sẽ được soft delete/deactivate theo rule backend.`,
     confirmLabel: 'Ngừng sử dụng',
     cancelLabel: 'Quay lại',
     variant: 'warning',
-    triggerElement: event.currentTarget,
+    triggerElement: trigger,
     onConfirm: () => resource.runMutation(
       () => deactivateSupply(item.id),
       'Đã ngừng sử dụng vật tư.',
@@ -132,7 +132,7 @@ const SuppliesPage = () => {
     { header: 'Đơn vị', accessor: 'unit_id', render: (item) => item.unit?.symbol ?? item.unit?.code ?? '—' },
     { header: 'Providers', accessor: 'providers', render: (item) => item.providers.length > 0 ? item.providers.map((provider) => `${provider.code} - ${provider.name}`).join(', ') : '—' },
     { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (item) => <StatusBadge active={item.is_active && !item.is_deleted} /> },
-    ...(hasActions ? [{ header: 'Thao tác', accessor: 'actions', render: (item: Supply) => <RowActions onView={() => openView(item)} onEdit={canUpdate ? () => { setEditing(item); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} onDelete={canDelete ? (event) => confirmDeactivate(item, event) : undefined} deleteLabel="Ngừng sử dụng" /> }] : []),
+    ...(hasActions ? [{ header: 'Thao tác', accessor: 'actions', render: (item: Supply) => <RowActions ariaLabel={`Thao tác cho ${item.code}`} onView={() => openView(item)} onEdit={canUpdate ? () => { setEditing(item); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} onDelete={canDelete ? (trigger) => confirmDeactivate(item, trigger) : undefined} deleteLabel="Ngừng sử dụng" /> }] : []),
   ];
 
   const resetFilters = () => {
@@ -142,7 +142,6 @@ const SuppliesPage = () => {
 
   return <PageFilterLayout rail={(
     <PageFilterRail
-      title="Bộ lọc vật tư"
       onReset={resetFilters}
       resetDisabled={searchInput.length === 0
         && !resource.query.categoryId
@@ -174,7 +173,7 @@ const SuppliesPage = () => {
       {(categories.error || units.error) && <p role="alert" className="text-xs text-amber-700">Một số danh mục lọc chưa tải được.</p>}
     </PageFilterRail>
   )}><div className="min-w-0 space-y-6">
-    <CrudPageHeader title="Supplies" description="Danh mục vật tư dùng cho tồn kho và order." createLabel="Thêm vật tư" onCreate={canCreate ? () => { setEditing(null); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} />
+    <CrudPageHeader title="Quản lý vật tư" onCreate={canCreate ? () => { setEditing(null); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} />
     <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
     {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable
       columns={columns}

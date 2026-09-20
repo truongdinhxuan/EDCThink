@@ -100,13 +100,13 @@ export const DataTable = <T extends object>({
         aria-busy={loading}
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px] border-collapse text-left text-sm">
+          <table className="w-full min-w-175 border-collapse text-left text-sm lg:min-w-[750px]">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
                 {columns.map((column, index) => {
                   const sortable = Boolean(column.sortKey && onSortChange);
                   return (
-                    <th key={index} className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th key={index} className="px-3.5 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
                       <button
                         type="button"
                         disabled={!sortable}
@@ -137,7 +137,7 @@ export const DataTable = <T extends object>({
               {data.length > 0 ? data.map((item, rowIndex) => (
                 <tr key={keyExtractor?.(item) ?? rowIndex} className="bg-white transition-colors hover:bg-slate-50/50">
                   {columns.map((column, columnIndex) => (
-                    <td key={columnIndex} className="px-6 py-4 text-slate-700">
+                    <td key={columnIndex} className="px-3.5 py-2.5 text-xs text-slate-700 sm:text-sm">
                       {column.render
                         ? column.render(item)
                         : String(item[column.accessor as keyof T] ?? '')}
@@ -146,7 +146,7 @@ export const DataTable = <T extends object>({
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={columns.length} className="px-6 py-8 text-center text-slate-500">
+                  <td colSpan={columns.length} className="px-3.5 py-8 text-center text-slate-500">
                     {emptyText}
                   </td>
                 </tr>

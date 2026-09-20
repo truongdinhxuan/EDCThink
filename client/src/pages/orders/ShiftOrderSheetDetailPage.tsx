@@ -5,7 +5,7 @@ import { getShiftOrderSheet } from '../../api/shift-order-sheets.service';
 import { TextButton } from '../../components/common/Button';
 import { CardSkeleton } from '../../components/common/skeleton';
 import { ShiftOrderSheetWorkspace } from '../../components/orders/ShiftOrderSheetWorkspace';
-import { getWorkspacePath } from '../../constants/workspaces';
+import { getWorkspacePath, SHIFT_ORDER_SHEET_PATH } from '../../constants/workspaces';
 import { useAuth } from '../../context/AuthContext';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { queryKeys } from '../../lib/queryKeys';
@@ -13,7 +13,7 @@ import { queryKeys } from '../../lib/queryKeys';
 const ShiftOrderSheetDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const { role } = useAuth();
-  const listPath = getWorkspacePath(role, 'shift-order-sheets');
+  const listPath = getWorkspacePath(role, SHIFT_ORDER_SHEET_PATH);
   const query = useQuery({
     queryKey: queryKeys.shiftOrderSheets.detail(id ?? ''),
     queryFn: ({ signal }) => getShiftOrderSheet(id!, signal),

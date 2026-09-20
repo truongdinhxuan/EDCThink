@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useCallback,useEffect,useState,type MouseEvent } from 'react';
+import { useCallback,useEffect,useState } from 'react';
 import { listAreaTypes } from '../../api/area-types.service';
 import { createArea,deactivateArea,listAreas,updateArea } from '../../api/areas.service';
 import { getApiErrorMessage } from '../../api/errors';
@@ -81,13 +81,13 @@ const AreasPage = () => {
       setFormError(error instanceof Error ? error.message : 'Không thể lưu dữ liệu. Vui lòng thử lại.');
     }
   };
-  const confirmDeactivate = (area: Area, event: MouseEvent<HTMLButtonElement>) => openConfirm({
+  const confirmDeactivate = (area: Area, trigger: HTMLElement | null) => openConfirm({
     title: 'Ngừng sử dụng khu vực?',
     description: `Khu vực “${area.name}” sẽ được chuyển sang trạng thái inactive, không xóa cứng.`,
     confirmLabel: 'Ngừng sử dụng',
     cancelLabel: 'Quay lại',
     variant: 'warning',
-    triggerElement: event.currentTarget,
+    triggerElement: trigger,
     onConfirm: () => resource.runMutation(
       () => deactivateArea(area.id),
       'Đã ngừng sử dụng khu vực.',
@@ -100,7 +100,7 @@ const AreasPage = () => {
     { header: 'Area Type', accessor: 'area_type', render: (area) => area.area_type ? `${area.area_type.code} — ${area.area_type.name}` : 'Chưa phân loại' },
     { header: 'Mô tả', accessor: 'description', sortKey: 'description', render: (area) => area.description || '—' },
     { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (area) => <StatusBadge active={area.is_active} /> },
-    ...(hasActions ? [{ header: 'Thao tác', accessor: 'actions', render: (area: Area) => <RowActions onView={() => openView(area)} onEdit={canUpdate ? () => { setEditing(area); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} onDelete={canDelete ? (event) => confirmDeactivate(area, event) : undefined} deleteLabel="Ngừng sử dụng" /> }] : []),
+    ...(hasActions ? [{ header: 'Thao tác', accessor: 'actions', render: (area: Area) => <RowActions ariaLabel={`Thao tác cho ${area.code}`} onView={() => openView(area)} onEdit={canUpdate ? () => { setEditing(area); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} onDelete={canDelete ? (trigger) => confirmDeactivate(area, trigger) : undefined} deleteLabel="Ngừng sử dụng" /> }] : []),
   ];
   const resetFilters = () => {
     setSearch('');
@@ -108,7 +108,7 @@ const AreasPage = () => {
   };
   return (
     <PageFilterLayout rail={(
-      <PageFilterRail title="Bộ lọc khu vực" onReset={resetFilters} resetDisabled={search.length === 0 && resource.query.isActive === true && !resource.query.areaTypeId}>
+      <PageFilterRail onReset={resetFilters} resetDisabled={search.length === 0 && resource.query.isActive === true && !resource.query.areaTypeId}>
         <FilterSection>
           <FilterField label="Tìm kiếm"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm mã hoặc tên khu vực..." className={inputClassName} /></FilterField>
           <FilterField label="Area Type">
@@ -121,7 +121,7 @@ const AreasPage = () => {
         </FilterSection>
       </PageFilterRail>
     )}><div className="min-w-0 space-y-6">
-      <CrudPageHeader title="Areas" description="Quản lý khu vực và mã khu vực duy nhất." createLabel="Thêm khu vực" onCreate={canCreate ? () => { setEditing(null); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} />
+      <CrudPageHeader title="Quản lý khu vực" onCreate={canCreate ? () => { setEditing(null); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
       {resource.error ? <ErrorState message={resource.error} onRetry={() => void resource.reload()} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} hideInternalSearch pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có khu vực phù hợp." />}
       {formOpen && (viewing || (editing ? canUpdate : canCreate)) && <PrimaryCrudDrawer mode={viewing ? 'view' : editing ? 'edit' : 'create'} size="md" onEdit={viewing && canUpdate ? () => setViewing(false) : undefined} error={formError} title={viewing ? 'Chi tiết khu vực' : (editing ? 'Chỉnh sửa khu vực' : 'Tạo khu vực')} busy={resource.mutating} onClose={() => setFormOpen(false)}>{viewing && editing ? <CrudEntityView fields={[

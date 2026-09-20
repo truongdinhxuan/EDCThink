@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { getApiErrorMessage } from '../../api/errors';
 import { listIncomingShiftOrderSheets } from '../../api/shift-order-sheets.service';
-import { getWorkspacePath } from '../../constants/workspaces';
+import { getWorkspacePath, SHIFT_ORDER_SHEET_PATH } from '../../constants/workspaces';
 import { useAuth } from '../../context/AuthContext';
 import { queryKeys } from '../../lib/queryKeys';
 import type {
@@ -55,7 +55,7 @@ export const IncomingMarketOrdersSection = ({
   context,
 }: IncomingMarketOrdersSectionProps) => {
   const { role } = useAuth();
-  const sheetsPath = getWorkspacePath(role, 'shift-order-sheets');
+  const sheetsPath = getWorkspacePath(role, SHIFT_ORDER_SHEET_PATH);
   const params = {
     workDate: context.work_date,
     workShiftId: context.work_shift_id,

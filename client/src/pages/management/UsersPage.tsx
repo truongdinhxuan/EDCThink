@@ -1,5 +1,4 @@
-import { useCallback,useEffect,useState,type MouseEvent } from 'react';
-import { listAreas } from '../../api/areas.service';
+import { useCallback,useEffect,useState } from 'react';
 import { listRoles } from '../../api/roles.service';
 import {
 createUser,deactivateUser,getUserRoles,getUsers,replaceUserRoles,updateUser,
@@ -20,6 +19,7 @@ import { UserForm,type UserFormValues,type UserReferenceData } from '../../compo
 import { UserWorkShiftPanel } from '../../components/users/UserWorkShiftPanel';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
+import { useAreaLookup } from '../../hooks/useAreaLookup';
 import { useCrudOffcanvas } from '../../hooks/useCrudOffcanvas';
 import { useCrudResource } from '../../hooks/useCrudResource';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -37,12 +37,6 @@ const loadRoles = async (signal: AbortSignal) =>
     { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
     signal,
   )).data;
-const loadAreas = async (signal: AbortSignal) =>
-  (await listAreas(
-    { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
-    signal,
-  )).data;
-
 const getRoleName = (user: UserProfile): string => {
   if (user.roles?.length) return user.roles.map((role) => role.name).join(', ');
   if (typeof user.role === 'string') return user.role;
@@ -50,7 +44,7 @@ const getRoleName = (user: UserProfile): string => {
 };
 
 const UsersPage = () => {
-  useDocumentTitle('Users');
+  useDocumentTitle('Người dùng');
   const { openConfirm } = useCrudOffcanvas();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.ADMIN_USER_CREATE)
@@ -69,11 +63,7 @@ const UsersPage = () => {
     'Không thể tải danh sách role.',
     queryKeys.roles.lookup({ pageSize: 100 }),
   );
-  const areas = useCrudResource(
-    loadAreas,
-    'Không thể tải danh sách area.',
-    queryKeys.areas.lookup({ pageSize: 100, isActive: true }),
-  );
+  const areas = useAreaLookup();
   const managerLoader = useCallback(
     (search: string | undefined, signal: AbortSignal) =>
       getUsers(
@@ -166,13 +156,13 @@ const UsersPage = () => {
     }
   };
 
-  const confirmDeactivate = (user: UserProfile, event: MouseEvent<HTMLButtonElement>) => openConfirm({
+  const confirmDeactivate = (user: UserProfile, trigger: HTMLElement | null) => openConfirm({
     title: 'Ngừng sử dụng tài khoản?',
     description: `Tài khoản “${user.email}” sẽ không còn được phép truy cập dữ liệu nội bộ.`,
     confirmLabel: 'Ngừng sử dụng',
     cancelLabel: 'Quay lại',
     variant: 'warning',
-    triggerElement: event.currentTarget,
+    triggerElement: trigger,
     onConfirm: () => resource.runMutation(
       () => deactivateUser(user.id),
       'Đã ngừng sử dụng người dùng.',
@@ -189,7 +179,7 @@ const UsersPage = () => {
     { header: 'Area', accessor: 'area_id', render: (user) => user.area ? `${user.area.code} - ${user.area.name}` : '—' },
     { header: 'Active', accessor: 'is_active', sortKey: 'is_active', render: (user) => <StatusBadge active={user.is_active} /> },
     { header: 'Duyệt', accessor: 'is_verified', render: (user) => <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${user.is_verified ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>{user.is_verified ? 'Đã duyệt' : 'Chờ duyệt'}</span> },
-    { header: 'Thao tác', accessor: 'actions', render: (user: UserProfile) => <RowActions onView={() => openView(user)} onEdit={canUpdate ? () => void openUserForm(user) : undefined} onDelete={canUpdate && user.is_active ? (event) => confirmDeactivate(user, event) : undefined} deleteLabel="Ngừng sử dụng" /> },
+    { header: 'Thao tác', accessor: 'actions', render: (user: UserProfile) => <RowActions ariaLabel={`Thao tác cho ${user.vinfast_id}`} onView={() => openView(user)} onEdit={canUpdate ? () => void openUserForm(user) : undefined} onDelete={canUpdate && user.is_active ? (trigger) => confirmDeactivate(user, trigger) : undefined} deleteLabel="Ngừng sử dụng" /> },
   ];
 
   const resetFilters = () => {
@@ -200,7 +190,6 @@ const UsersPage = () => {
   return (
     <PageFilterLayout rail={(
       <PageFilterRail
-        title="Bộ lọc người dùng"
         onReset={resetFilters}
         resetDisabled={searchInput.length === 0 && !resource.query.roleId && !resource.query.areaId && resource.query.isActive === undefined}
       >
@@ -213,7 +202,7 @@ const UsersPage = () => {
         {(roles.error || areas.error) && <p role="alert" className="text-xs text-amber-700">Một số bộ lọc tham chiếu chưa tải được.</p>}
       </PageFilterRail>
     )}><div className="min-w-0 space-y-6">
-      <CrudPageHeader title="Users" description="Quản lý hồ sơ, nhiều role, khu vực và trạng thái duyệt tài khoản." createLabel="Thêm người dùng" onCreate={canCreate ? () => void openUserForm(null) : undefined} />
+      <CrudPageHeader title="Quản lý người dùng" onCreate={canCreate ? () => void openUserForm(null) : undefined} />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
       {resource.error ? (
         <ErrorState message={resource.error} onRetry={() => void resource.reload()} />

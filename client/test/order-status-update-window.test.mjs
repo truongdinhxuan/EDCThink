@@ -73,7 +73,10 @@ describe('OrderDetailPage locks status actions once expired', () => {
   });
 
   it('disables every action in the status block', () => {
-    const block = page.match(/<div className="flex flex-wrap gap-2">[\s\S]*?<\/div>\n {8}<\/div>/)?.[0] ?? '';
+    // Anchored on the heading, not on the row's class list: the actions are what
+    // this test is about, and their spacing is free to be retuned.
+    const start = page.indexOf('Thao tác theo trạng thái và quyền');
+    const block = page.slice(start, page.indexOf('{isStatusUpdateExpired &&', start));
     assert.ok(block, 'action block not found');
     for (const label of [
       'Xác nhận', 'Từ chối', 'Phân bổ vị trí', 'Xuất hàng',

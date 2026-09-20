@@ -3,7 +3,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type MouseEvent,
   type ReactNode,
 } from 'react';
 import { createUnit, deactivateUnit, listUnits, updateUnit } from '../../api/units.service';
@@ -71,7 +70,7 @@ const getDrawerTitle = (mode: UnitDrawerMode): string => {
 };
 
 const UnitsPage = () => {
-  useDocumentTitle('Đơn vị');
+  useDocumentTitle('Đơn vị tính');
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);
   const canUpdate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE);
@@ -231,7 +230,7 @@ const UnitsPage = () => {
   const openUnitDrawer = useCallback((
     mode: UnitDrawerMode,
     item: Unit | null,
-    triggerElement: HTMLElement,
+    triggerElement: HTMLElement | null,
   ) => {
     drawerSequence.current += 1;
     const next: UnitDrawerState = {
@@ -268,7 +267,7 @@ const UnitsPage = () => {
 
   const openDeactivate = useCallback((
     item: Unit,
-    event: MouseEvent<HTMLButtonElement>,
+    trigger: HTMLElement | null,
   ) => {
     openConfirm({
       title: 'Ngừng sử dụng đơn vị?',
@@ -276,7 +275,7 @@ const UnitsPage = () => {
       confirmLabel: 'Ngừng sử dụng',
       cancelLabel: 'Hủy',
       variant: 'warning',
-      triggerElement: event.currentTarget,
+      triggerElement: trigger,
       preventCloseWhileBusy: true,
       onConfirm: async () => {
         const ok = await runMutation(
@@ -305,12 +304,13 @@ const UnitsPage = () => {
       accessor: 'actions',
       render: (item) => (
         <RowActions
-          onView={(event) => openUnitDrawer('view', item, event.currentTarget)}
+          ariaLabel={`Thao tác cho ${item.code}`}
+          onView={(trigger) => openUnitDrawer('view', item, trigger)}
           onEdit={canUpdate
-            ? (event) => openUnitDrawer('edit', item, event.currentTarget)
+            ? (trigger) => openUnitDrawer('edit', item, trigger)
             : undefined}
           onDelete={canDelete
-            ? (event) => openDeactivate(item, event)
+            ? (trigger) => openDeactivate(item, trigger)
             : undefined}
         />
       ),
@@ -321,7 +321,6 @@ const UnitsPage = () => {
     <PageFilterLayout
       rail={(
         <PageFilterRail
-          title="Bộ lọc đơn vị"
           onReset={resetFilters}
           resetDisabled={search.length === 0 && activeFilter === true}
         >
@@ -353,9 +352,7 @@ const UnitsPage = () => {
     >
       <div className="min-w-0 space-y-6">
         <CrudPageHeader
-          title="Units"
-          description="Quản lý đơn vị tính dùng cho vật tư."
-          createLabel="Thêm đơn vị"
+          title="Quản lý đơn vị tính"
           onCreate={canCreate
             ? (event) => openUnitDrawer('create', null, event.currentTarget)
             : undefined}

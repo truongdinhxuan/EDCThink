@@ -1,5 +1,4 @@
-import { useCallback,useEffect,useState,type MouseEvent } from 'react';
-import { listAreas } from '../../api/areas.service';
+import { useCallback,useEffect,useState } from 'react';
 import { createStorageLocation,deactivateStorageLocation,listStorageLocations,updateStorageLocation } from '../../api/storage-locations.service';
 import { DataTable,type Column } from '../../components/common/DataTable';
 import { CrudEntityView } from '../../components/crud/CrudEntityView';
@@ -9,8 +8,8 @@ import { FilterField,FilterSection,PageFilterLayout,PageFilterRail } from '../..
 import { StorageLocationForm } from '../../components/forms/StorageLocationForm';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
+import { useAreaLookup } from '../../hooks/useAreaLookup';
 import { useCrudOffcanvas } from '../../hooks/useCrudOffcanvas';
-import { useCrudResource } from '../../hooks/useCrudResource';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { queryKeys } from '../../lib/queryKeys';
@@ -20,14 +19,8 @@ import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 type StorageLocationQuery = StorageLocationListParams & PaginationParams;
 
-const loadAreas = async (signal: AbortSignal) =>
-  (await listAreas(
-    { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
-    signal,
-  )).data;
-
 const StorageLocationsPage = () => {
-  useDocumentTitle('Khu vực lưu kho');
+  useDocumentTitle('Vị trí kho');
   const { openConfirm } = useCrudOffcanvas();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);
@@ -42,11 +35,7 @@ const StorageLocationsPage = () => {
     queryKey: queryKeys.storageLocations.lists,
     invalidateQueryKeys: [queryKeys.stockBalances.all, queryKeys.stockTransactions.all],
   });
-  const areas = useCrudResource(
-    loadAreas,
-    'Không thể tải danh sách khu vực.',
-    queryKeys.areas.lookup({ pageSize: 100, isActive: true }),
-  );
+  const areas = useAreaLookup();
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput, 400);
   const resourceSearch = resource.query.search;
@@ -78,13 +67,13 @@ const StorageLocationsPage = () => {
       setFormError(error instanceof Error ? error.message : 'Không thể lưu dữ liệu. Vui lòng thử lại.');
     }
   };
-  const confirmDeactivate = (item: StorageLocation, event: MouseEvent<HTMLButtonElement>) => openConfirm({
+  const confirmDeactivate = (item: StorageLocation, trigger: HTMLElement | null) => openConfirm({
     title: 'Ngừng sử dụng vị trí kho?',
     description: `Vị trí “${item.code}” sẽ được chuyển sang inactive nếu không vi phạm ràng buộc dữ liệu.`,
     confirmLabel: 'Ngừng sử dụng',
     cancelLabel: 'Quay lại',
     variant: 'warning',
-    triggerElement: event.currentTarget,
+    triggerElement: trigger,
     onConfirm: () => resource.runMutation(
       () => deactivateStorageLocation(item.id),
       'Đã ngừng sử dụng vị trí kho.',
@@ -99,7 +88,7 @@ const StorageLocationsPage = () => {
     { header: 'Mô tả', accessor: 'description', sortKey: 'description', render: (item) => item.description || '—' },
     { header: 'Khu vực', accessor: 'area_id', render: (item) => item.area ? `${item.area.code} - ${item.area.name}` : '—' },
     { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (item) => <StatusBadge active={item.is_active} /> },
-    ...(hasActions ? [{ header: 'Thao tác', accessor: 'actions', render: (item: StorageLocation) => <RowActions onView={() => openView(item)} onEdit={canUpdate ? () => { setEditing(item); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} onDelete={canDelete ? (event) => confirmDeactivate(item, event) : undefined} deleteLabel="Ngừng sử dụng" /> }] : []),
+    ...(hasActions ? [{ header: 'Thao tác', accessor: 'actions', render: (item: StorageLocation) => <RowActions ariaLabel={`Thao tác cho ${item.code}`} onView={() => openView(item)} onEdit={canUpdate ? () => { setEditing(item); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} onDelete={canDelete ? (trigger) => confirmDeactivate(item, trigger) : undefined} deleteLabel="Ngừng sử dụng" /> }] : []),
   ];
 
   const resetFilters = () => {
@@ -108,7 +97,7 @@ const StorageLocationsPage = () => {
   };
 
   return <PageFilterLayout rail={(
-    <PageFilterRail title="Bộ lọc vị trí kho" onReset={resetFilters} resetDisabled={searchInput.length === 0 && !resource.query.areaId && resource.query.isActive === true}>
+    <PageFilterRail onReset={resetFilters} resetDisabled={searchInput.length === 0 && !resource.query.areaId && resource.query.isActive === true}>
       <FilterSection>
         <FilterField label="Tìm kiếm"><input type="search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Tìm mã hoặc tên vị trí..." className={inputClassName} /></FilterField>
         <FilterField label="Khu vực"><select disabled={areas.loading && areas.items.length === 0} value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value || undefined })} className={inputClassName}><option value="">{areas.loading && areas.items.length === 0 ? 'Đang tải khu vực...' : 'Tất cả khu vực'}</option>{areas.items.map((area) => <option key={area.id} value={area.id}>{area.code}</option>)}</select></FilterField>
@@ -117,7 +106,7 @@ const StorageLocationsPage = () => {
       {areas.error && <p role="alert" className="text-xs text-amber-700">Không thể tải bộ lọc khu vực.</p>}
     </PageFilterRail>
   )}><div className="min-w-0 space-y-6">
-    <CrudPageHeader title="Storage locations" description="Quản lý vị trí lưu kho theo khu vực." createLabel="Thêm vị trí kho" onCreate={canCreate ? () => { setEditing(null); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} />
+    <CrudPageHeader title="Quản lý vị trí kho" onCreate={canCreate ? () => { setEditing(null); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} />
     <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
     {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable
       columns={columns}

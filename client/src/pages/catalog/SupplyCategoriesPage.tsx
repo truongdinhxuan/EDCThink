@@ -1,4 +1,4 @@
-import { useCallback,useEffect,useState,type MouseEvent } from 'react';
+import { useCallback,useEffect,useState } from 'react';
 import {
 createSupplyCategory,
 deactivateSupplyCategory,
@@ -42,7 +42,7 @@ const initialQuery: CategoryQuery = {
 };
 
 const SupplyCategoriesPage = () => {
-  useDocumentTitle('Loại vật tư');
+  useDocumentTitle('Danh mục vật tư');
   const { openConfirm } = useCrudOffcanvas();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);
@@ -91,14 +91,14 @@ const SupplyCategoriesPage = () => {
 
   const confirmDeactivate = (
     item: SupplyCategory,
-    event: MouseEvent<HTMLButtonElement>,
+    trigger: HTMLElement | null,
   ) => openConfirm({
     title: 'Ngừng sử dụng danh mục?',
     description: `Danh mục “${item.code}” sẽ được soft delete nếu không vi phạm ràng buộc dữ liệu.`,
     confirmLabel: 'Ngừng sử dụng',
     cancelLabel: 'Quay lại',
     variant: 'warning',
-    triggerElement: event.currentTarget,
+    triggerElement: trigger,
     onConfirm: () => resource.runMutation(
       () => deactivateSupplyCategory(item.id),
       'Đã ngừng sử dụng danh mục.',
@@ -118,7 +118,7 @@ const SupplyCategoriesPage = () => {
     ...(hasActions ? [{
       header: 'Thao tác',
       accessor: 'actions',
-      render: (item: SupplyCategory) => <RowActions onView={() => openView(item)} onEdit={canUpdate ? () => { setEditing(item); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} onDelete={canDelete ? (event) => confirmDeactivate(item, event) : undefined} deleteLabel="Ngừng sử dụng" />,
+      render: (item: SupplyCategory) => <RowActions ariaLabel={`Thao tác cho ${item.code}`} onView={() => openView(item)} onEdit={canUpdate ? () => { setEditing(item); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} onDelete={canDelete ? (trigger) => confirmDeactivate(item, trigger) : undefined} deleteLabel="Ngừng sử dụng" />,
     }] : []),
   ];
 
@@ -129,7 +129,7 @@ const SupplyCategoriesPage = () => {
 
   return (
     <PageFilterLayout rail={(
-      <PageFilterRail title="Bộ lọc danh mục" onReset={resetFilters} resetDisabled={search.length === 0 && resource.query.isActive === true}>
+      <PageFilterRail onReset={resetFilters} resetDisabled={search.length === 0 && resource.query.isActive === true}>
         <FilterSection>
           <FilterField label="Tìm kiếm"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm mã hoặc mô tả danh mục..." className={inputClassName} /></FilterField>
           <FilterField label="Trạng thái"><select value={String(resource.query.isActive ?? true)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === 'true' })} className={inputClassName}><option value="true">Active</option><option value="false">Inactive</option></select></FilterField>
@@ -137,9 +137,7 @@ const SupplyCategoriesPage = () => {
       </PageFilterRail>
     )}><div className="min-w-0 space-y-6">
       <CrudPageHeader
-        title="Supply categories"
-        description="Quản lý nhóm vật tư với mã danh mục duy nhất."
-        createLabel="Thêm danh mục"
+        title="Quản lý danh mục vật tư"
         onCreate={canCreate ? () => { setEditing(null); setViewing(false); setFormError(null); setFormOpen(true); } : undefined}
       />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />

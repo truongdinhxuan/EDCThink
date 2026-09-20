@@ -37,11 +37,11 @@ export const TableSkeleton = ({
       className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
     >
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[800px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[700px] border-collapse text-left text-sm lg:min-w-[750px]">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               {Array.from({ length: columns }, (_, index) => (
-                <th key={index} className="px-6 py-4">
+                <th key={index} className="px-3.5 py-2.5">
                   <Skeleton className={`h-3 ${cellWidths[index % cellWidths.length]}`} />
                 </th>
               ))}
@@ -51,7 +51,7 @@ export const TableSkeleton = ({
             {Array.from({ length: rows }, (_, rowIndex) => (
               <tr key={rowIndex}>
                 {Array.from({ length: columns }, (__, columnIndex) => (
-                  <td key={columnIndex} className="px-6 py-4">
+                  <td key={columnIndex} className="px-3.5 py-2.5">
                     <Skeleton
                       className={`h-4 ${
                         cellWidths[(rowIndex + columnIndex) % cellWidths.length]

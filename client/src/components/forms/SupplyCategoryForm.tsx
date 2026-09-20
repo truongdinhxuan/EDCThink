@@ -17,7 +17,7 @@ export const SupplyCategoryForm = ({ item, busy, onSave }: {
     },
   });
   return (
-    <CrudDrawerForm isDirty={isDirty} busy={busy} submitLabel={item ? 'Lưu thay đổi' : 'Tạo danh mục'} onSubmit={handleSubmit(onSave)} className="space-y-4">
+    <CrudDrawerForm isDirty={isDirty} busy={busy} onSubmit={handleSubmit(onSave)} className="space-y-4">
       <label className={labelClassName}>
         <span>Mã danh mục</span>
         <input {...register('code', { required: 'Vui lòng nhập mã danh mục.', setValueAs: (value: string) => value.trim() })} className={inputClassName} />

@@ -9,13 +9,11 @@ import {
   type RefObject,
 } from 'react';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
-import { listAreas } from '../../api/areas.service';
 import { getApiErrorMessage } from '../../api/errors';
 import { createOrder } from '../../api/orders.service';
 import { useAuth } from '../../context/AuthContext';
-import { useCrudResource } from '../../hooks/useCrudResource';
-import { queryKeys } from '../../lib/queryKeys';
-import type { AreaOption, SupplyOption } from '../../types/catalog';
+import { useAreaLookup } from '../../hooks/useAreaLookup';
+import type { SupplyOption } from '../../types/catalog';
 import type { CreateOrderInput, Order } from '../../types/orders';
 import type { ShiftOrderSheetCreateContext } from '../../types/shift-order-sheets';
 import { InfoButton, SecondaryButton, TextErrorButton } from '../common/Button';
@@ -68,12 +66,6 @@ const emptyItem = () => ({
   note: '',
 });
 
-const loadAreas = async (signal: AbortSignal) =>
-  (await listAreas(
-    { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
-    signal,
-  )).data;
-
 const formatWorkDate = (value: string): string => {
   const date = new Date(`${value}T00:00:00+07:00`);
   return Number.isNaN(date.getTime())
@@ -107,11 +99,7 @@ export const CreateOrderForm = ({
     setResolvedSupplies((current) =>
       current[supply.id] ? current : { ...current, [supply.id]: supply });
   }, []);
-  const areaResource = useCrudResource<AreaOption>(
-    loadAreas,
-    'Không thể tải danh sách area.',
-    queryKeys.areas.lookup({ pageSize: 100, isActive: true }),
-  );
+  const areaResource = useAreaLookup();
   const areas = areaResource.items;
   const sourceArea = areas.find((area) => area.code === ORDER_SOURCE_AREA_CODE);
   const receivingArea = user?.publicData.area

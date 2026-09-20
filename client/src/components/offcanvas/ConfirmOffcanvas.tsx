@@ -69,7 +69,7 @@ export const ConfirmOffcanvas = ({
         data-confirm-cancel="true"
         disabled={busy}
         onClick={cancel}
-        className={`${SecondaryButton} min-h-11 w-full sm:w-auto`}
+        className={`${SecondaryButton} min-h-9 w-full px-4 text-sm sm:min-h-10 sm:w-auto`}
       >
         {entry.cancelLabel ?? 'Bỏ qua'}
       </button>
@@ -77,7 +77,7 @@ export const ConfirmOffcanvas = ({
         type="button"
         disabled={busy}
         onClick={() => void confirm()}
-        className={`${buttonClassByVariant[entry.variant ?? 'default']} min-h-11 w-full sm:w-auto`}
+        className={`${buttonClassByVariant[entry.variant ?? 'default']} min-h-9 w-full px-4 text-sm sm:min-h-10 sm:w-auto`}
       >
         {pending ? 'Đang xử lý...' : entry.confirmLabel ?? 'Xác nhận'}
       </button>

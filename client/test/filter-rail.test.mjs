@@ -9,7 +9,9 @@ describe('Phase 3 shared Filter Rail contract', () => {
   it('T01/T09 lays out an inline desktop rail beside min-width-safe main content', () => {
     const rail = read('src/components/filters/PageFilterRail.tsx');
     assert.match(rail, /lg:flex-row lg:items-start/);
-    assert.match(rail, /lg:w-64/);
+    // A fixed track on desktop, narrowed at lg so the data table keeps its
+    // columns on a 1366px screen and widened again from xl.
+    assert.match(rail, /lg:w-56 xl:w-60/);
     assert.match(rail, /lg:sticky lg:top-0/);
     assert.match(rail, /min-w-0 flex-1/);
     assert.match(rail, /overflow-y-auto overscroll-contain/);
