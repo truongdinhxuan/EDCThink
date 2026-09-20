@@ -10,7 +10,6 @@ import {
 } from '../constants/workspaces';
 import { ORDER_READ_PERMISSIONS } from '../constants/workspaceNavigation';
 import { LegacyRoleRedirect } from './LegacyRoleRedirect';
-import SupplyDashboardPage from '../pages/dashboards/SupplyDashboardPage';
 
 const WorkspaceLayout = lazy(() => import('../layouts/workspace/WorkspaceLayout').then((module) => ({ default: module.WorkspaceLayout })));
 const RoleDashboardPage = lazy(() => import('../pages/dashboards/RoleDashboardPage'));
