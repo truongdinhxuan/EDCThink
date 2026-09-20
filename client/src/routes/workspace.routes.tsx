@@ -36,7 +36,7 @@ const StockTransactionsPage = lazy(() => import('../pages/stock/StockTransaction
 // const MilkrunVehiclesPage = lazy(() => import('../pages/milkrun/VehiclesPage'));
 const WorkspacePlaceholderPage = lazy(() => import('../pages/operations/WorkspacePlaceholderPage'));
 const OrdersListPage = lazy(() => import('../pages/orders/OrdersListPage'));
-const CreateOrderPage = lazy(() => import('../pages/orders/CreateOrderPage'));
+// const CreateOrderPage = lazy(() => import('../pages/orders/CreateOrderPage'));
 const OrderDetailPage = lazy(() => import('../pages/orders/OrderDetailPage'));
 const ShiftOrderSheetsPage = lazy(() => import('../pages/orders/ShiftOrderSheetsPage'));
 const ShiftOrderSheetHistoryPage = lazy(() => import('../pages/orders/ShiftOrderSheetHistoryPage'));
@@ -72,7 +72,7 @@ const createFeatureRoutes = (): RouteObject[] => [
   { path: 'storage-locations', element: guarded([PERMISSION_CODE.SUPPLY_CATALOG_READ], <StorageLocationsPage />) },
   { path: 'areas', element: guarded([PERMISSION_CODE.SUPPLY_AREA_READ], <AreasPage />) },
   { path: 'orders', element: guarded(ORDER_READ_PERMISSIONS, <OrdersListPage />) },
-  { path: 'orders/create', element: guarded([PERMISSION_CODE.SUPPLY_ORDER_CREATE], <CreateOrderPage />) },
+  // { path: 'orders/create', element: guarded([PERMISSION_CODE.SUPPLY_ORDER_CREATE], <CreateOrderPage />) },
   { path: 'orders/:id', element: guarded(ORDER_READ_PERMISSIONS, <OrderDetailPage />) },
   { path: 'shift-order-sheets', element: guarded([PERMISSION_CODE.SUPPLY_SHIFT_ORDER_SHEET_READ], <ShiftOrderSheetsPage />) },
   // Declared above ':id' for the reader's sake; React Router ranks the static

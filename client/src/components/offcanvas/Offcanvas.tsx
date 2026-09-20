@@ -6,8 +6,7 @@ import type {
   OffcanvasCloseReason,
   OffcanvasSize,
 } from '../../types/offcanvas.types';
-import { AppTooltip } from '../common/AppTooltip';
-import { getButtonClassName } from '../common/Button';
+
 
 const SIZE_CLASS_NAMES: Record<OffcanvasSize, string> = {
   sm: 'md:w-[min(60vw,27rem)]',
@@ -86,7 +85,7 @@ export const Offcanvas = ({
         tabIndex={-1}
         data-offcanvas-panel="true"
         data-state={phase}
-        className={`offcanvas-panel fixed inset-y-0 right-0 flex h-screen h-dvh w-screen w-[100dvw] max-w-full flex-col overflow-hidden bg-white shadow-2xl outline-none ${SIZE_CLASS_NAMES[size]} ${isTopmost ? '' : 'pointer-events-none'}`}
+        className={`offcanvas-panel fixed inset-y-0 right-0 flex h-dvh w-screen w-[100dvw] max-w-full flex-col overflow-hidden bg-white shadow-2xl outline-none ${SIZE_CLASS_NAMES[size]} ${isTopmost ? '' : 'pointer-events-none'}`}
         style={{ zIndex: panelLayer }}
       >
         <header className="sticky top-0 z-10 flex min-w-0 shrink-0 items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-5 sm:py-4">
@@ -100,21 +99,6 @@ export const Offcanvas = ({
               </div>
             )}
           </div>
-          <AppTooltip content="Đóng" side="left" disabled={busy}>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => onRequestClose('close-button')}
-              className={getButtonClassName({
-                variant: 'icon',
-                size: 'icon',
-                className: 'h-11 w-11 shrink-0 text-xl',
-              })}
-              aria-label={`Đóng ${title}`}
-            >
-              <span aria-hidden="true">×</span>
-            </button>
-          </AppTooltip>
         </header>
 
         <div

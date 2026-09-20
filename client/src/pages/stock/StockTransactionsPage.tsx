@@ -11,7 +11,7 @@ import { CrudEntityView } from '../../components/crud/CrudEntityView';
 import { CrudFeedbackToast,CrudPageHeader,ErrorState,inputClassName } from '../../components/crud/CrudPrimitives';
 import { FilterField,FilterSection,PageFilterLayout,PageFilterRail } from '../../components/filters';
 import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
-import { StockAdjustmentModal } from '../../components/stock/StockAdjustmentModal';
+import { StockAdjustmentForm } from '../../components/stock/StockAdjustmentForm';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
 import { useAreaLookup } from '../../hooks/useAreaLookup';
@@ -119,6 +119,12 @@ const StockTransactionsPage = () => {
     'Không thể tạo stock adjustment.',
   );
 
+  // The drawer stays open when the server rejects the adjustment, so the operator
+  // keeps what they typed; the failure arrives on the toast above it.
+  const saveAdjustment = async (input: CreateStockAdjustmentInput) => {
+    if (await createAdjustment(input)) setAdjustmentOpen(false);
+  };
+
   const detailFields: Array<[string, string]> = detail ? [
     ['Type', transactionTypeCode(detail)],
     ['Vật tư', detail.supply ? `${detail.supply.code}${detail.supply.description ? ` - ${detail.supply.description}` : ''}` : 'Không rõ'],
@@ -184,7 +190,16 @@ const StockTransactionsPage = () => {
     <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
     {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} hideInternalSearch pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có biến động nào phù hợp với bộ lọc." />}
     {detailId && <PrimaryCrudDrawer mode="view" title="Chi tiết biến động tồn kho" onClose={() => setDetailId(null)}>{detailQuery.isPending ? <CardSkeleton lines={6} label="Đang tải chi tiết biến động" /> : detailQuery.isError ? <ErrorState message={getApiErrorMessage(detailQuery.error, 'Không thể tải chi tiết biến động.')} onRetry={() => void detailQuery.refetch()} /> : detail ? <CrudEntityView fields={detailFields.map(([label, value]) => ({ label, value }))} /> : null}</PrimaryCrudDrawer>}
-    {adjustmentOpen && canAdjust && <StockAdjustmentModal busy={resource.mutating} onClose={() => setAdjustmentOpen(false)} onSubmit={createAdjustment} />}
+    {adjustmentOpen && canAdjust && (
+      <PrimaryCrudDrawer
+        mode="create"
+        title="Tạo điều chỉnh tồn kho"
+        busy={resource.mutating}
+        onClose={() => setAdjustmentOpen(false)}
+      >
+        <StockAdjustmentForm busy={resource.mutating} onSave={saveAdjustment} />
+      </PrimaryCrudDrawer>
+    )}
   </div></PageFilterLayout>;
 };
 

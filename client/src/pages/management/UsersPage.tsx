@@ -115,6 +115,8 @@ const UsersPage = () => {
       users: managers.items,
       managerSearch: managers.search,
       setManagerSearch: managers.setSearch,
+      managersLoading: managers.loading,
+      managersError: managers.error,
       loading: roles.loading || areas.loading || managers.loading,
       errors: [roles.error, areas.error, managers.error].filter((error): error is string => Boolean(error)),
     };

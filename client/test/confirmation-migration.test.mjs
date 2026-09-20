@@ -136,14 +136,17 @@ describe('Phase 4 confirmation migration contract', () => {
     assert.doesNotMatch(stock, /\bConfirmDialog\b/);
   });
 
-  it('intentionally keeps Supply stock and discrepancy business input forms hybrid', () => {
+  it('moves the stock adjustment form to the drawer, leaving discrepancy history a modal', () => {
     const balances = read('src/pages/stock/StockBalancesPage.tsx');
-    const adjustment = read('src/components/stock/StockAdjustmentModal.tsx');
-    assert.match(balances, /<StockAdjustmentModal/);
+    const adjustment = read('src/components/stock/StockAdjustmentForm.tsx');
+    assert.match(balances, /<StockAdjustmentForm/);
+    assert.match(adjustment, /<CrudDrawerForm/);
+    assert.doesNotMatch(adjustment, /<CrudModal/);
+    assert.doesNotMatch(adjustment, /\bConfirmDialog\b/);
+    // Discrepancy history is a read-only panel with an inline resolve note; it
+    // was not part of this migration and stays a centred modal.
     assert.match(balances, /resolution_note/);
     assert.match(balances, /<CrudModal/);
-    assert.match(adjustment, /<CrudModal/);
-    assert.doesNotMatch(adjustment, /\bConfirmDialog\b/);
   });
 
   it('shows normalized backend failures inside the drawer and permits retry', () => {

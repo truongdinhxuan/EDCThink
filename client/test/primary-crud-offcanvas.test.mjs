@@ -48,6 +48,25 @@ describe('Phase 5 Primary CRUD rollout source contracts', () => {
       assert.doesNotMatch(source, /from ['"].*api\//);
     });
   }
+  it('creates stock adjustments in the drawer, not a centred modal', () => {
+    // Both stock screens raise the same form. It keeps its own server-side
+    // lookups (so neither page duplicates four of them), which is why it lives
+    // under components/stock rather than components/forms.
+    const form = read('components/stock/StockAdjustmentForm.tsx');
+    assert.match(form, /<CrudDrawerForm/);
+    assert.match(form, /isDirty=\{isDirty\}/);
+    assert.doesNotMatch(form, /<FormActions|<CrudModal|onClose/);
+
+    for (const page of ['stock/StockBalancesPage', 'stock/StockTransactionsPage']) {
+      const source = read(`pages/${page}.tsx`);
+      assert.match(source, /<PrimaryCrudDrawer/, page);
+      assert.match(source, /<StockAdjustmentForm busy=\{resource\.mutating\} onSave=\{saveAdjustment\}/, page);
+      // Closing is the page's call, and only after the server accepted it.
+      assert.match(source, /if \(await createAdjustment\(input\)\) setAdjustmentOpen\(false\)/, page);
+      assert.doesNotMatch(source, /StockAdjustmentModal/, page);
+    }
+  });
+
   it('adapter delegates stack/dirty/close semantics to the existing foundation', () => {
     const source = read('components/crud/PrimaryCrudDrawer.tsx');
     assert.match(source, /openCrud\(/);
@@ -106,5 +125,44 @@ describe('Phase 5 Primary CRUD rollout source contracts', () => {
     assert.match(stock, /<PrimaryCrudDrawer mode="view"/);
     assert.match(stock, /queryKeys\.stockTransactions\.detail/);
     assert.doesNotMatch(stock, /updateStockTransaction|deleteStockTransaction/);
+  });
+});
+
+/**
+ * Every server-backed picker inside a drawer used to be an <input type="search">
+ * with a <select> under it. That pair has two failure modes a combobox does not:
+ * the select only ever held the first page of results, and the two controls could
+ * disagree — leaving a selection that no longer matched the search box.
+ */
+describe('Drawer pickers are comboboxes, not search-plus-select pairs', () => {
+  const core = read('components/common/ServerCombobox.tsx');
+
+  it('keeps one implementation of the combobox behaviour', () => {
+    assert.match(core, /role="combobox"/);
+    assert.match(core, /role="listbox"/);
+    assert.match(core, /createPortal\(/);
+    assert.match(core, /APP_LAYER\.primaryDrawerPopover/);
+    for (const wrapper of [
+      'components/orders/SupplyCombobox.tsx',
+      'components/common/StorageLocationCombobox.tsx',
+    ]) {
+      const source = read(wrapper);
+      assert.match(source, /<ServerCombobox/, wrapper);
+      // Wrappers supply the query and the wording only.
+      assert.doesNotMatch(source, /role="listbox"|createPortal/, wrapper);
+      // Closed pickers must not fetch a list nobody asked to see.
+      assert.match(source, /enabled: open/, wrapper);
+    }
+  });
+
+  it('leaves no search input paired with a select in a drawer form', () => {
+    for (const path of [
+      'components/stock/StockAdjustmentForm.tsx',
+      'components/forms/UserForm.tsx',
+    ]) {
+      const source = read(path);
+      assert.doesNotMatch(source, /type="search"/, path);
+      assert.match(source, /Combobox/, path);
+    }
   });
 });
