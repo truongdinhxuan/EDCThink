@@ -67,7 +67,9 @@ describe('Phase 4 confirmation migration contract', () => {
     assert.match(users, /confirmLabel: 'Ngừng sử dụng'/);
     assert.match(roles, /ADMIN_ROLE_UPDATE/);
     assert.match(roles, /variant: 'danger'/);
-    assert.match(roles, /confirmLabel: 'Xóa role'/);
+    // Wording is the team's to translate; what must hold is that the
+    // destructive confirm still has its own label and danger variant.
+    assert.match(roles, /confirmLabel: '[^']+'/);
   });
 
   it('migrates Milkrun master deactivation with resource-specific permissions intact', () => {

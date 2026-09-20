@@ -23,7 +23,6 @@ import {
 import { getButtonClassName } from '../common/Button';
 
 interface PageFilterRailProps {
-  title?: string;
   children: ReactNode;
   onReset?: () => void;
   resetDisabled?: boolean;
@@ -60,13 +59,12 @@ export const FilterField = ({
 );
 
 const FilterRailContent = ({
-  title,
-  titleId,
   children,
   onReset,
   resetDisabled,
   onClose,
   mobile,
+  titleId,
 }: PageFilterRailProps & {
   titleId?: string;
   onClose?: () => void;
@@ -75,8 +73,7 @@ const FilterRailContent = ({
   <>
     <header className={`flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 ${mobile ? '' : 'pr-12'}`}>
       <div className="min-w-0">
-        <h2 id={titleId} className="truncate text-sm font-bold text-slate-900">{title}</h2>
-        <p className="mt-0.5 text-xs text-slate-500">Thu hẹp dữ liệu đang hiển thị</p>
+        <h2 id={titleId} className="truncate text-sm font-bold text-slate-900">Bộ lọc</h2>
       </div>
       {mobile && onClose && (
         <button
@@ -129,7 +126,6 @@ const writeCollapsedPreference = (collapsed: boolean): void => {
 };
 
 export const PageFilterRail = ({
-  title = 'Bộ lọc',
   children,
   onReset,
   resetDisabled = false,
@@ -206,6 +202,9 @@ export const PageFilterRail = ({
 
   const mobileDrawer = typeof document === 'undefined' ? null : createPortal(
     <div className="lg:hidden">
+      {/* `filter-rail-backdrop` is what hides this. The drawer is portaled
+          unconditionally, so without that class the dimmed, blurred layer paints
+          over every mobile page from first render. */}
       <button
         type="button"
         aria-label="Đóng bộ lọc"
@@ -213,7 +212,7 @@ export const PageFilterRail = ({
         disabled={!mobileOpen}
         data-filter-backdrop="true"
         data-open={mobileOpen}
-        className="fixed inset-0 border-0 bg-slate-950/45 p-0 backdrop-blur-[2px] hover:cursor-pointer"
+        className="filter-rail-backdrop fixed inset-0 border-0 bg-slate-950/45 p-1 backdrop-blur-[2px] hover:cursor-pointer"
         style={{ zIndex: APP_LAYER.filterBackdrop }}
         onClick={() => closeFilterRail(railId)}
       />
@@ -231,7 +230,6 @@ export const PageFilterRail = ({
         style={{ zIndex: APP_LAYER.filterDrawer }}
       >
         <FilterRailContent
-          title={title}
           titleId={titleId}
           onReset={onReset}
           resetDisabled={resetDisabled}
@@ -263,8 +261,8 @@ export const PageFilterRail = ({
       </div>
 
       <aside
-        className={`transition-all duration-200 ease-in-out relative hidden shrink-0 self-start overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:sticky lg:top-0 lg:flex lg:max-h-[calc(100dvh-8rem)] lg:flex-col ${desktopCollapsed ? 'lg:w-12' : 'lg:w-64'}`}
-      aria-label={title}
+        className={`transition-all duration-200 ease-in-out relative hidden shrink-0 self-start overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:sticky lg:top-0 lg:flex lg:max-h-[calc(100dvh-8rem)] lg:flex-col ${desktopCollapsed ? 'lg:w-12' : 'lg:w-56 xl:w-60'}`}
+      aria-label="Bộ lọc"
       >
         {desktopCollapsed ? (
           <button
@@ -284,7 +282,6 @@ export const PageFilterRail = ({
         ) : (
           <>
             <FilterRailContent
-              title={title}
               onReset={onReset}
               resetDisabled={resetDisabled}
             >

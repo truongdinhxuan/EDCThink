@@ -9,6 +9,7 @@ const createOrder = read('src/pages/orders/CreateOrderPage.tsx');
 const createOrderForm = read('src/components/orders/CreateOrderForm.tsx');
 const orderDetail = read('src/pages/orders/OrderDetailPage.tsx');
 const sheetList = read('src/pages/orders/ShiftOrderSheetsPage.tsx');
+const sheetHistory = read('src/pages/orders/ShiftOrderSheetHistoryPage.tsx');
 const sheetDetail = read('src/pages/orders/ShiftOrderSheetDetailPage.tsx');
 const sheetWorkspace = read('src/components/orders/ShiftOrderSheetWorkspace.tsx');
 const sheetApi = read('src/api/shift-order-sheets.service.ts');
@@ -22,12 +23,15 @@ describe('Supply Phase 9 shift-order-sheet UI', () => {
     assert.match(sheetApi, /supply\/shift-order-sheets\/current/);
     assert.match(sheetApi, /PaginatedResponse<ShiftOrderSheetSummary>/);
     assert.match(sheetList, /queryKeys\.shiftOrderSheets\.current/);
-    assert.match(sheetList, /queryKeys\.shiftOrderSheets\.history/);
+    // The archive is its own route now, so its query lives with it.
+    assert.match(sheetHistory, /queryKeys\.shiftOrderSheets\.history/);
+    assert.doesNotMatch(sheetList, /queryKeys\.shiftOrderSheets\.history/);
     assert.doesNotMatch(sheetList, /\.slice\(/);
   });
 
   it('registers list/detail routes and preserves the sheet context for Create More', () => {
     assert.match(routes, /path: 'shift-order-sheets'/);
+    assert.match(routes, /path: 'shift-order-sheets\/history'/);
     assert.match(routes, /path: 'shift-order-sheets\/:id'/);
     assert.match(createOrderForm, /sheetContext\?\.id/);
     assert.match(createOrderForm, /shift_order_sheet_id: sheetContext\.id/);
@@ -68,7 +72,7 @@ describe('Supply Phase 9 shift-order-sheet UI', () => {
     assert.doesNotMatch(sheetWorkspace, /window\.location\.reload/);
   });
 
-  it('renders the fast current-area flow and a read-only same-route history mode', () => {
+  it('renders the fast current-area flow and a read-only history route', () => {
     assert.match(sheetList, /getCurrentShiftOrderSheet/);
     assert.match(sheetList, /Bạn chưa được gán khu vực làm việc/);
     assert.match(sheetWorkspace, /Phiếu order ca \{shiftLabel\(context\)\} ngày/);

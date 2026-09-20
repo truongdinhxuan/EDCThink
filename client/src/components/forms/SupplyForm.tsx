@@ -44,7 +44,7 @@ export const SupplyForm = ({ item, busy, categories, categoriesLoading, categori
     || Boolean(categoriesError || unitsError || providersError)
     || categories.length === 0 || units.length === 0 || providers.length === 0;
 
-  return <CrudDrawerForm isDirty={isDirty} busy={busy} submitLabel={item ? 'Lưu thay đổi' : 'Tạo vật tư'} submitDisabled={referencesUnavailable} onSubmit={handleSubmit(onSave)} className="space-y-4">
+  return <CrudDrawerForm isDirty={isDirty} busy={busy} submitDisabled={referencesUnavailable} onSubmit={handleSubmit(onSave)} className="space-y-4">
     <div className="grid gap-4 sm:grid-cols-2">
       <label className={labelClassName}><span>Mã vật tư</span><input {...register('code', { required: 'Vui lòng nhập mã vật tư.', setValueAs: (value: string) => value.trim() })} className={inputClassName} /><FieldError message={errors.code?.message} /></label>
       <label className={labelClassName}>

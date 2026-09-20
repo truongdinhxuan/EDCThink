@@ -23,7 +23,7 @@ export const StorageLocationForm = ({ item, areas, areasLoading, areasError, bus
     },
   });
   const referencesUnavailable = areasLoading || Boolean(areasError) || areas.length === 0;
-  return <CrudDrawerForm isDirty={isDirty} busy={busy} submitLabel={item ? 'Lưu thay đổi' : 'Tạo vị trí kho'} submitDisabled={referencesUnavailable} onSubmit={handleSubmit(onSave)} className="space-y-4">
+  return <CrudDrawerForm isDirty={isDirty} busy={busy} submitDisabled={referencesUnavailable} onSubmit={handleSubmit(onSave)} className="space-y-4">
     <div className="grid gap-4 sm:grid-cols-2">
       <label className={labelClassName}><span>Khu vực</span>
         {areasLoading && areas.length === 0 ? <SelectSkeleton label="Đang tải khu vực" /> : <select {...register('area_id', { required: 'Vui lòng chọn khu vực.' })} disabled={Boolean(areasError)} className={inputClassName}>

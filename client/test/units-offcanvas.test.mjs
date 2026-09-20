@@ -112,7 +112,9 @@ describe('Phase 2 Units CRUD offcanvas contract', () => {
     assert.match(units, /cancelLabel: 'Hủy'/);
     assert.match(units, /return ok \? undefined : false/);
     assert.match(units, /throwOnError: true/);
-    assert.match(units, /triggerElement: event\.currentTarget/);
+    // Focus returns to the row's action-menu trigger, which outlives the menu
+    // item that was clicked.
+    assert.match(units, /triggerElement: trigger/);
   });
 
   it('retains the legacy form modal but removes the unused centered confirmation', () => {

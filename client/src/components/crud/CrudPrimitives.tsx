@@ -9,11 +9,11 @@ import {
   InfoButton,
   SecondaryButton,
   TextButton,
-  TextErrorButton,
 } from '../common/Button';
+import { ActionMenu, type ActionMenuItem } from '../common/ActionMenu';
 import { APP_LAYER } from '../../constants/layers';
 export const inputClassName =
-  'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition ' +
+  'w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs outline-none transition sm:text-sm ' +
   'focus:border-blue-500 focus:ring-2 focus:ring-blue-100 ' +
   'disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500';
 
@@ -28,28 +28,19 @@ const renderPortal = (children: ReactNode) => {
 
 export const CrudPageHeader = ({
   title,
-  description,
   onCreate,
   createLabel = 'Thêm mới',
 }: {
   title: string;
-  description: string;
   onCreate?: (event: MouseEvent<HTMLButtonElement>) => void;
   createLabel?: string;
 }) => (
   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
     <div className="min-w-0">
-      <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
-        Master data
-      </p>
 
       <h1 className="mt-1 break-words text-2xl font-bold text-slate-900">
         {title}
       </h1>
-
-      <p className="mt-1 text-sm leading-6 text-slate-500">
-        {description}
-      </p>
     </div>
 
     {onCreate && (
@@ -195,7 +186,7 @@ export const CrudModal = ({
             {title}
           </h2>
 
-          <AppTooltip content="Đóng cửa sổ" side="left" disabled={busy}>
+          {/* <AppTooltip content="Đóng cửa sổ" side="left" disabled={busy}>
             <button
               type="button"
               disabled={busy}
@@ -209,10 +200,10 @@ export const CrudModal = ({
             >
               <span aria-hidden="true">×</span>
             </button>
-          </AppTooltip>
+          </AppTooltip> */}
         </div>
 
-        <div className="max-h-[calc(100vh-6rem)] max-h-[calc(100dvh-6rem)] overflow-y-auto p-4 sm:max-h-[calc(90vh-4.5rem)] sm:max-h-[calc(90dvh-4.5rem)] sm:p-5">
+        <div className="max-h-[calc(100vh-6rem)] overflow-y-auto p-4 sm:max-h-[calc(90vh-4.5rem)] sm:p-5">
           {children}
         </div>
       </div>
@@ -236,44 +227,28 @@ export const RowActions = ({
   onEdit,
   onDelete,
   deleteLabel = 'Deactivate',
+  ariaLabel,
+  extraItems = [],
 }: {
-  onView?: (event: MouseEvent<HTMLButtonElement>) => void;
-  onEdit?: (event: MouseEvent<HTMLButtonElement>) => void;
-  onDelete?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onView?: (trigger: HTMLElement | null) => void;
+  onEdit?: (trigger: HTMLElement | null) => void;
+  onDelete?: (trigger: HTMLElement | null) => void;
   deleteLabel?: string;
-}) => (
-  <div className="flex flex-wrap justify-end gap-x-3 gap-y-2">
-    {onView && (
-      <button
-        type="button"
-        onClick={onView}
-        className={TextButton}
-      >
-        Xem
-      </button>
-    )}
+  ariaLabel?: string;
+  /**
+   * Page-specific actions such as Permissions or Area Types. They lead the menu:
+   * they are why someone opens it on this page, while Xem and Sửa are the same
+   * everywhere and are found by habit further down.
+   */
+  extraItems?: ActionMenuItem[];
+}) => {
+  const items: ActionMenuItem[] = extraItems.map((item) => ({ ...item, primary: true }));
+  if (onView) items.push({ label: 'Xem', onSelect: onView });
+  if (onEdit) items.push({ label: 'Sửa', onSelect: onEdit });
+  if (onDelete) items.push({ label: deleteLabel, onSelect: onDelete, danger: true });
 
-    {onEdit && (
-      <button
-        type="button"
-        onClick={onEdit}
-        className={TextButton}
-      >
-      Sửa
-      </button>
-    )}
-
-    {onDelete && (
-      <button
-        type="button"
-        onClick={onDelete}
-        className={TextErrorButton}
-      >
-        {deleteLabel}
-      </button>
-    )}
-  </div>
-);
+  return <ActionMenu items={items} ariaLabel={ariaLabel} />;
+};
 
 export const FormActions = ({
   busy,

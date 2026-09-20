@@ -43,6 +43,21 @@ export const getRoleHomePath = (
 ): string => `${DEFAULT_WORKSPACE_BASE_PATH}/dashboard`;
 
 /**
+ * The current shift's Sheet: the screen a team lead works in.
+ */
+export const SHIFT_ORDER_SHEET_PATH = 'shift-order-sheets';
+
+/**
+ * The Sheet archive, with its own filters.
+ *
+ * Named rather than spelled out at each call site because the route table, the
+ * current-Sheet screen, the archive itself and the single-Sheet screen all have
+ * to agree on it, and a typo in any of them is a 404 that only shows up when
+ * somebody clicks.
+ */
+export const SHIFT_ORDER_SHEET_HISTORY_PATH = `${SHIFT_ORDER_SHEET_PATH}/history`;
+
+/**
  * Builds an absolute workspace URL from a route-relative path.
  *
  * @param _role Ignored — see {@link getRoleBasePath}.

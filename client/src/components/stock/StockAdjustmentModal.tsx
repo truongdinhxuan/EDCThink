@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
-import { listAreas } from '../../api/areas.service';
 import { listStorageLocations } from '../../api/storage-locations.service';
 import { listSupplies } from '../../api/supplies.service';
-import { useCrudResource } from '../../hooks/useCrudResource';
+import { useAreaLookup } from '../../hooks/useAreaLookup';
 import { useServerLookup } from '../../hooks/useServerLookup';
 import { queryKeys } from '../../lib/queryKeys';
 import type { CreateStockAdjustmentInput, StockAdjustmentType } from '../../types/stock-transactions';
@@ -18,12 +17,6 @@ const ADJUSTMENT_TYPES: readonly { value: StockAdjustmentType; label: string }[]
   { value: 'EXPORT', label: 'Xuất kho' },
 ];
 
-const loadAreas = async (signal: AbortSignal) =>
-  (await listAreas(
-    { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
-    signal,
-  )).data;
-
 export const StockAdjustmentModal = ({
   busy,
   onClose,
@@ -33,11 +26,7 @@ export const StockAdjustmentModal = ({
   onClose: () => void;
   onSubmit: (input: CreateStockAdjustmentInput) => Promise<boolean>;
 }) => {
-  const areas = useCrudResource(
-    loadAreas,
-    'Không thể tải danh sách khu vực.',
-    queryKeys.areas.lookup({ pageSize: 100, isActive: true }),
-  );
+  const areas = useAreaLookup();
   const [selectedAreaId, setSelectedAreaId] = useState('');
   const supplyLoader = useCallback(
     (search: string | undefined, signal: AbortSignal) => listSupplies(

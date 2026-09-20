@@ -135,8 +135,11 @@ const WorkspaceLayoutContent = ({
           notificationRef={notificationRef}
         />
 
-        <div className="z-10 min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3 sm:p-5 lg:px-8">
-          <div className="lg:pl-3 lg:pr-6 space-y-6">
+        {/* One gutter, not three: the page padding, the nested wrapper's own
+            left/right padding and the header margin used to stack up to ~100px
+            of dead horizontal space on a 1366px screen. */}
+        <div className="z-10 min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3 sm:p-4 lg:px-5 xl:px-6">
+          <div className="space-y-4 sm:space-y-5">
             <Outlet context={{ searchQuery, setSearchQuery }} />
           </div>
         </div>

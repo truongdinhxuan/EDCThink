@@ -33,7 +33,9 @@ describe('Phase 5 Primary CRUD rollout source contracts', () => {
       assert.match(source, /setFormError\(error instanceof Error/);
       assert.doesNotMatch(source, /queryClient\.clear|location\.reload|navigate\(/);
       assert.doesNotMatch(source, /(?:if\s*\(|\?|&&|\|\|)\s*role\s*===|role\.name\s*===|role\.includes\(/);
-      if (form !== 'RoleForm') assert.doesNotMatch(source, /<CrudModal/);
+      // RolesPage used to be the exception: its Permissions and Area Types
+      // panels were centred modals. They are drawers now, so the rule is total.
+      assert.doesNotMatch(source, /<CrudModal/);
     });
     it(`${form}: reusable RHF form retains dirty state and drawer footer`, () => {
       const source = read(`components/forms/${form}.tsx`);

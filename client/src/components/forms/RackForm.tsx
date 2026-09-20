@@ -22,7 +22,7 @@ export const RackForm = ({
   });
 
   return (
-    <CrudDrawerForm isDirty={isDirty} busy={busy} submitLabel={item ? 'Lưu thay đổi' : 'Tạo rack'} onSubmit={handleSubmit(onSave)} className="space-y-4">
+    <CrudDrawerForm isDirty={isDirty} busy={busy} onSubmit={handleSubmit(onSave)} className="space-y-4">
       <label className={labelClassName}>
         Code *
         <input

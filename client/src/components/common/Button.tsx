@@ -27,10 +27,12 @@ const baseButtonClassName =
   'transition duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 cursor-pointer ' +
   'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none';
 
+// A 1px bevel instead of 2px, and a softer one: at this button height a heavy
+// inner shadow reads as a chunky toy control rather than a dense ERP one.
 const raisedButtonClassName =
-  'relative border shadow-sm hover:shadow-md ' +
+  'relative border shadow-sm hover:shadow ' +
   'after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] ' +
-  'after:shadow-[inset_0_1px_0px_rgba(255,255,255,0.28),inset_0_-2px_0px_rgba(0,0,0,0.18)]';
+  'after:shadow-[inset_0_1px_0px_rgba(255,255,255,0.22),inset_0_-1px_0px_rgba(0,0,0,0.12)]';
 
 const variantClassNames: Record<ButtonVariant, string> = {
   primary:
@@ -67,11 +69,13 @@ const variantClassNames: Record<ButtonVariant, string> = {
     'rounded-lg border border-transparent bg-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:ring-slate-400',
 };
 
+// Tuned for a 1366x768 operator screen: at the old scale a row of four status
+// actions wrapped onto a second line, which pushed the data below the fold.
 const sizeClassNames: Record<ButtonSize, string> = {
   xs: 'gap-1 px-2 py-1 text-xs',
-  sm: 'gap-1.5 px-3 py-2 text-sm',
-  md: 'gap-2 px-4 py-2 text-sm',
-  lg: 'gap-2 px-5 py-3 text-sm font-semibold',
+  sm: 'gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm',
+  md: 'gap-1.5 px-3 py-1.5 text-xs sm:px-3.5 sm:py-2 sm:text-sm',
+  lg: 'gap-2 px-4 py-2.5 text-sm font-semibold',
   icon: 'h-9 w-9 p-0',
 };
 

@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 
 const navigation = read('src/constants/workspaceNavigation.ts');
+const areaLookup = read('src/hooks/useAreaLookup.ts');
 const routes = read('src/routes/workspace.routes.tsx');
 const form = read('src/components/orders/CreateOrderForm.tsx');
 const combobox = read('src/components/orders/SupplyCombobox.tsx');
@@ -152,7 +153,9 @@ describe('UX P0 — combobox dropdown + Orders filters', () => {
 
   it('UXP0-029/030: operator Orders filters expose readable Area, no raw UUID inputs', () => {
     assert.doesNotMatch(ordersList, /Created by UUID|Area UUID/);
-    assert.match(ordersList, /listAreas/);
+    // Areas come from the API through the shared hook, never hardcoded.
+    assert.match(ordersList, /useAreaLookup\(\)/);
+    assert.match(areaLookup, /listAreas/);
     assert.match(ordersList, /\{area\.code\} — \{area\.name\}/);
     assert.match(ordersList, /value=\{resource\.query\.areaId \?\? ''\}/);
   });

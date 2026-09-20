@@ -20,15 +20,17 @@ describe('Phase 6 Role Area Type configuration UI', () => {
   });
 
   it('shows Area Type Access independently from permission assignment', () => {
-    assert.match(page, />Area Types<\/button>/);
-    assert.match(page, /Area Type Access/);
+    // Lives in the row's action menu now, but still outside the canAssign gate
+    // that Permissions sits behind.
+    assert.match(page, /onSelect: \(\) => openAreaTypeScopes\(item\)/);
+    assert.doesNotMatch(page, /canAssign[\s\S]{0,120}label: 'Area Types'/);
     assert.match(page, /ADMIN_ROLE_UPDATE/);
     assert.match(page, /replaceRoleAreaTypeScopes/);
   });
 
   it('renders exact system ADMIN as read-only all-scope without role-name authorization', () => {
     assert.match(page, /code === 'ADMIN' && areaScopeTarget\.is_system/);
-    assert.match(page, /Toàn bộ Area Type \(System Admin\)/);
+    assert.match(page, /\(System Admin\)/);
     assert.match(page, /không tạo mapping PACKING, LOGISTICS hoặc SHOP/);
     assert.doesNotMatch(page, /role\s*===|role\.name\s*===|role\.includes/);
   });

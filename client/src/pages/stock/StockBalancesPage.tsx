@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { getApiErrorMessage } from '../../api/errors';
 import { resolveInventoryDiscrepancy } from '../../api/inventory-discrepancies.service';
-import { listAreas } from '../../api/areas.service';
 import { listStockBalanceDiscrepancies, listStockBalances } from '../../api/stock-balances.service';
 import { createStockAdjustment } from '../../api/stock-transactions.service';
 import { listStorageLocations } from '../../api/storage-locations.service';
@@ -15,7 +14,7 @@ import { FilterField, FilterSection, PageFilterLayout, PageFilterRail } from '..
 import { StockAdjustmentModal } from '../../components/stock/StockAdjustmentModal';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
-import { useCrudResource } from '../../hooks/useCrudResource';
+import { useAreaLookup } from '../../hooks/useAreaLookup';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { useProviderLookup } from '../../hooks/useProviderLookup';
@@ -29,11 +28,6 @@ import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 type StockBalanceQuery = StockBalanceListParams & PaginationParams;
 
-const loadAreas = async (signal: AbortSignal) =>
-  (await listAreas(
-    { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
-    signal,
-  )).data;
 const numberFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
 const dateFormatter = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
 const isStackBalance = (item: StockBalance) => item.supply?.category?.code === 'KIEN_SAT_TC';
@@ -57,11 +51,7 @@ const StockBalancesPage = () => {
       queryKeys.supplyStackOptions.all,
     ],
   });
-  const areas = useCrudResource(
-    loadAreas,
-    'Không thể tải danh sách khu vực.',
-    queryKeys.areas.lookup({ pageSize: 100, isActive: true }),
-  );
+  const areas = useAreaLookup();
   const providers = useProviderLookup();
   const supplyLoader = useCallback(
     (search: string | undefined, signal: AbortSignal) => listSupplies(
@@ -208,7 +198,7 @@ const StockBalancesPage = () => {
     && (resource.query.warning ?? 'all') === 'all';
 
   return <PageFilterLayout rail={(
-    <PageFilterRail title="Bộ lọc tồn kho" onReset={resetFilters} resetDisabled={filtersAreDefault}>
+    <PageFilterRail onReset={resetFilters} resetDisabled={filtersAreDefault}>
       <FilterSection>
         <FilterField label="Tìm kiếm"><input type="search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Tìm mã vật tư, khu vực, vị trí..." className={inputClassName} /></FilterField>
         <FilterField label="Tìm vật tư"><input type="search" value={supplies.search} onChange={(event) => supplies.setSearch(event.target.value)} placeholder="Tìm vật tư trên server..." className={inputClassName} /></FilterField>
@@ -222,7 +212,7 @@ const StockBalancesPage = () => {
       {[supplies.error, providers.error, areas.error, locations.error].some(Boolean) && <p role="alert" className="text-xs text-amber-700">Một số bộ lọc không tải được. Dữ liệu tồn kho vẫn được hiển thị.</p>}
     </PageFilterRail>
   )}><div className="min-w-0 space-y-6">
-    <CrudPageHeader title="Stock balances" description="Tồn kho hiện tại theo vật tư, Provider, khu vực và vị trí lưu." createLabel="Tạo adjustment" onCreate={canAdjust ? () => setAdjustmentOpen(true) : undefined} />
+    <CrudPageHeader title="Tồn kho vật tư" onCreate={canAdjust ? () => setAdjustmentOpen(true) : undefined} />
     <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
     {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} hideInternalSearch pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có tồn kho phù hợp với bộ lọc." />}
     {adjustmentOpen && canAdjust && <StockAdjustmentModal busy={resource.mutating} onClose={() => setAdjustmentOpen(false)} onSubmit={createAdjustment} />}

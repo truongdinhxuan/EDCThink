@@ -70,16 +70,22 @@ export interface ShiftOrderSheetWorkspaceProps {
   context: ShiftOrderSheetCreateContext;
   sheet: ShiftOrderSheetDetail | null;
   mode: 'current' | 'history' | 'detail';
-  onShowHistory?: () => void;
-  onBackCurrent?: () => void;
+  /**
+   * Where the archive lives. A path rather than a callback because these are
+   * separate routes now, and a real link can be opened in a new tab, bookmarked
+   * and restored by the browser's back button.
+   */
+  historyPath?: string;
+  /** Route back to the working shift, offered while reading an archived Sheet. */
+  currentSheetPath?: string;
 }
 
 export const ShiftOrderSheetWorkspace = ({
   context,
   sheet,
   mode,
-  onShowHistory,
-  onBackCurrent,
+  historyPath,
+  currentSheetPath,
 }: ShiftOrderSheetWorkspaceProps) => {
   const queryClient = useQueryClient();
   const { role, hasPermission } = useAuth();
@@ -268,13 +274,13 @@ export const ShiftOrderSheetWorkspace = ({
   return (
     <section className="space-y-5">
       <CrudFeedbackToast feedback={feedback} onClose={() => setFeedback(null)} />
-      <header className="sticky top-0 z-20 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <header className="sticky top-0 z-20 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm sm:p-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             {mode === 'history' && (
               <p className="text-xs font-bold uppercase tracking-widest text-amber-600">Lịch sử</p>
             )}
-            <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">
+            <h1 className="text-lg font-bold text-slate-900 sm:text-xl">
               {titlePrefix}Phiếu order ca {shiftLabel(context)} ngày {formatDate(context.work_date)}
             </h1>
             <p className="mt-2 text-sm text-slate-600">
@@ -283,21 +289,21 @@ export const ShiftOrderSheetWorkspace = ({
             </p>
             {leaderName && <p className="mt-1 text-xs text-slate-500">Tổ trưởng: {leaderName}</p>}
           </div>
-          <div className="flex flex-col gap-2 min-[360px]:flex-row min-[360px]:flex-wrap lg:justify-end">
+          <div className="flex flex-col gap-1.5 min-[360px]:flex-row min-[360px]:flex-wrap sm:gap-2 lg:justify-end">
             {allowCreate && (
               <button type="button" onClick={openCreateOrder} className={`${InfoButton} w-full min-[360px]:w-auto`}>
                 + Thêm Order
               </button>
             )}
-            {mode === 'current' && onShowHistory && (
-              <button type="button" onClick={onShowHistory} className={`${SecondaryButton} w-full min-[360px]:w-auto`}>
+            {mode === 'current' && historyPath && (
+              <Link to={historyPath} className={`${SecondaryButton} w-full min-[360px]:w-auto`}>
                 Lịch sử phiếu order ca
-              </button>
+              </Link>
             )}
-            {mode === 'history' && onBackCurrent && (
-              <button type="button" onClick={onBackCurrent} className={`${SecondaryButton} w-full min-[360px]:w-auto`}>
+            {mode === 'history' && currentSheetPath && (
+              <Link to={currentSheetPath} className={`${SecondaryButton} w-full min-[360px]:w-auto`}>
                 ← Quay lại phiếu hiện tại
-              </button>
+              </Link>
             )}
             {isSingleSheetView && hasPermission(PERMISSION_CODE.SUPPLY_SHIFT_ORDER_SHEET_READ) && (
               <button

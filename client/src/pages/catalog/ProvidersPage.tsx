@@ -1,4 +1,4 @@
-import { useCallback,useEffect,useState,type MouseEvent } from 'react';
+import { useCallback,useEffect,useState } from 'react';
 import {
 createProvider,
 deactivateProvider,
@@ -84,7 +84,7 @@ const ProvidersPage = () => {
   const resource = usePaginatedResource<Provider, ProviderQuery>({
     loader,
     initialQuery,
-    loadErrorMessage: 'Không thể tải danh sách Provider.',
+    loadErrorMessage: 'Không thể tải danh sách nhà cung cấp.',
     queryKey: queryKeys.providers.lists,
     invalidateQueryKeys: [
       queryKeys.providers.lookups,
@@ -139,14 +139,14 @@ const ProvidersPage = () => {
 
   const confirmDeactivate = (
     item: Provider,
-    event: MouseEvent<HTMLButtonElement>,
+    trigger: HTMLElement | null,
   ) => openConfirm({
     title: 'Ngừng sử dụng Provider?',
     description: `Provider “${item.code} — ${item.name}” sẽ ngừng hoạt động và bị soft delete.`,
     confirmLabel: 'Ngừng sử dụng',
     cancelLabel: 'Quay lại',
     variant: 'warning',
-    triggerElement: event.currentTarget,
+    triggerElement: trigger,
     onConfirm: () => resource.runMutation(
       () => deactivateProvider(item.id),
       'Đã ngừng sử dụng Provider.',
@@ -190,6 +190,7 @@ const ProvidersPage = () => {
       accessor: 'actions',
       render: (item: Provider) => (
         <RowActions
+          ariaLabel={`Thao tác cho ${item.code}`}
           onView={() => openView(item)}
           onEdit={canUpdate ? () => {
             setEditing(item);
@@ -197,7 +198,7 @@ const ProvidersPage = () => {
           } : undefined}
           onDelete={!canDelete || item.code === UNKNOWN_PROVIDER_CODE
             ? undefined
-            : (event) => confirmDeactivate(item, event)}
+            : (trigger) => confirmDeactivate(item, trigger)}
           deleteLabel="Ngừng sử dụng"
         />
       ),
@@ -211,7 +212,7 @@ const ProvidersPage = () => {
 
   return (
     <PageFilterLayout rail={(
-      <PageFilterRail title="Bộ lọc Provider" onReset={resetFilters} resetDisabled={search.length === 0 && resolveStatusFilter(resource.query) === 'active'}>
+      <PageFilterRail onReset={resetFilters} resetDisabled={search.length === 0 && resolveStatusFilter(resource.query) === 'active'}>
         <FilterSection>
           <FilterField label="Tìm kiếm"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm code, tên hoặc mô tả Provider..." className={inputClassName} /></FilterField>
           <FilterField label="Trạng thái"><select value={resolveStatusFilter(resource.query)} onChange={(event) => resource.updateQuery(statusQuery(event.target.value as StatusFilter))} className={inputClassName}><option value="active">Đang hoạt động</option><option value="inactive">Ngừng hoạt động</option><option value="deleted">Đã deactivate</option></select></FilterField>
@@ -219,9 +220,7 @@ const ProvidersPage = () => {
       </PageFilterRail>
     )}><div className="min-w-0 space-y-6">
       <CrudPageHeader
-        title="Providers"
-        description="Quản lý nhà cung cấp được liên kết với vật tư và tồn kho."
-        createLabel="Thêm Provider"
+        title="Quản lý nhà cung cấp"
         onCreate={canCreate ? () => {
           setEditing(null);
           setViewing(false); setFormError(null); setFormOpen(true);
@@ -248,13 +247,13 @@ const ProvidersPage = () => {
           sortOrder={resource.query.sortOrder}
           onSortChange={(sortBy, sortOrder) =>
             resource.updateQuery({ sortBy, sortOrder })}
-          emptyText="Không có Provider phù hợp."
+          emptyText="Không có nhà cung cấp phù hợp."
         />
       )}
 
       {formOpen && (viewing || (editing ? canUpdate : canCreate)) && (
         <PrimaryCrudDrawer mode={viewing ? 'view' : editing ? 'edit' : 'create'} size="md" onEdit={viewing && canUpdate ? () => setViewing(false) : undefined} error={formError}
-          title={viewing ? 'Chi tiết nhà cung cấp' : (editing ? 'Chỉnh sửa Provider' : 'Tạo Provider')}
+          title={viewing ? 'Chi tiết nhà cung cấp' : (editing ? 'Chỉnh sửa nhà cung cấp' : 'Tạo nhà cung cấp')}
           busy={resource.mutating}
           onClose={() => setFormOpen(false)}
         >

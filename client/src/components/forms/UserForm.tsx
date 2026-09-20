@@ -66,7 +66,7 @@ export const UserForm = ({ user, roleIds, canAssignRoles, references, busy, onSa
     || references.roles.length === 0 || references.areas.length === 0;
 
   return (
-    <CrudDrawerForm isDirty={isDirty} busy={busy} submitLabel={user ? 'Lưu thay đổi' : 'Tạo người dùng'} submitDisabled={referencesUnavailable} onSubmit={handleSubmit(onSave)} className="space-y-5">
+    <CrudDrawerForm isDirty={isDirty} busy={busy} submitDisabled={referencesUnavailable} onSubmit={handleSubmit(onSave)} className="space-y-5">
       {references.errors.length > 0 && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
           {references.errors.map((message) => <p key={message}>{message}</p>)}

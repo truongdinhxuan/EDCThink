@@ -28,7 +28,7 @@ export const ProviderForm = ({
   });
 
   return (
-    <CrudDrawerForm isDirty={isDirty} busy={busy} submitLabel={item ? 'Lưu thay đổi' : 'Tạo Provider'} onSubmit={handleSubmit(onSave)} className="space-y-4">
+    <CrudDrawerForm isDirty={isDirty} busy={busy} onSubmit={handleSubmit(onSave)} className="space-y-4">
       {isUnknown && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           UNKNOW — Chưa rõ là Provider hệ thống. Không thể đổi code hoặc deactivate.
