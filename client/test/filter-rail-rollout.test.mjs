@@ -34,7 +34,7 @@ describe('Phase 7 remaining-page Filter Rail rollout', () => {
     for (const path of migratedPages) {
       const source = read(path);
       const rail = source.slice(source.indexOf('<PageFilterRail'), source.indexOf('</PageFilterRail>'));
-      assert.doesNotMatch(rail, /CrudPageHeader|PrimaryCrudDrawer|StockAdjustmentModal|RowActions/ , path);
+      assert.doesNotMatch(rail, /CrudPageHeader|PrimaryCrudDrawer|StockAdjustmentForm|RowActions/ , path);
     }
   });
 

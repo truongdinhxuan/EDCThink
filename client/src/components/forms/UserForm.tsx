@@ -1,6 +1,8 @@
-import { useForm } from 'react-hook-form';
+import { useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import { CrudDrawerForm } from '../crud/CrudDrawerForm';
 import { FieldError, inputClassName, labelClassName } from '../crud/CrudPrimitives';
+import { ServerCombobox } from '../common/ServerCombobox';
 import { SelectSkeleton } from '../common/skeleton';
 import type { UserProfile } from '../../types/users';
 import type { Role } from '../../types/roles';
@@ -27,10 +29,18 @@ export interface UserReferenceData {
   users: UserProfile[];
   managerSearch: string;
   setManagerSearch: (value: string) => void;
+  /** Reported separately from `loading` so the manager combobox can speak for itself. */
+  managersLoading: boolean;
+  managersError: string | null;
   loading: boolean;
   errors: string[];
 }
 
+
+const managerLabel = (candidate: UserProfile): string => {
+  const name = `${candidate.first_name} ${candidate.last_name}`.trim();
+  return name ? `${name} (${candidate.email})` : candidate.email;
+};
 
 export const UserForm = ({ user, roleIds, canAssignRoles, references, busy, onSave }: {
   user: UserProfile | null;
@@ -41,7 +51,9 @@ export const UserForm = ({ user, roleIds, canAssignRoles, references, busy, onSa
   onSave: (values: UserFormValues) => Promise<void>;
 }) => {
   const {
+    control,
     register,
+    setValue,
     handleSubmit,
     getValues,
     formState: { errors, isDirty },
@@ -64,6 +76,23 @@ export const UserForm = ({ user, roleIds, canAssignRoles, references, busy, onSa
   });
   const referencesUnavailable = references.loading || references.errors.length > 0
     || references.roles.length === 0 || references.areas.length === 0;
+
+  const managerId = useWatch({ control, name: 'managed_by_user_id' });
+  const [pickedManager, setPickedManager] = useState<UserProfile | null>(null);
+  // Nobody may manage themselves, and an inactive account cannot be given reports.
+  const managerOptions = references.users.filter(
+    (candidate) => candidate.id !== user?.id && candidate.is_active,
+  );
+  // On an existing user the id arrives without the row, so fall back to naming it
+  // from whatever the manager search has loaded.
+  const selectedManager = pickedManager?.id === managerId
+    ? pickedManager
+    : managerOptions.find((candidate) => candidate.id === managerId) ?? null;
+
+  const pickManager = (candidate: UserProfile | null) => {
+    setPickedManager(candidate);
+    setValue('managed_by_user_id', candidate?.id ?? '', { shouldDirty: true });
+  };
 
   return (
     <CrudDrawerForm isDirty={isDirty} busy={busy} submitDisabled={referencesUnavailable} onSubmit={handleSubmit(onSave)} className="space-y-5">
@@ -140,19 +169,31 @@ export const UserForm = ({ user, roleIds, canAssignRoles, references, busy, onSa
         </label>
         <label className={labelClassName}>
           <span>Người quản lý</span>
-          <input
-            type="search"
-            value={references.managerSearch}
-            onChange={(event) => references.setManagerSearch(event.target.value)}
-            placeholder="Tìm người quản lý trên server..."
-            className={inputClassName}
+          <ServerCombobox<UserProfile>
+            value={managerId}
+            selected={selectedManager}
+            items={managerOptions}
+            search={references.managerSearch}
+            setSearch={references.setManagerSearch}
+            loading={references.managersLoading}
+            lookupError={references.managersError}
+            onChange={pickManager}
+            getLabel={managerLabel}
+            renderOption={(candidate) => (
+              <span className="min-w-0">
+                <span className="block truncate font-semibold">
+                  {`${candidate.first_name} ${candidate.last_name}`.trim()}
+                </span>
+                <span className="block truncate text-xs text-slate-500">{candidate.email}</span>
+              </span>
+            )}
+            placeholder="Nhập tên hoặc email người quản lý…"
+            loadingText="Đang tải người quản lý…"
+            emptyText="Không có người quản lý phù hợp."
+            noMatchText="Không tìm thấy người quản lý."
+            clearLabel="Bỏ chọn người quản lý"
+            ariaLabel="Chọn người quản lý"
           />
-          {references.loading && references.users.length === 0 ? <SelectSkeleton label="Đang tải người quản lý" /> : <select {...register('managed_by_user_id')} className={inputClassName}>
-            <option value="">Không chọn</option>
-            {references.users.filter((candidate) => candidate.id !== user?.id && candidate.is_active).map((candidate) => (
-              <option key={candidate.id} value={candidate.id}>{candidate.first_name} {candidate.last_name} ({candidate.email})</option>
-            ))}
-          </select>}
         </label>
         <label className={labelClassName}>
           <span>Số điện thoại</span>

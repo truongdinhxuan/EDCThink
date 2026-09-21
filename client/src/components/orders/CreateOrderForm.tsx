@@ -372,7 +372,7 @@ export const CreateOrderForm = ({
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
         {contextRow}
         <span className="w-full text-xs text-slate-400">
-          Area gửi/nhận khóa theo phiếu; backend kiểm tra lại khi tạo Order.
+          Kiểm tra kỹ thông tin trước khi gửi Order.
         </span>
         {areaResource.error && (
           <span className="w-full text-xs text-rose-600">{areaResource.error}</span>

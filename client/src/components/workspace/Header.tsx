@@ -6,6 +6,7 @@ import { getButtonClassName, IconButton } from "../common/Button";
 import NotificationBell from "../notifications/NotificationBell";
 import UserMenu from "./UserMenu";
 import { APP_LAYER } from "../../constants/layers";
+import { faBarsStaggered } from "@fortawesome/free-solid-svg-icons";
 
 interface HeaderProps {
   isMobileSidebarOpen: boolean;
@@ -42,7 +43,7 @@ const Header = ({
             aria-controls="sidebar"
             aria-expanded={isMobileSidebarOpen}
           >
-            <i className="hgi-stroke hgi-menu-05 text-2xl" aria-hidden="true"></i>
+            <FontAwesomeIcon size="lg" icon={faBarsStaggered} />
           </button>
         </AppTooltip>
         <div className="min-w-0">

@@ -11,7 +11,7 @@ const authService = read('src/api/auth.service.ts');
 const createOrderForm = read('src/components/orders/CreateOrderForm.tsx');
 const orderDetailPage = read('src/pages/orders/OrderDetailPage.tsx');
 const stackFields = read('src/components/orders/OrderStackFields.tsx');
-const adjustmentModal = read('src/components/stock/StockAdjustmentModal.tsx');
+const adjustmentModal = read('src/components/stock/StockAdjustmentForm.tsx');
 
 const TYPED_FILES = [
   'src/api/auth.service.ts',
@@ -26,7 +26,7 @@ const TYPED_FILES = [
 const QUANTITY_INPUT_FILES = [
   'src/components/orders/CreateOrderForm.tsx',
   'src/components/orders/OrderStackFields.tsx',
-  'src/components/stock/StockAdjustmentModal.tsx',
+  'src/components/stock/StockAdjustmentForm.tsx',
   'src/pages/orders/OrderDetailPage.tsx',
 ];
 

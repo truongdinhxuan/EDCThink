@@ -10,8 +10,9 @@ import { DataTable, type Column } from '../../components/common/DataTable';
 import { CardSkeleton } from '../../components/common/skeleton';
 import { InfoButton, TextButton } from '../../components/common/Button';
 import { CrudFeedbackToast, CrudModal, CrudPageHeader, ErrorState, FieldError, inputClassName, labelClassName } from '../../components/crud/CrudPrimitives';
+import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
 import { FilterField, FilterSection, PageFilterLayout, PageFilterRail } from '../../components/filters';
-import { StockAdjustmentModal } from '../../components/stock/StockAdjustmentModal';
+import { StockAdjustmentForm } from '../../components/stock/StockAdjustmentForm';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
 import { useAreaLookup } from '../../hooks/useAreaLookup';
@@ -155,6 +156,12 @@ const StockBalancesPage = () => {
     'Không thể tạo stock adjustment.',
   );
 
+  // The drawer stays open when the server rejects the adjustment, so the operator
+  // keeps what they typed; the failure arrives on the toast above it.
+  const saveAdjustment = async (input: CreateStockAdjustmentInput) => {
+    if (await createAdjustment(input)) setAdjustmentOpen(false);
+  };
+
   const submitResolution = async () => {
     if (!resolveTarget) return;
     const note = resolutionNote.trim();
@@ -215,7 +222,16 @@ const StockBalancesPage = () => {
     <CrudPageHeader title="Tồn kho vật tư" onCreate={canAdjust ? () => setAdjustmentOpen(true) : undefined} />
     <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
     {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} hideInternalSearch pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có tồn kho phù hợp với bộ lọc." />}
-    {adjustmentOpen && canAdjust && <StockAdjustmentModal busy={resource.mutating} onClose={() => setAdjustmentOpen(false)} onSubmit={createAdjustment} />}
+    {adjustmentOpen && canAdjust && (
+      <PrimaryCrudDrawer
+        mode="create"
+        title="Tạo điều chỉnh tồn kho"
+        busy={resource.mutating}
+        onClose={() => setAdjustmentOpen(false)}
+      >
+        <StockAdjustmentForm busy={resource.mutating} onSave={saveAdjustment} />
+      </PrimaryCrudDrawer>
+    )}
     {discrepancyBalance && (
       <CrudModal
         title={`Lịch sử sai lệch — ${discrepancyBalance.supply?.code ?? 'Vật tư'}`}
@@ -227,8 +243,8 @@ const StockBalancesPage = () => {
         }}
       >
         <div className="mb-4 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-3">
-          <Summary label="Provider" value={discrepancyBalance.provider ? `${discrepancyBalance.provider.code} — ${discrepancyBalance.provider.name}` : '—'} />
-          <Summary label="Area" value={discrepancyBalance.area ? `${discrepancyBalance.area.code} — ${discrepancyBalance.area.name}` : '—'} />
+          <Summary label="Nhà cung cấp" value={discrepancyBalance.provider ? `${discrepancyBalance.provider.code} — ${discrepancyBalance.provider.name}` : '—'} />
+          <Summary label="Khu vực" value={discrepancyBalance.area ? `${discrepancyBalance.area.code} — ${discrepancyBalance.area.name}` : '—'} />
           <Summary label="Vị trí" value={discrepancyBalance.storage_location ? `${discrepancyBalance.storage_location.code}${discrepancyBalance.storage_location.name ? ` — ${discrepancyBalance.storage_location.name}` : ''}` : '—'} />
         </div>
         {discrepancyQuery.isPending ? (

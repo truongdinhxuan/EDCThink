@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 
 const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 
-const modal = read('src/components/stock/StockAdjustmentModal.tsx');
+const modal = read('src/components/stock/StockAdjustmentForm.tsx');
 const transactionTypes = read('src/types/stock-transactions.ts');
 const balanceTypes = read('src/types/stock-balances.ts');
 const transactionPage = read('src/pages/stock/StockTransactionsPage.tsx');

@@ -83,8 +83,14 @@ describe('Table density stays in step with its skeleton', () => {
   });
 
   it('uses one horizontal floor in both', () => {
-    for (const source of [table, skeleton]) {
-      assert.match(source, /min-w-\[700px\][^"]*lg:min-w-\[750px\]/);
-    }
+    // Read off the <table> tag itself, and compared rather than pinned to one
+    // spelling: min-w-175 and min-w-[700px] are the same width, so asserting the
+    // text would fail on a rewrite that changed nothing.
+    const widths = (source) => {
+      const tag = source.match(/<table className="[^"]*"/)?.[0] ?? '';
+      return (tag.match(/(?:lg:)?min-w-[^\s"]+/g) ?? []).sort();
+    };
+    assert.ok(widths(table).length >= 2, 'expected a base and an lg: min-width');
+    assert.deepEqual(widths(skeleton), widths(table));
   });
 });

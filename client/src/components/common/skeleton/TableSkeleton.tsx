@@ -37,7 +37,7 @@ export const TableSkeleton = ({
       className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
     >
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[700px] border-collapse text-left text-sm lg:min-w-[750px]">
+        <table className="w-full min-w-175 border-collapse text-left text-sm lg:min-w-[750px]">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               {Array.from({ length: columns }, (_, index) => (

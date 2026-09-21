@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { listOrders } from '../../api/orders.service';
 import { getWorkShifts } from '../../api/work-shifts.service';
-import { InfoButton, TextButton } from '../../components/common/Button';
+import { TextButton } from '../../components/common/Button';
 import { DataTable, type Column } from '../../components/common/DataTable';
 import { ErrorState, inputClassName } from '../../components/crud/CrudPrimitives';
 import {
@@ -13,7 +13,6 @@ import {
   PageFilterRail,
 } from '../../components/filters';
 import { OrderStatusBadge } from '../../components/orders/OrderStatusBadge';
-import { PERMISSION_CODE } from '../../constants/permissions';
 import { getWorkspacePath } from '../../constants/workspaces';
 import { useAuth } from '../../context/AuthContext';
 import { useAreaLookup } from '../../hooks/useAreaLookup';
@@ -50,9 +49,8 @@ const formatDate = (value: string): string => {
 
 const OrdersListPage = () => {
   useDocumentTitle('Order lịch sử');
-  const { role, hasPermission } = useAuth();
+  const { role } = useAuth();
   const ordersPath = getWorkspacePath(role, 'orders');
-  const createOrderPath = getWorkspacePath(role, 'orders/create');
   const loader = useCallback(
     (query: OrderQuery, signal: AbortSignal) => listOrders(query, signal),
     [],
@@ -277,9 +275,6 @@ const OrdersListPage = () => {
           <div className="min-w-0">
             <h1 className="mt-1 text-2xl font-bold text-slate-900">Lịch sử order</h1>
           </div>
-          {hasPermission(PERMISSION_CODE.SUPPLY_ORDER_CREATE) && (
-            <Link to={createOrderPath} className={InfoButton}>Tạo order</Link>
-          )}
         </div>
 
         {resource.error ? (

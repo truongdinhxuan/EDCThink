@@ -10,6 +10,9 @@ const areaLookup = read('src/hooks/useAreaLookup.ts');
 const routes = read('src/routes/workspace.routes.tsx');
 const form = read('src/components/orders/CreateOrderForm.tsx');
 const combobox = read('src/components/orders/SupplyCombobox.tsx');
+// Combobox behaviour (keyboard, portal, autofocus) now lives in the generic
+// that Supply, Storage location and Manager all render through.
+const comboboxCore = read('src/components/common/ServerCombobox.tsx');
 const providerSelect = read('src/components/common/SupplyProviderSelect.tsx');
 const stackFields = read('src/components/orders/OrderStackFields.tsx');
 const workspace = read('src/components/orders/ShiftOrderSheetWorkspace.tsx');
@@ -66,7 +69,8 @@ describe('UX P0 — Create Order friction', () => {
 
   it('UXP0-010/011: first material row is the first focusable control', () => {
     assert.match(form, /autoFocusFlag=\{index === 0\}/);
-    assert.match(combobox, /data-autofocus=\{autoFocusFlag \? 'true' : undefined\}/);
+    assert.match(comboboxCore, /data-autofocus=\{autoFocusFlag \? 'true' : undefined\}/);
+    assert.match(combobox, /autoFocusFlag=\{autoFocusFlag\}/);
   });
 
   it('UXP0-016/017: add-row control sits below the list and focuses the new Supply', () => {
@@ -100,8 +104,8 @@ describe('UX P0 — focus + keyboard flow', () => {
   });
 
   it('UXP0-020/021: combobox keyboard contract preserved, Ctrl/Cmd+Enter submits', () => {
-    assert.match(combobox, /event\.key === 'Enter' && open/);
-    assert.match(combobox, /ArrowDown.*ArrowUp|ArrowDown' \|\| event\.key === 'ArrowUp'/s);
+    assert.match(comboboxCore, /event\.key === 'Enter' && open/);
+    assert.match(comboboxCore, /ArrowDown.*ArrowUp|ArrowDown' \|\| event\.key === 'ArrowUp'/s);
     assert.match(form, /event\.ctrlKey \|\| event\.metaKey/);
     assert.match(form, /if \(tag === 'INPUT'\) event\.preventDefault\(\)/);
   });
@@ -146,9 +150,9 @@ describe('UX P0 — Shift Sheet workspace', () => {
 describe('UX P0 — combobox dropdown + Orders filters', () => {
   it('UXP0-031: Supply dropdown is portaled above the drawer footer, below confirm', () => {
     assert.match(layers, /primaryDrawerPopover: 85/);
-    assert.match(combobox, /createPortal\(/);
-    assert.match(combobox, /position.*fixed|className="fixed/);
-    assert.match(combobox, /APP_LAYER\.primaryDrawerPopover/);
+    assert.match(comboboxCore, /createPortal\(/);
+    assert.match(comboboxCore, /position.*fixed|className="fixed/);
+    assert.match(comboboxCore, /APP_LAYER\.primaryDrawerPopover/);
   });
 
   it('UXP0-029/030: operator Orders filters expose readable Area, no raw UUID inputs', () => {
