@@ -12,6 +12,7 @@ import {
   canReadOrder,
   isOrderAreaScoped,
   type OrderReadAccess,
+  ORDER_SOURCE_AREA_CODE,
 } from '../domain/order-access';
 import {
   assertApprovedQuantity,
@@ -480,7 +481,6 @@ const generateOrderCode = (): string => {
   return `ORD-${date}-${randomUUID().slice(0, 8).toUpperCase()}`;
 };
 
-const ORDER_SOURCE_AREA_CODE = 'VTDG';
 const STACK_CATEGORY_CODE = 'KIEN_SAT_TC';
 
 const firstRelation = <T>(value: T | T[] | null): T | null =>
@@ -1010,6 +1010,15 @@ export class OrderService {
     }
     if (body.to_area_id !== actor.areaId) {
       serviceError(400, 'to_area_id must equal the current user area_id');
+    }
+    // The supplying Area fulfils Orders, it does not raise them. Left open, the
+    // warehouse would appear as its own customer and its Sheets would mix real
+    // market demand with its own entries.
+    if (actor.areaId === sourceAreaId && !actor.isSystemAdmin) {
+      serviceError(
+        409,
+        `Khu vực ${ORDER_SOURCE_AREA_CODE} là nguồn cấp phát nên không thể tự tạo Order cho chính mình.`,
+      );
     }
     const submittedAt = new Date().toISOString();
     await this.assertWithinWorkShiftWindow(actor.id, submittedAt);

@@ -9,6 +9,7 @@ import type {
   StockActor,
 } from '../interfaces/stock';
 import { StockServiceError, stockRpcError } from './stock.helpers';
+import { StockAreaAccessService } from './stock-area-access.service';
 
 export class StockAdjustmentsService {
   constructor(private readonly fastify: FastifyInstance) {}
@@ -18,6 +19,10 @@ export class StockAdjustmentsService {
   }
 
   async create(actor: StockActor, body: CreateStockAdjustmentBody) {
+    // Before any other validation: an Area the actor may not touch is a refusal,
+    // not a bad request, and the reply must not reveal whether the rest was valid.
+    new StockAreaAccessService(this.fastify, actor).assertCanWrite(body.area_id);
+
     let quantity: number | null = null;
     if (body.quantity !== undefined) {
       try {

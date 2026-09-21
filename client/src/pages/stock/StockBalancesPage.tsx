@@ -15,7 +15,7 @@ import { FilterField, FilterSection, PageFilterLayout, PageFilterRail } from '..
 import { StockAdjustmentForm } from '../../components/stock/StockAdjustmentForm';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
-import { useAreaLookup } from '../../hooks/useAreaLookup';
+import { useStockAreaScopes } from '../../hooks/useStockAreaScopes';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { useProviderLookup } from '../../hooks/useProviderLookup';
@@ -52,7 +52,9 @@ const StockBalancesPage = () => {
       queryKeys.supplyStackOptions.all,
     ],
   });
-  const areas = useAreaLookup();
+  // Only the Areas this user may read stock for; the backend applies the
+  // same rule to the rows, so an Area missing here would return nothing.
+  const areaScopes = useStockAreaScopes();
   const providers = useProviderLookup();
   const supplyLoader = useCallback(
     (search: string | undefined, signal: AbortSignal) => listSupplies(
@@ -212,11 +214,11 @@ const StockBalancesPage = () => {
         <FilterField label="Vật tư"><select disabled={supplies.loading && supplies.items.length === 0} value={resource.query.supplyId ?? ''} onChange={(event) => resource.updateQuery({ supplyId: event.target.value || undefined })} className={inputClassName}><option value="">{supplies.loading && supplies.items.length === 0 ? 'Đang tải vật tư...' : 'Tất cả vật tư'}</option>{supplies.items.map((supply) => <option key={supply.id} value={supply.id}>{supply.code}{supply.description ? ` - ${supply.description}` : ''}</option>)}</select></FilterField>
         <FilterField label="Cảnh báo"><select value={resource.query.warning ?? 'all'} onChange={(event) => resource.updateQuery({ warning: event.target.value as StockBalanceQuery['warning'] })} className={inputClassName}><option value="all">Tất cả cảnh báo</option><option value="warning">Có cảnh báo</option><option value="no_warning">Không cảnh báo</option></select></FilterField>
         <FilterField label="Provider"><select disabled={providers.loading && providers.items.length === 0} value={resource.query.providerId ?? ''} onChange={(event) => resource.updateQuery({ providerId: event.target.value || undefined })} className={inputClassName}><option value="">{providers.loading && providers.items.length === 0 ? 'Đang tải Provider...' : 'Tất cả Provider'}</option>{providers.items.map((provider) => <option key={provider.id} value={provider.id}>{provider.code} - {provider.name}</option>)}</select></FilterField>
-        <FilterField label="Khu vực"><select disabled={areas.loading && areas.items.length === 0} value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value || undefined, storageLocationId: undefined })} className={inputClassName}><option value="">{areas.loading && areas.items.length === 0 ? 'Đang tải khu vực...' : 'Tất cả khu vực'}</option>{areas.items.map((area) => <option key={area.id} value={area.id}>{area.code} - {area.name}</option>)}</select></FilterField>
+        <FilterField label="Khu vực"><select disabled={areaScopes.loading} value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value || undefined, storageLocationId: undefined })} className={inputClassName}><option value="">{areaScopes.loading ? 'Đang tải khu vực...' : 'Tất cả khu vực được phép'}</option>{areaScopes.scopes.areas.map((area) => <option key={area.id} value={area.id}>{area.code} - {area.name}</option>)}</select></FilterField>
         <FilterField label="Tìm vị trí kho"><input type="search" value={locations.search} onChange={(event) => locations.setSearch(event.target.value)} placeholder="Tìm vị trí kho trên server..." className={inputClassName} /></FilterField>
         <FilterField label="Vị trí kho"><select disabled={locations.loading && locations.items.length === 0} value={resource.query.storageLocationId ?? ''} onChange={(event) => resource.updateQuery({ storageLocationId: event.target.value || undefined })} className={inputClassName}><option value="">{locations.loading && locations.items.length === 0 ? 'Đang tải vị trí kho...' : 'Tất cả vị trí kho'}</option>{locations.items.map((location) => <option key={location.id} value={location.id}>{location.code}{location.name ? ` - ${location.name}` : ''}</option>)}</select></FilterField>
       </FilterSection>
-      {[supplies.error, providers.error, areas.error, locations.error].some(Boolean) && <p role="alert" className="text-xs text-amber-700">Một số bộ lọc không tải được. Dữ liệu tồn kho vẫn được hiển thị.</p>}
+      {[supplies.error, providers.error, areaScopes.error, locations.error].some(Boolean) && <p role="alert" className="text-xs text-amber-700">Một số bộ lọc không tải được. Dữ liệu tồn kho vẫn được hiển thị.</p>}
     </PageFilterRail>
   )}><div className="min-w-0 space-y-6">
     <CrudPageHeader title="Tồn kho vật tư" onCreate={canAdjust ? () => setAdjustmentOpen(true) : undefined} />

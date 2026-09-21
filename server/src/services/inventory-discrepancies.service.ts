@@ -8,6 +8,8 @@ import {
   resolvePaginatedQueryResult,
 } from '../utils/pagination';
 import { stockFail, stockFailWithDetails } from './stock.helpers';
+import type { StockActor } from '../interfaces/stock';
+import { StockAreaAccessService } from './stock-area-access.service';
 
 interface SupabaseErrorLike {
   code?: string;
@@ -104,16 +106,39 @@ const discrepancyRpcError = (error: SupabaseErrorLike): never => {
 };
 
 export class InventoryDiscrepanciesService {
-  constructor(private readonly fastify: FastifyInstance) {}
+  private readonly areaAccess: StockAreaAccessService;
+
+  constructor(
+    private readonly fastify: FastifyInstance,
+    actor: StockActor,
+  ) {
+    this.areaAccess = new StockAreaAccessService(fastify, actor);
+  }
 
   private get db() {
     return this.fastify.supabaseAdmin;
+  }
+
+  /**
+   * A discrepancy is an attribute of one stock balance, so it inherits that
+   * balance's Area. Resolving the Area from the balance keeps the rule in one
+   * place instead of re-deriving it from the discrepancy row.
+   */
+  private async areaOfBalance(stockBalanceId: string): Promise<string> {
+    const { data, error } = await this.db
+      .from('stock_balances')
+      .select('area_id')
+      .eq('id', stockBalanceId)
+      .single();
+    if (error || !data) return stockFail(404, 'Stock balance not found');
+    return (data as { area_id: string }).area_id;
   }
 
   async listForBalance(
     stockBalanceId: string,
     query: InventoryDiscrepancyListQuery = {},
   ) {
+    await this.areaAccess.assertCanRead(await this.areaOfBalance(stockBalanceId));
     const pagination = parsePagination(query, {
       allowedSortBy: DISCREPANCY_SORT_FIELDS,
       defaultSortBy: 'reported_at',
@@ -147,6 +172,18 @@ export class InventoryDiscrepanciesService {
     actorId: string,
     body: ResolveInventoryDiscrepancyBody,
   ) {
+    // Resolving writes to the balance's history, so it needs write access to
+    // that Area, not merely the right to look at it.
+    const { data: target, error: targetError } = await this.db
+      .from('inventory_discrepancies')
+      .select('stock_balance_id')
+      .eq('id', discrepancyId)
+      .single();
+    if (targetError || !target) return stockFail(404, 'Inventory discrepancy not found');
+    this.areaAccess.assertCanWrite(
+      await this.areaOfBalance((target as { stock_balance_id: string }).stock_balance_id),
+    );
+
     const { error } = await this.db.rpc('resolve_inventory_discrepancy', {
       p_discrepancy_id: discrepancyId,
       p_actor_id: actorId,

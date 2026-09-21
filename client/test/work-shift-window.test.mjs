@@ -67,10 +67,12 @@ describe('outside-hours lock in the Sheet workspace', () => {
   });
 
   it('hides "+ Thêm Order" outside the shift window', () => {
-    assert.match(
-      workspace,
-      /const allowCreate = mode === 'current' && canCreateOrder && !isOutsideWorkingHours/,
-    );
+    // The shift window is one of three gates; the Area's own eligibility and the
+    // caller's permission are the others. Asserted together so dropping any of
+    // them is a red test rather than a silently wider button.
+    assert.match(workspace, /const allowCreate = mode === 'current' && canCreateOrder/);
+    assert.match(workspace, /&& areaMayOrder/);
+    assert.match(workspace, /&& !isOutsideWorkingHours/);
   });
 
   it('only locks the Sheet being worked, never a historical one', () => {

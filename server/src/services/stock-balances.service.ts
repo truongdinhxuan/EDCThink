@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import type { StockBalanceListQuery } from '../interfaces/stock';
+import type { StockActor, StockBalanceListQuery } from '../interfaces/stock';
 import { STOCK_BALANCE_SORT_FIELDS } from '../schemas/stock';
 import { createPaginatedResult, parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
 import { stockDatabaseError } from './stock.helpers';
+import { StockAreaAccessService } from './stock-area-access.service';
 import {
   inCondition,
   resolveStockSearchReferences,
@@ -26,7 +27,14 @@ const SELECT = `
 `;
 
 export class StockBalancesService {
-  constructor(private readonly fastify: FastifyInstance) {}
+  private readonly areaAccess: StockAreaAccessService;
+
+  constructor(
+    private readonly fastify: FastifyInstance,
+    actor: StockActor,
+  ) {
+    this.areaAccess = new StockAreaAccessService(fastify, actor);
+  }
 
   private get db() {
     return this.fastify.supabaseAdmin;
@@ -42,6 +50,15 @@ export class StockBalancesService {
       .from('stock_balances')
       .select(SELECT, { count: 'exact' })
       .eq('is_deleted', false);
+
+    // Scope first, then the caller's own filter. PostgREST ANDs the two, so an
+    // areaId from the query string can only narrow this further — never widen it
+    // past what the actor may read.
+    const readable = await this.areaAccess.readableAreaIds();
+    if (readable !== 'ALL') {
+      if (readable.length === 0) return createPaginatedResult([], pagination, 0);
+      request = request.in('area_id', readable);
+    }
 
     const supplyId = query.supplyId ?? query.supply_id;
     const providerId = query.providerId ?? query.provider_id;
@@ -91,6 +108,9 @@ export class StockBalancesService {
       .eq('id', id)
       .single();
     if (error || !data) stockDatabaseError(error, 'Stock balance not found');
+    // 403 rather than an empty result: the id came from the caller, so there is
+    // nothing left to conceal by pretending the row does not exist.
+    await this.areaAccess.assertCanRead((data as { area_id: string }).area_id);
     return data;
   }
 }

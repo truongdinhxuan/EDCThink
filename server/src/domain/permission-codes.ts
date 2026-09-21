@@ -35,6 +35,7 @@ export const PERMISSION_CODE = {
   MILKRUN_TRIP_STATUS_DEACTIVATE: "milkrun.trip_status.deactivate",
   SUPPLY_STOCK_READ: "supply.stock.read",
   SUPPLY_STOCK_ADJUST: "supply.stock.adjust",
+  SUPPLY_STOCK_READ_ALL_AREAS: "supply.stock.read_all_areas",
   SUPPLY_CATALOG_READ: "supply.catalog.read",
   SUPPLY_CATALOG_CREATE: "supply.catalog.create",
   SUPPLY_CATALOG_UPDATE: "supply.catalog.update",

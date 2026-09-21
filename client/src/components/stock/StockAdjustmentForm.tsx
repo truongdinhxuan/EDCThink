@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
-import { useAreaLookup } from '../../hooks/useAreaLookup';
+import { useStockAreaScopes } from '../../hooks/useStockAreaScopes';
 import type { StorageLocationOption } from '../../types/storage-locations';
 import type { SupplyOption } from '../../types/supplies';
 import type { CreateStockAdjustmentInput, StockAdjustmentType } from '../../types/stock-transactions';
@@ -31,8 +31,13 @@ export const StockAdjustmentForm = ({
   busy: boolean;
   onSave: (input: CreateStockAdjustmentInput) => Promise<void>;
 }) => {
-  const areas = useAreaLookup();
-  const [selectedAreaId, setSelectedAreaId] = useState('');
+  // Writing is pinned to the user's own Area, so this list is usually a single
+  // entry. An admin gets every Area and still has to pick one.
+  const areaScopes = useStockAreaScopes();
+  const { areas: scopedAreas, writableAreaId } = areaScopes.scopes;
+  const writableAreas = writableAreaId
+    ? scopedAreas.filter((area) => area.id === writableAreaId)
+    : scopedAreas;
   // The comboboxes hand back the whole row, so the chosen supply and location
   // are held here rather than looked up again in a page of search results. The
   // old select could only resolve a selection while it happened to sit in the
@@ -59,6 +64,7 @@ export const StockAdjustmentForm = ({
       note: '',
     },
   });
+  const selectedAreaId = useWatch({ control, name: 'area_id' });
   const selectedSupplyId = useWatch({ control, name: 'supply_id' });
   const selectedLocationId = useWatch({ control, name: 'storage_location_id' });
   const selectedProviderId = useWatch({ control, name: 'provider_id' });
@@ -97,6 +103,13 @@ export const StockAdjustmentForm = ({
     setValue('storage_location_id', location?.id ?? '', { shouldValidate: true, shouldDirty: true });
   };
 
+  // A non-admin has exactly one writable Area, so asking them to choose it is
+  // busywork. Left unselected for an admin, who genuinely has to decide.
+  useEffect(() => {
+    if (selectedAreaId || writableAreas.length !== 1) return;
+    setValue('area_id', writableAreas[0].id, { shouldValidate: true });
+  }, [selectedAreaId, setValue, writableAreas]);
+
   useEffect(() => {
     if (isStackImport) return;
     setValue('stack_quantity', undefined, { shouldValidate: false });
@@ -105,11 +118,13 @@ export const StockAdjustmentForm = ({
 
   // Supplies and locations report their own loading and failures inside their
   // dropdowns now; only Areas is still a plain select that needs a banner.
-  const referenceErrors = areas.error ? [areas.error] : [];
-  const referencesLoading = areas.loading;
+  const referenceErrors = areaScopes.error
+    ? ['Không thể tải danh sách khu vực được phép.']
+    : [];
+  const referencesLoading = areaScopes.loading;
   const referencesUnavailable = referencesLoading
     || referenceErrors.length > 0
-    || areas.items.length === 0;
+    || writableAreas.length === 0;
 
   const submit = async (values: CreateStockAdjustmentInput) => {
     const payload: CreateStockAdjustmentInput = {
@@ -176,22 +191,24 @@ export const StockAdjustmentForm = ({
         </label>
         <label className={labelClassName}>
           <span>Khu vực</span>
-          {areas.loading && areas.items.length === 0 ? <SelectSkeleton label="Đang tải khu vực" /> : (
+          {areaScopes.loading ? <SelectSkeleton label="Đang tải khu vực" /> : (
             <select
               {...areaRegistration}
               disabled={referencesLoading}
               className={inputClassName}
               onChange={(event) => {
                 void areaRegistration.onChange(event);
-                setSelectedAreaId(event.target.value);
+                // The chosen location belongs to the old Area.
                 pickLocation(null);
               }}
             >
               <option value="">Chọn khu vực</option>
-              {areas.items.map((area) => <option key={area.id} value={area.id}>{area.code} - {area.name}</option>)}
+              {writableAreas.map((area) => <option key={area.id} value={area.id}>{area.code} - {area.name}</option>)}
             </select>
           )}
-          {!areas.loading && areas.items.length === 0 ? <FieldError message="Không có khu vực active." /> : <FieldError message={errors.area_id?.message} />}
+          {!areaScopes.loading && writableAreas.length === 0
+            ? <FieldError message="Bạn chưa được gán khu vực nào để điều chỉnh tồn kho." />
+            : <FieldError message={errors.area_id?.message} />}
         </label>
         <label className={labelClassName}>
           <span>Vị trí kho</span>

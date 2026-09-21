@@ -33,6 +33,9 @@ export const queryKeys = {
   meAreaScopes: {
     all: ['me-area-scopes'] as const,
   },
+  meStockAreaScopes: {
+    all: ['me-stock-area-scopes'] as const,
+  },
   supplyCategories: resourceKeys('supply-categories'),
   units: resourceKeys('units'),
   supplies: resourceKeys('supplies'),

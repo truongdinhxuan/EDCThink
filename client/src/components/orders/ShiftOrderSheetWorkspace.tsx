@@ -123,7 +123,12 @@ export const ShiftOrderSheetWorkspace = ({
       : context.is_outside_working_hours === true
   );
 
-  const allowCreate = mode === 'current' && canCreateOrder && !isOutsideWorkingHours;
+  // `can_create_order` is the server's verdict on the Area; the permission is
+  // the verdict on the person. Both have to agree, and the backend rejects the
+  // request anyway if the button is ever wrong.
+  const areaMayOrder = context.can_create_order !== false;
+  const allowCreate = mode === 'current' && canCreateOrder && areaMayOrder
+    && !isOutsideWorkingHours;
   const sheetId = sheet?.id ?? null;
 
   /**

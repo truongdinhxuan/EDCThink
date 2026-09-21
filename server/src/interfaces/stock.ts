@@ -1,3 +1,4 @@
+import type { PermissionCode } from '../domain/permission-codes';
 import type { StockTransactionType } from '../domain/enums';
 import type { PaginationQuery } from './pagination';
 
@@ -64,4 +65,8 @@ export interface CreateStockAdjustmentBody {
 
 export interface StockActor {
   id: string;
+  areaId: string | null;
+  roleIds: string[];
+  permissions: readonly PermissionCode[];
+  isSystemAdmin: boolean;
 }

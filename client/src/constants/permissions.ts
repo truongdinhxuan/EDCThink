@@ -43,6 +43,7 @@ export const PERMISSION_CODE = {
   SUPPLY_AREA_DEACTIVATE: 'supply.area.deactivate',
   SUPPLY_STOCK_READ: 'supply.stock.read',
   SUPPLY_STOCK_ADJUST: 'supply.stock.adjust',
+  SUPPLY_STOCK_READ_ALL_AREAS: 'supply.stock.read_all_areas',
   SUPPLY_ORDER_CREATE: 'supply.order.create',
   SUPPLY_ORDER_APPROVE: 'supply.order.approve',
   SUPPLY_ORDER_ALLOCATE: 'supply.order.allocate',

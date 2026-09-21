@@ -13,7 +13,10 @@ const orderDetailPage = read('../client/src/pages/orders/OrderDetailPage.tsx');
 
 describe('order source and receiving area flow', () => {
   it('resolves the active VTDG area as the order source without a hard-coded UUID', () => {
-    assert.match(orderService, /ORDER_SOURCE_AREA_CODE = 'VTDG'/);
+    // Defined once in the domain layer: the Sheet screen reads the same
+    // constant to decide whether this Area may raise Orders at all.
+    assert.match(orderAccess, /ORDER_SOURCE_AREA_CODE = 'VTDG'/);
+    assert.match(orderService, /ORDER_SOURCE_AREA_CODE,/);
     assert.match(
       orderService,
       /\.from\('areas'\)[\s\S]*\.eq\('code', ORDER_SOURCE_AREA_CODE\)[\s\S]*\.eq\('is_active', true\)[\s\S]*\.eq\('is_deleted', false\)/,

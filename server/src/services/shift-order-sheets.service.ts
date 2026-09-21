@@ -12,6 +12,7 @@ import {
   resolveReadableAreaIds,
 } from '../domain/sheet-access';
 import { resolveShiftEndAt, resolveShiftStartAt } from '../domain/orderRules';
+import { ORDER_SOURCE_AREA_CODE } from '../domain/order-access';
 import { AreaScopesService } from './area-scopes.service';
 import {
   createShiftOrderSheetExportFilename,
@@ -344,6 +345,20 @@ export class ShiftOrderSheetsService {
     };
   }
 
+  /**
+   * The supplying Area fulfils Orders rather than raising them, so its staff get
+   * the Sheet screen for approving the markets but not the "+ Thêm Order" action.
+   */
+  private async canCreateOrderFromArea(actor: ShiftOrderSheetActor): Promise<boolean> {
+    if (actor.isSystemAdmin) return true;
+    const { data } = await this.db
+      .from('areas')
+      .select('code')
+      .eq('id', actor.areaId)
+      .maybeSingle();
+    return (data as { code: string } | null)?.code !== ORDER_SOURCE_AREA_CODE;
+  }
+
   private async readableAreaIds(actor: ShiftOrderSheetActor): Promise<string[]> {
     const scopes = await this.areaScopes(actor).getEffectiveAreaTypeScopes();
     return resolveReadableAreaIds(
@@ -461,7 +476,10 @@ export class ShiftOrderSheetsService {
 
   async getCurrent(actor: ShiftOrderSheetActor) {
     if (!actor.areaId) fail(409, 'Bạn chưa được gán khu vực làm việc.');
-    await this.areaScopes(actor).assertAreaWithinEffectiveScope(actor.areaId);
+    // Deliberately not asserted against the Area Type scope. This reads the
+    // caller's OWN Area and nothing else, so there is nothing here to leak, and
+    // the supplying Area belongs to no Area Type on purpose — asserting would
+    // lock its own staff out of the screen where they approve the markets.
 
     const now = new Date().toISOString();
     const [areaResult, shiftResult] = await Promise.all([
@@ -507,6 +525,9 @@ export class ShiftOrderSheetsService {
       // already applied, so the client never has to redo shift arithmetic.
       is_outside_working_hours: shift.is_overtime,
       business_time_zone: BUSINESS_TIME_ZONE,
+      // Resolved server-side so the button and the endpoint can never disagree
+      // about whether this Area is allowed to raise Orders.
+      can_create_order: await this.canCreateOrderFromArea(actor),
     } as const;
 
     const { data, error } = await this.db

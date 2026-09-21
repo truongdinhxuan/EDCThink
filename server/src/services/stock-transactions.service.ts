@@ -1,12 +1,13 @@
 import type { FastifyInstance } from 'fastify';
-import type { StockTransactionListQuery } from '../interfaces/stock';
+import type { StockActor, StockTransactionListQuery } from '../interfaces/stock';
 import { STOCK_TRANSACTION_SORT_FIELDS } from '../schemas/stock';
-import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
+import { createPaginatedResult, parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
 import {
   normalizeDateBoundary,
   stockDatabaseError,
   stockFail,
 } from './stock.helpers';
+import { StockAreaAccessService } from './stock-area-access.service';
 import {
   inCondition,
   resolveStockSearchReferences,
@@ -39,7 +40,14 @@ const SELECT = `
 `;
 
 export class StockTransactionsService {
-  constructor(private readonly fastify: FastifyInstance) {}
+  private readonly areaAccess: StockAreaAccessService;
+
+  constructor(
+    private readonly fastify: FastifyInstance,
+    actor: StockActor,
+  ) {
+    this.areaAccess = new StockAreaAccessService(fastify, actor);
+  }
 
   private get db() {
     return this.fastify.supabaseAdmin;
@@ -85,6 +93,15 @@ export class StockTransactionsService {
 
     const supplyId = query.supplyId ?? query.supply_id;
     const providerId = query.providerId ?? query.provider_id;
+    // Scope first, then the caller's own filter. PostgREST ANDs the two, so an
+    // areaId from the query string can only narrow this further — never widen it
+    // past what the actor may read.
+    const readable = await this.areaAccess.readableAreaIds();
+    if (readable !== 'ALL') {
+      if (readable.length === 0) return createPaginatedResult([], pagination, 0);
+      request = request.in('area_id', readable);
+    }
+
     const areaId = query.areaId ?? query.area_id;
     if (supplyId) request = request.eq('supply_id', supplyId);
     if (providerId) request = request.eq('provider_id', providerId);
@@ -137,6 +154,7 @@ export class StockTransactionsService {
       .eq('id', id)
       .single();
     if (error || !data) stockDatabaseError(error, 'Stock transaction not found');
+    await this.areaAccess.assertCanRead((data as { area_id: string }).area_id);
     return data;
   }
 }

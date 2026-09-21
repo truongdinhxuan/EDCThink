@@ -55,6 +55,11 @@ export interface ShiftOrderSheetCreateContext {
   shift_end_at?: string;
   /** Server verdict at fetch time. The UI re-derives from the bounds as time passes. */
   is_outside_working_hours?: boolean;
+  /**
+   * Whether this Area may raise Orders at all. The supplying Area fulfils them
+   * instead, so its staff get the approval view without the create action.
+   */
+  can_create_order?: boolean;
 }
 
 export interface ShiftOrderSheetOrderItem {
@@ -93,6 +98,7 @@ export interface CurrentShiftOrderSheetContext extends Omit<ShiftOrderSheetCreat
   shift_start_at: string;
   shift_end_at: string;
   is_outside_working_hours: boolean;
+  can_create_order: boolean;
   business_time_zone: 'Asia/Ho_Chi_Minh';
 }
 
