@@ -1,5 +1,5 @@
 resources:
-BACKEND:
+BACKEND :
   - fastify
 FRONTEND:
   - vite react
