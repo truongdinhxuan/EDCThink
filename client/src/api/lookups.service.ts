@@ -1,5 +1,6 @@
 import type {
   AdjustmentReasonLookup,
+  AllocationConfirmReasonLookup,
   LookupListParams,
   OrderRevisionActionLookup,
   OrderStatusLookup,
@@ -40,6 +41,16 @@ export const listAdjustmentReasons = (
 ) =>
   listLookup<AdjustmentReasonLookup>(
     'lookup/adjustment-reasons',
+    params,
+    signal,
+  );
+
+export const listAllocationConfirmReasons = (
+  params: LookupListParams = {},
+  signal?: AbortSignal,
+) =>
+  listLookup<AllocationConfirmReasonLookup>(
+    'lookup/allocation-confirm-reasons',
     params,
     signal,
   );

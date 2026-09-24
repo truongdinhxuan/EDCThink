@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { useStockAreaScopes } from '../../hooks/useStockAreaScopes';
-import type { StorageLocationOption } from '../../types/storage-locations';
 import type { SupplyOption } from '../../types/supplies';
 import type { CreateStockAdjustmentInput, StockAdjustmentType } from '../../types/stock-transactions';
-import { StorageLocationCombobox } from '../common/StorageLocationCombobox';
+import {
+  StorageLocationLabelsPicker,
+  type LocationLabel,
+} from '../common/StorageLocationLabelsPicker';
 import { SupplyProviderSelect } from '../common/SupplyProviderSelect';
 import { SelectSkeleton } from '../common/skeleton';
 import { SupplyCombobox } from '../orders/SupplyCombobox';
@@ -38,12 +40,14 @@ export const StockAdjustmentForm = ({
   const writableAreas = writableAreaId
     ? scopedAreas.filter((area) => area.id === writableAreaId)
     : scopedAreas;
-  // The comboboxes hand back the whole row, so the chosen supply and location
-  // are held here rather than looked up again in a page of search results. The
-  // old select could only resolve a selection while it happened to sit in the
-  // current 20 rows, which quietly broke the stack-supply branch below.
+  // The combobox hands back the whole row, so the chosen supply is held here
+  // rather than looked up again in a page of search results. The old select
+  // could only resolve a selection while it happened to sit in the current 20
+  // rows, which quietly broke the stack-supply branch below.
   const [selectedSupply, setSelectedSupply] = useState<SupplyOption | null>(null);
-  const [selectedLocation, setSelectedLocation] = useState<StorageLocationOption | null>(null);
+  // Labels for where the code sits. Stock is one pooled row per code, so these
+  // carry no quantity and are optional.
+  const [locations, setLocations] = useState<LocationLabel[]>([]);
   const {
     control,
     register,
@@ -55,7 +59,6 @@ export const StockAdjustmentForm = ({
       supply_id: '',
       provider_id: '',
       area_id: '',
-      storage_location_id: '',
       type: 'ADJUSTMENT_IN',
       quantity: 1,
       stack_quantity: undefined,
@@ -66,7 +69,6 @@ export const StockAdjustmentForm = ({
   });
   const selectedAreaId = useWatch({ control, name: 'area_id' });
   const selectedSupplyId = useWatch({ control, name: 'supply_id' });
-  const selectedLocationId = useWatch({ control, name: 'storage_location_id' });
   const selectedProviderId = useWatch({ control, name: 'provider_id' });
   const selectedType = useWatch({ control, name: 'type' });
   const stackQuantity = useWatch({ control, name: 'stack_quantity' });
@@ -85,7 +87,6 @@ export const StockAdjustmentForm = ({
   // Registered without a control of their own: the comboboxes write these
   // through setValue, so validation still runs but there is no field to spread.
   register('supply_id', { required: 'Vui lòng chọn vật tư.' });
-  register('storage_location_id', { required: 'Vui lòng chọn vị trí kho.' });
   register('provider_id', { required: 'Vui lòng chọn Provider.' });
 
   const pickSupply = (supply: SupplyOption | null) => {
@@ -96,11 +97,6 @@ export const StockAdjustmentForm = ({
     setValue('provider_id', '', { shouldValidate: false });
     setValue('stack_quantity', undefined, { shouldValidate: false });
     setValue('set_per_qty', undefined, { shouldValidate: false });
-  };
-
-  const pickLocation = (location: StorageLocationOption | null) => {
-    setSelectedLocation(location);
-    setValue('storage_location_id', location?.id ?? '', { shouldValidate: true, shouldDirty: true });
   };
 
   // A non-admin has exactly one writable Area, so asking them to choose it is
@@ -129,6 +125,7 @@ export const StockAdjustmentForm = ({
   const submit = async (values: CreateStockAdjustmentInput) => {
     const payload: CreateStockAdjustmentInput = {
       ...values,
+      location_ids: locations.map((location) => location.id),
       reason: values.reason.trim(),
       note: values.note?.trim() || null,
     };
@@ -198,8 +195,8 @@ export const StockAdjustmentForm = ({
               className={inputClassName}
               onChange={(event) => {
                 void areaRegistration.onChange(event);
-                // The chosen location belongs to the old Area.
-                pickLocation(null);
+                // Labels belong to the old Area.
+                setLocations([]);
               }}
             >
               <option value="">Chọn khu vực</option>
@@ -210,18 +207,16 @@ export const StockAdjustmentForm = ({
             ? <FieldError message="Bạn chưa được gán khu vực nào để điều chỉnh tồn kho." />
             : <FieldError message={errors.area_id?.message} />}
         </label>
-        <label className={labelClassName}>
-          <span>Vị trí kho</span>
-          <StorageLocationCombobox
-            value={selectedLocationId}
-            selectedLocation={selectedLocation}
+        <div className={labelClassName}>
+          <span>Vị trí kho (nhãn)</span>
+          <StorageLocationLabelsPicker
             areaId={selectedAreaId}
-            onChange={pickLocation}
+            value={locations}
+            onChange={setLocations}
             disabled={busy}
-            ariaLabel="Chọn vị trí kho cho điều chỉnh tồn kho"
-            error={errors.storage_location_id?.message}
+            ariaLabel="Gắn vị trí kho cho mã vật tư"
           />
-        </label>
+        </div>
         <label className={labelClassName}>
           <span>Loại điều chỉnh</span>
           <select {...register('type', { required: true })} className={inputClassName}>

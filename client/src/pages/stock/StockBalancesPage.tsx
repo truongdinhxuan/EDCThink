@@ -2,7 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { getApiErrorMessage } from '../../api/errors';
 import { resolveInventoryDiscrepancy } from '../../api/inventory-discrepancies.service';
-import { listStockBalanceDiscrepancies, listStockBalances } from '../../api/stock-balances.service';
+import {
+  listStockBalanceDiscrepancies,
+  listStockBalances,
+  replaceStockBalanceLocations,
+} from '../../api/stock-balances.service';
 import { createStockAdjustment } from '../../api/stock-transactions.service';
 import { listStorageLocations } from '../../api/storage-locations.service';
 import { listSupplies } from '../../api/supplies.service';
@@ -13,6 +17,7 @@ import { CrudFeedbackToast, CrudModal, CrudPageHeader, ErrorState, FieldError, i
 import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
 import { FilterField, FilterSection, PageFilterLayout, PageFilterRail } from '../../components/filters';
 import { StockAdjustmentForm } from '../../components/stock/StockAdjustmentForm';
+import { StockBalanceLocationsForm } from '../../components/stock/StockBalanceLocationsForm';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
 import { useStockAreaScopes } from '../../hooks/useStockAreaScopes';
@@ -34,10 +39,12 @@ const dateFormatter = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', tim
 const isStackBalance = (item: StockBalance) => item.supply?.category?.code === 'KIEN_SAT_TC';
 const isLegacyStackBalance = (item: StockBalance) => isStackBalance(item)
   && (item.set_per_qty === null || item.stack_quantity === null);
+const locationsText = (item: StockBalance) =>
+  item.locations.length > 0 ? item.locations.map((location) => location.code).join(', ') : '—';
 
 const StockBalancesPage = () => {
   useDocumentTitle('Vật tư tồn kho');
-  const { hasPermission } = useAuth();
+  const { hasPermission, isSystemAdmin } = useAuth();
   const queryClient = useQueryClient();
   const canAdjust = hasPermission(PERMISSION_CODE.SUPPLY_STOCK_ADJUST);
   const canResolveDiscrepancy = hasPermission(PERMISSION_CODE.SUPPLY_DISCREPANCY_RESOLVE);
@@ -85,7 +92,12 @@ const StockBalancesPage = () => {
   const resourceSearch = resource.query.search;
   const updateResourceQuery = resource.updateQuery;
   const [adjustmentOpen, setAdjustmentOpen] = useState(false);
+  const [labelBalance, setLabelBalance] = useState<StockBalance | null>(null);
   const [discrepancyBalance, setDiscrepancyBalance] = useState<StockBalance | null>(null);
+  // Relabelling writes to the row's Area, so it follows the same rule as an
+  // adjustment; the server enforces it again.
+  const canRelabel = (item: StockBalance) => canAdjust
+    && (isSystemAdmin || item.area_id === areaScopes.scopes.writableAreaId);
   const [resolveTarget, setResolveTarget] = useState<InventoryDiscrepancy | null>(null);
   const [resolutionNote, setResolutionNote] = useState('');
   const discrepancyQuery = useQuery({
@@ -114,7 +126,26 @@ const StockBalancesPage = () => {
     { header: 'Vật tư', accessor: 'supply_id', render: (item) => item.supply ? <div><p className="font-semibold text-slate-800">{item.supply.code}</p><p className="text-xs text-slate-500">{item.supply.description || '—'}</p></div> : '—' },
     { header: 'Provider', accessor: 'provider_id', render: (item) => item.provider ? <div><p className="font-semibold text-slate-800">{item.provider.code}</p><p className="text-xs text-slate-500">{item.provider.name}</p></div> : '—' },
     { header: 'Khu vực', accessor: 'area_id', render: (item) => item.area ? `${item.area.code} - ${item.area.name}` : '—' },
-    { header: 'Vị trí kho', accessor: 'storage_location_id', render: (item) => item.storage_location ? `${item.storage_location.code}${item.storage_location.name ? ` - ${item.storage_location.name}` : ''}` : '—' },
+    {
+      header: 'Vị trí kho',
+      accessor: 'locations',
+      render: (item) => (
+        <div className="flex min-w-32 flex-wrap items-center gap-1">
+          {item.locations.length === 0
+            ? <span className="text-xs text-slate-400">Chưa gắn</span>
+            : item.locations.map((location) => (
+              <span key={location.id} title={location.name ?? undefined} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                {location.code}
+              </span>
+            ))}
+          {canRelabel(item) && (
+            <button type="button" onClick={() => setLabelBalance(item)} className={`${TextButton} text-xs`} aria-label={`Sửa vị trí của ${item.supply?.code ?? 'vật tư'}`}>
+              Sửa
+            </button>
+          )}
+        </div>
+      ),
+    },
     {
       header: 'SET / chồng',
       accessor: 'set_per_qty',
@@ -162,6 +193,16 @@ const StockBalancesPage = () => {
   // keeps what they typed; the failure arrives on the toast above it.
   const saveAdjustment = async (input: CreateStockAdjustmentInput) => {
     if (await createAdjustment(input)) setAdjustmentOpen(false);
+  };
+
+  const saveLocations = async (locationIds: string[]) => {
+    if (!labelBalance) return;
+    const saved = await resource.runMutation(
+      () => replaceStockBalanceLocations(labelBalance.id, { location_ids: locationIds }),
+      'Đã cập nhật vị trí kho.',
+      'Không thể cập nhật vị trí kho.',
+    );
+    if (saved) setLabelBalance(null);
   };
 
   const submitResolution = async () => {
@@ -234,6 +275,16 @@ const StockBalancesPage = () => {
         <StockAdjustmentForm busy={resource.mutating} onSave={saveAdjustment} />
       </PrimaryCrudDrawer>
     )}
+    {labelBalance && (
+      <PrimaryCrudDrawer
+        mode="edit"
+        title="Vị trí kho của mã vật tư"
+        busy={resource.mutating}
+        onClose={() => setLabelBalance(null)}
+      >
+        <StockBalanceLocationsForm balance={labelBalance} busy={resource.mutating} onSave={saveLocations} />
+      </PrimaryCrudDrawer>
+    )}
     {discrepancyBalance && (
       <CrudModal
         title={`Lịch sử sai lệch — ${discrepancyBalance.supply?.code ?? 'Vật tư'}`}
@@ -247,7 +298,7 @@ const StockBalancesPage = () => {
         <div className="mb-4 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-3">
           <Summary label="Nhà cung cấp" value={discrepancyBalance.provider ? `${discrepancyBalance.provider.code} — ${discrepancyBalance.provider.name}` : '—'} />
           <Summary label="Khu vực" value={discrepancyBalance.area ? `${discrepancyBalance.area.code} — ${discrepancyBalance.area.name}` : '—'} />
-          <Summary label="Vị trí" value={discrepancyBalance.storage_location ? `${discrepancyBalance.storage_location.code}${discrepancyBalance.storage_location.name ? ` — ${discrepancyBalance.storage_location.name}` : ''}` : '—'} />
+          <Summary label="Vị trí (nhãn)" value={locationsText(discrepancyBalance)} />
         </div>
         {discrepancyQuery.isPending ? (
           <CardSkeleton lines={6} label="Đang tải lịch sử sai lệch" />
@@ -272,13 +323,15 @@ const StockBalancesPage = () => {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="font-bold text-slate-900">Order {discrepancy.order?.code ?? 'Không rõ'}</p>
-                      <p className="mt-1 text-xs text-slate-500">Báo bởi {reporter} · {dateFormatter.format(new Date(discrepancy.reported_at))}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {discrepancy.source === 'ISSUE' ? 'Phát hiện khi cấp hàng' : 'Báo khi xác nhận số chồng'} · {reporter} · {dateFormatter.format(new Date(discrepancy.reported_at))}
+                      </p>
                     </div>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${discrepancy.status === 'OPEN' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}>{discrepancy.status}</span>
                   </div>
                   <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-4">
-                    <Summary label="Dự kiến" value={`${discrepancy.expected_stack_quantity} chồng`} />
-                    <Summary label="Thực tế" value={`${discrepancy.actual_stack_quantity} chồng`} />
+                    <Summary label={discrepancy.source === 'ISSUE' ? 'Đã cấp' : 'Đã duyệt'} value={`${discrepancy.expected_stack_quantity} chồng`} />
+                    <Summary label={discrepancy.source === 'ISSUE' ? 'Tồn sổ trừ được' : 'Thực tế'} value={`${discrepancy.actual_stack_quantity} chồng`} />
                     <Summary label="Chênh lệch" value={`${discrepancy.difference_stack_quantity} chồng`} />
                     <Summary label="Quy cách" value={`${discrepancy.order_item?.set_per_qty ?? '—'} SET/chồng`} />
                   </dl>

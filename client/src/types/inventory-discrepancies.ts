@@ -2,6 +2,12 @@ import type { PaginatedListParams } from './pagination.types';
 
 export type InventoryDiscrepancyStatus = 'OPEN' | 'RESOLVED';
 
+/**
+ * CONFIRMATION: the picker reported stacks as not available.
+ * ISSUE: the books held fewer stacks than were confirmed and shipped.
+ */
+export type InventoryDiscrepancySource = 'CONFIRMATION' | 'ISSUE';
+
 export interface DiscrepancyUserSummary {
   id: string;
   vinfast_id: string;
@@ -20,6 +26,7 @@ export interface InventoryDiscrepancy {
   difference_stack_quantity: number;
   reason: string | null;
   status: InventoryDiscrepancyStatus;
+  source: InventoryDiscrepancySource;
   reported_by: string;
   reported_at: string;
   resolved_by: string | null;
@@ -42,11 +49,9 @@ export interface InventoryDiscrepancy {
     id: string;
     expected_stack_quantity: number;
     actual_stack_quantity: number | null;
-    stock_balance?: {
-      id: string;
-      storage_location?: { id: string; code: string; name: string | null } | null;
-    } | null;
   } | null;
+  /** Every location the code is labelled at: where to go and recount. */
+  locations?: Array<{ id: string; code: string; name: string | null }>;
 }
 
 export interface InventoryDiscrepancyListParams extends PaginatedListParams {

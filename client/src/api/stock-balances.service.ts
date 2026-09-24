@@ -1,5 +1,6 @@
 import type { ApiEnvelope } from '../types/api';
 import type {
+  ReplaceStockBalanceLocationsInput,
   StockBalance,
   StockBalanceListParams,
 } from '../types/stock-balances';
@@ -24,6 +25,18 @@ export const getStockBalance = async (id: string): Promise<StockBalance> =>
   unwrapData(
     await instance.get<ApiEnvelope<StockBalance>, ApiEnvelope<StockBalance>>(
       `stock-balances/${id}`,
+    ),
+  );
+
+/** Relabels where a code sits. Quantities are not touched. */
+export const replaceStockBalanceLocations = async (
+  id: string,
+  input: ReplaceStockBalanceLocationsInput,
+): Promise<StockBalance> =>
+  unwrapData(
+    await instance.put<ApiEnvelope<StockBalance>, ApiEnvelope<StockBalance>>(
+      `stock-balances/${id}/locations`,
+      input,
     ),
   );
 

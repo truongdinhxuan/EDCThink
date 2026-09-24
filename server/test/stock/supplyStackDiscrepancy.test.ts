@@ -9,6 +9,16 @@ const read = (path: string): string =>
 const migration = read(
   'supabase/migrations/20260823165527_supply_stack_discrepancy_confirmation.sql',
 );
+const confirmMigration = read(
+  'supabase/migrations/20260924010200_stack_confirm_issue_flow.sql',
+);
+const confirmFunction = confirmMigration.slice(
+  confirmMigration.indexOf('create or replace function public.confirm_stack_order_item'),
+  confirmMigration.indexOf('revoke all on function public.confirm_stack_order_item'),
+);
+const labelsMigration = read(
+  'supabase/migrations/20260924010000_stock_location_labels.sql',
+);
 const serviceRoleGrantMigration = read(
   'supabase/migrations/20260823165524_service_role_authorization_read_grants.sql',
 );
@@ -28,26 +38,25 @@ describe('Supply stack Phase 5 discrepancy confirmation', () => {
     assert.doesNotMatch(migration, /create\s+type[\s\S]*enum/i);
   });
 
-  it('keeps correction, discrepancy and full-only reallocation in one locked RPC', () => {
-    assert.match(migration, /create or replace function public\.confirm_stack_allocation_actual/i);
-    assert.match(migration, /for update of allocation/i);
-    assert.match(migration, /for update of orders/i);
-    assert.match(migration, /for update of balance/i);
-    assert.match(migration, /insert into public\.inventory_discrepancies/i);
-    assert.match(migration, /insert into public\.stock_transactions/i);
-    assert.match(migration, /v_available_alternative < v_difference/i);
-    assert.match(migration, /v_reallocation_status := 'INSUFFICIENT'/i);
-    assert.doesNotMatch(migration, /update public\.stock_transactions|delete from public\.stock_transactions/i);
+  it('keeps correction and recount in one locked RPC, with no re-allocation', () => {
+    assert.match(confirmFunction, /for update of orders/i);
+    assert.match(confirmFunction, /for update of item/i);
+    assert.match(confirmFunction, /for update of balance/i);
+    assert.match(confirmFunction, /insert into public\.inventory_discrepancies/i);
+    assert.match(confirmFunction, /insert into public\.stock_transactions/i);
+    assert.doesNotMatch(confirmFunction, /v_available_alternative|v_reallocation_status/i);
+    assert.doesNotMatch(confirmFunction, /update public\.stock_transactions|delete from public\.stock_transactions/i);
   });
 
   it('exposes confirmation through permission-protected Order API without issuing stock', () => {
-    assert.match(ordersRoutes, /allocations\/:allocationId\/confirm/);
+    assert.match(ordersRoutes, /items\/:itemId\/confirm/);
     assert.match(ordersRoutes, /SUPPLY_ORDER_CONFIRM_ALLOCATION/);
-    assert.match(ordersService, /confirm_stack_allocation_actual/);
+    assert.match(ordersService, /confirm_stack_order_item/);
     assert.doesNotMatch(
-      ordersService.match(/async confirmAllocation[\s\S]*?\n  }/i)?.[0] ?? '',
+      ordersService.match(/async confirmStackItem[\s\S]*?\n  }/i)?.[0] ?? '',
       /issue_order|SUPPLY_ORDER_ISSUE/,
     );
+    assert.doesNotMatch(confirmFunction, /set status = 'ISSUED'|quantity_issued/);
   });
 
   it('derives warning state and supports server-side warning filtering plus history', () => {
@@ -71,13 +80,23 @@ describe('Supply stack Phase 5 discrepancy confirmation', () => {
   });
 
   it('keeps mutation RPC execution backend-only', () => {
-    for (const signature of [
-      'confirm_stack_allocation_actual',
-      'resolve_inventory_discrepancy',
-    ]) {
-      assert.match(migration, new RegExp(`revoke all on function public\\.${signature}[\\s\\S]*?from public, anon, authenticated`, 'i'));
-      assert.match(migration, new RegExp(`grant execute on function public\\.${signature}[\\s\\S]*?to service_role`, 'i'));
+    for (const [source, signature] of [
+      [confirmMigration, 'confirm_stack_order_item'],
+      [migration, 'resolve_inventory_discrepancy'],
+    ] as const) {
+      assert.match(source, new RegExp(`revoke all on function public\\.${signature}[\\s\\S]*?from public, anon, authenticated`, 'i'));
+      assert.match(source, new RegExp(`grant execute on function public\\.${signature}[\\s\\S]*?to service_role`, 'i'));
     }
+  });
+
+  it('records where a recount came from and allows one of each per confirmation', () => {
+    assert.match(labelsMigration, /drop index public\.inventory_discrepancies_allocation_key/);
+    assert.match(labelsMigration, /check \(source in \('CONFIRMATION', 'ISSUE'\)\)/);
+    assert.match(
+      labelsMigration,
+      /inventory_discrepancies_allocation_source_key\s+on public\.inventory_discrepancies \(allocation_id, source\)/,
+    );
+    assert.match(discrepancyService, /^\s+source,\s*$/m);
   });
 
   it('grants backend-only reads required by current PostgREST authorization and embeds', () => {

@@ -42,12 +42,14 @@ export interface RejectOrderBody {
 }
 
 export interface IssueOrderBody {
+  /**
+   * Normal supplies only. Stock is one pooled row per code, so an issue is a
+   * quantity, not a split across locations. Stack items never appear here:
+   * they ship their confirmed count automatically.
+   */
   items: Array<{
     order_item_id: string;
-    issues: Array<{
-      storage_location_id: string;
-      quantity: number;
-    }>;
+    quantity: number;
   }>;
   forklift_by?: string;
   taken_away_by?: string;
@@ -61,9 +63,11 @@ export interface CancelOrderBody {
   cancel_reason: string;
 }
 
-export interface ConfirmAllocationBody {
+export interface ConfirmStackItemBody {
   actual_stack_quantity: number;
-  reason?: string;
+  /** Required when the count differs from the approval; see allocation_confirm_reasons. */
+  reason_code?: string;
+  reason_note?: string;
 }
 
 export interface OrderListQuery extends PaginationQuery {

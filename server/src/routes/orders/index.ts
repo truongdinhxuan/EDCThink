@@ -1,6 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
 import {
-  allocateOrder,
   approveOrder,
   cancelOrder,
   completeOrder,
@@ -11,7 +10,7 @@ import {
   patchOrder,
   receiveOrder,
   rejectOrder,
-  confirmOrderAllocation,
+  confirmOrderStackItem,
 } from '../../controllers/orders';
 import { PERMISSION_CODE } from '../../domain/permission-codes';
 import { ORDER_READ_PERMISSIONS } from '../../domain/order-access';
@@ -21,7 +20,7 @@ import {
   orderApproveSchema,
   orderListSchema,
   orderPatchSchema,
-  allocationConfirmSchema,
+  stackItemConfirmSchema,
   orderIssueSchema,
 } from '../../schemas/orders';
 
@@ -45,10 +44,6 @@ const orderRoutes: FastifyPluginAsync = async (fastify) => {
   const orderIssuePermission = [
     verifyToken,
     requirePermission(PERMISSION_CODE.SUPPLY_ORDER_ISSUE),
-  ];
-  const orderAllocatePermission = [
-    verifyToken,
-    requirePermission(PERMISSION_CODE.SUPPLY_ORDER_ALLOCATE),
   ];
   const orderConfirmAllocationPermission = [
     verifyToken,
@@ -80,18 +75,15 @@ const orderRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: orderReviewPermission },
     rejectOrder,
   );
+  // No separate allocation step any more: stock has no locations to split an
+  // Order across, so data vật tư confirms one stack count per item directly.
   fastify.post(
-    '/:id/allocate',
-    { preHandler: orderAllocatePermission },
-    allocateOrder,
-  );
-  fastify.post(
-    '/:id/allocations/:allocationId/confirm',
+    '/:id/items/:itemId/confirm',
     {
       preHandler: orderConfirmAllocationPermission,
-      schema: allocationConfirmSchema,
+      schema: stackItemConfirmSchema,
     },
-    confirmOrderAllocation,
+    confirmOrderStackItem,
   );
   fastify.post(
     '/:id/issue',

@@ -17,12 +17,15 @@ export interface StockBalanceSupplySummary {
   } | null;
 }
 
+/**
+ * One row per (supply, provider, area[, set_per_qty]) holding the whole
+ * quantity. `locations` says where the code sits and carries no quantity.
+ */
 export interface StockBalance {
   id: string;
   supply_id: string;
   provider_id: string;
   area_id: string;
-  storage_location_id: string;
   quantity: number;
   set_per_qty: number | null;
   stack_quantity: number | null;
@@ -35,13 +38,18 @@ export interface StockBalance {
   supply: StockBalanceSupplySummary | null;
   provider: Pick<Provider, 'id' | 'code' | 'name' | 'description'> | null;
   area: Pick<Area, 'id' | 'code' | 'name'> | null;
-  storage_location: Pick<StorageLocation, 'id' | 'code' | 'name'> | null;
+  locations: Array<Pick<StorageLocation, 'id' | 'code' | 'name'>>;
 }
 
 export interface StockBalanceListParams extends PaginatedListParams {
   supplyId?: string;
   providerId?: string;
   areaId?: string;
+  /** Rows labelled with this location. */
   storageLocationId?: string;
   warning?: 'all' | 'warning' | 'no_warning';
+}
+
+export interface ReplaceStockBalanceLocationsInput {
+  location_ids: string[];
 }

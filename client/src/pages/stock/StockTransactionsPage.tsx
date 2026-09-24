@@ -98,7 +98,8 @@ const StockTransactionsPage = () => {
     { header: 'Loại', accessor: 'transaction_type_id', sortKey: 'type', render: (item) => { const type = transactionTypeCode(item); return <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${transactionTypeClass(type)}`}>{type}</span>; } },
     { header: 'Vật tư', accessor: 'supply_id', render: (item) => item.supply ? <div><p className="font-semibold text-slate-800">{item.supply.code}</p><p className="text-xs text-slate-500">{item.supply.description || '—'}</p></div> : '—' },
     { header: 'Provider', accessor: 'provider_id', render: (item) => item.provider ? <div><p className="font-semibold text-slate-800">{item.provider.code}</p><p className="text-xs text-slate-500">{item.provider.name}</p></div> : '—' },
-    { header: 'Khu vực / Vị trí', accessor: 'area_id', render: (item) => <div><p>{item.area ? `${item.area.code} - ${item.area.name}` : '—'}</p><p className="text-xs text-slate-500">{item.storage_location?.code ?? '—'}</p></div> },
+    // Only transactions written before stock stopped tracking locations carry one.
+    { header: 'Khu vực / Vị trí', accessor: 'area_id', render: (item) => <div><p>{item.area ? `${item.area.code} - ${item.area.name}` : '—'}</p>{item.storage_location && <p className="text-xs text-slate-500">{item.storage_location.code}</p>}</div> },
     { header: 'Số lượng', accessor: 'quantity', sortKey: 'quantity', render: (item) => numberFormatter.format(item.quantity) },
     { header: 'Trước → Sau', accessor: 'before_quantity', render: (item) => `${numberFormatter.format(item.before_quantity)} → ${numberFormatter.format(item.after_quantity)}` },
     { header: 'Lý do', accessor: 'reason', render: (item) => item.reason || '—' },
@@ -132,7 +133,7 @@ const StockTransactionsPage = () => {
     ['Vật tư', detail.supply ? `${detail.supply.code}${detail.supply.description ? ` - ${detail.supply.description}` : ''}` : 'Không rõ'],
     ['Provider', detail.provider ? `${detail.provider.code} - ${detail.provider.name}` : 'Không rõ'],
     ['Khu vực', detail.area ? `${detail.area.code} - ${detail.area.name}` : 'Không rõ'],
-    ['Vị trí kho', detail.storage_location ? `${detail.storage_location.code}${detail.storage_location.name ? ` - ${detail.storage_location.name}` : ''}` : 'Không rõ'],
+    ['Vị trí kho', detail.storage_location ? `${detail.storage_location.code}${detail.storage_location.name ? ` - ${detail.storage_location.name}` : ''}` : 'Không theo vị trí'],
     ['Số lượng', numberFormatter.format(detail.quantity)],
     ['Tồn trước', numberFormatter.format(detail.before_quantity)],
     ['Tồn sau', numberFormatter.format(detail.after_quantity)],

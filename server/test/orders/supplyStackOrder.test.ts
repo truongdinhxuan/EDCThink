@@ -11,27 +11,32 @@ const orderService = read('src/services/orders.service.ts');
 const supplyService = read('src/services/supplies.service.ts');
 const supplyRoutes = read('src/routes/supplies/index.ts');
 const orderSchema = read('src/schemas/orders.ts');
-const allocationMigration = read('supabase/migrations/20260823142244_supply_stack_allocation.sql');
+const confirmMigration = read('supabase/migrations/20260924010200_stack_confirm_issue_flow.sql');
+const labelsMigration = read('supabase/migrations/20260924010000_stock_location_labels.sql');
+const locationFreeMigration = read('supabase/migrations/20260924010100_stock_location_free_rpcs.sql');
 const orderRoutes = read('src/routes/orders/index.ts');
 const orderController = read('src/controllers/orders/index.ts');
 const permissionCodes = read('src/domain/permission-codes.ts');
 
 describe('Supply stack Phase 3 options (T-001 to T-006)', () => {
-  it('aggregates positive stack options across eligible locations (T-001/T-002/T-003)', () => {
-    assert.match(migration, /create or replace function public\.get_supply_stack_options/);
-    assert.match(migration, /sum\(sb\.stack_quantity\) as available_stack_quantity/);
-    assert.match(migration, /sum\(sb\.stack_quantity\) \* sb\.set_per_qty as available_total_set_quantity/);
-    assert.match(migration, /sb\.stack_quantity > 0/);
-    assert.match(migration, /group by sb\.set_per_qty/);
+  // Current definition: one pooled row per set_per_qty, so nothing to sum.
+  const options = locationFreeMigration.slice(
+    locationFreeMigration.indexOf('create or replace function public.get_supply_stack_options'),
+    locationFreeMigration.indexOf('create or replace function public.normalize_order_item_request'),
+  );
+
+  it('lists positive stack options, one per set size (T-001/T-002/T-003)', () => {
+    assert.match(options, /sb\.stack_quantity as available_stack_quantity/);
+    assert.match(options, /sb\.stack_quantity \* sb\.set_per_qty as available_total_set_quantity/);
+    assert.match(options, /sb\.stack_quantity > 0/);
   });
 
   it('scopes options by Supply, Provider, Area and excludes legacy rows (T-004/T-005/T-006)', () => {
-    assert.match(migration, /sb\.supply_id = p_supply_id/);
-    assert.match(migration, /sb\.provider_id = p_provider_id/);
-    assert.match(migration, /sb\.area_id = p_area_id/);
-    assert.match(migration, /sb\.set_per_qty is not null/);
-    assert.match(migration, /sl\.is_active = true/);
-    assert.match(migration, /sl\.is_deleted = false/);
+    assert.match(options, /sb\.supply_id = p_supply_id/);
+    assert.match(options, /sb\.provider_id = p_provider_id/);
+    assert.match(options, /sb\.area_id = p_area_id/);
+    assert.match(options, /sb\.set_per_qty is not null/);
+    assert.doesNotMatch(options, /storage_locations/);
   });
 
   it('exposes one authenticated, permission-protected endpoint', () => {
@@ -83,7 +88,6 @@ describe('Supply stack Phase 3 read/edit (T-016/T-019)', () => {
   it('scopes detail availability by set_per_qty (T-016)', () => {
     assert.match(orderService, /const stackDimension = item\.set_per_qty === null/);
     assert.match(orderService, /availableStacksByDimension/);
-    assert.match(orderService, /storage_location\.is_deleted/);
   });
 
   it('preserves stack fields in create, replace and detail response (T-019)', () => {
@@ -99,77 +103,71 @@ describe('Supply stack Phase 3 read/edit (T-016/T-019)', () => {
   });
 });
 
-describe('Supply stack Phase 4 allocation contract', () => {
-  const allocationFunction = allocationMigration.slice(
-    allocationMigration.indexOf('create or replace function public.allocate_stack_order'),
-    allocationMigration.indexOf('revoke execute on function public.allocate_stack_order'),
+describe('Stack item confirmation contract', () => {
+  const confirmFunction = confirmMigration.slice(
+    confirmMigration.indexOf('create or replace function public.confirm_stack_order_item'),
+    confirmMigration.indexOf('revoke all on function public.confirm_stack_order_item'),
   );
 
-  it('uses one permission-protected route, service orchestration and authoritative RPC', () => {
+  it('has no allocation step left: one route confirms one item', () => {
+    // Stock no longer has locations to split an Order across.
+    assert.match(confirmMigration, /drop function if exists public\.allocate_stack_order/);
+    assert.doesNotMatch(orderRoutes, /'\/:id\/allocate'/);
+    assert.doesNotMatch(orderService, /allocate_stack_order/);
+    assert.match(orderRoutes, /'\/:id\/items\/:itemId\/confirm'/);
+    assert.match(orderRoutes, /requirePermission\(PERMISSION_CODE\.SUPPLY_ORDER_CONFIRM_ALLOCATION\)/);
+    assert.match(orderController, /new OrderService\(request\.server\)\.confirmStackItem/);
+    assert.match(orderService, /'confirm_stack_order_item'/);
+    // The code stays: it still grants read access to Orders.
     assert.match(permissionCodes, /SUPPLY_ORDER_ALLOCATE: "supply\.order\.allocate"/);
-    assert.match(orderRoutes, /'\/:id\/allocate'/);
-    assert.match(orderRoutes, /requirePermission\(PERMISSION_CODE\.SUPPLY_ORDER_ALLOCATE\)/);
-    assert.match(orderController, /new OrderService\(request\.server\)\.allocate/);
-    assert.match(orderService, /rpc\('allocate_stack_order'/);
-    assert.doesNotMatch(orderService, /available_stack_quantity desc/);
   });
 
   it('derives approved stacks exactly without rounding', () => {
     assert.match(
-      allocationFunction,
-      /v_required_stack_quantity\s*:=\s*v_item\.quantity_approved \/ v_item\.set_per_qty/,
+      confirmFunction,
+      /v_approved_stack := v_item\.quantity_approved \/ v_item\.set_per_qty/,
     );
+    assert.match(confirmFunction, /mod\(v_item\.quantity_approved, v_item\.set_per_qty\) <> 0/);
+    assert.doesNotMatch(confirmFunction, /round\(|floor\(|ceil\(/i);
+  });
+
+  it('lets the count go above or below the approval, but never without a reason', () => {
+    assert.doesNotMatch(confirmFunction, /ACTUAL_STACK_EXCEEDS_EXPECTED/);
+    assert.match(confirmFunction, /if p_actual_stack_quantity <> v_approved_stack then/);
+    assert.match(confirmFunction, /message = 'CONFIRM_REASON_REQUIRED'/);
+    // The reason's own direction column decides which side it may be used on.
+    assert.match(confirmFunction, /\(p_actual_stack_quantity < v_approved_stack\)\s*<> \(v_reason\.direction = 'LOWER'\)/);
+    assert.match(confirmFunction, /message = 'CONFIRM_REASON_DIRECTION_MISMATCH'/);
+  });
+
+  it('never branches on a reason code; corrects_stock decides', () => {
+    assert.match(confirmFunction, /if v_reason\.corrects_stock then/);
+    assert.doesNotMatch(confirmFunction, /'NOT_AVAILABLE'|'NEGOTIATED_(LOWER|HIGHER)'/);
+  });
+
+  it('corrects only the phantom part of a shortfall and opens a recount', () => {
     assert.match(
-      allocationFunction,
-      /mod\(v_item\.quantity_approved, v_item\.set_per_qty\) <> 0/,
+      confirmFunction,
+      /v_correction_stack := least\(\s*v_approved_stack - p_actual_stack_quantity,\s*greatest\(v_balance\.stack_quantity - p_actual_stack_quantity, 0\)\s*\)/,
     );
-    assert.doesNotMatch(allocationFunction, /round\(|floor\(|ceil\(/i);
+    assert.match(confirmFunction, /'OPEN',\s*'CONFIRMATION'/);
+    assert.match(confirmFunction, /code = 'DISCREPANCY_CORRECTION'/);
   });
 
-  it('uses largest-first deterministic ordering and supports split rows', () => {
-    assert.match(allocationFunction, /working\.available_stack_quantity desc/);
-    assert.match(allocationFunction, /working\.storage_location_code asc/);
-    assert.match(allocationFunction, /working\.stock_balance_id asc/);
-    assert.match(allocationFunction, /least\(\s*v_balance\.available_stack_quantity,\s*v_remaining_stack_quantity/);
-    assert.match(allocationFunction, /insert into public\.order_item_allocations/);
-    assert.match(allocationFunction, /v_remaining_stack_quantity\s*:=\s*v_remaining_stack_quantity - v_take_stack_quantity/);
+  it('no longer re-allocates a shortfall into new unconfirmed rows', () => {
+    assert.doesNotMatch(confirmFunction, /REALLOCATED|INSUFFICIENT|v_new_allocations/);
+    assert.match(confirmMigration, /drop function if exists public\.confirm_stack_allocation_actual/);
   });
 
-  it('tracks whole-order working availability and rolls the function back on shortage', () => {
-    assert.match(allocationFunction, /pg_temp\.stack_allocation_working/);
-    assert.match(allocationFunction, /update pg_temp\.stack_allocation_working/);
-    assert.match(allocationFunction, /message = 'INSUFFICIENT_STACK_STOCK'/);
-    assert.match(allocationFunction, /shortage_stack_quantity/);
+  it('refuses a second confirmation of the same item', () => {
+    assert.match(confirmFunction, /message = 'ALLOCATION_ALREADY_CONFIRMED'/);
+    assert.match(labelsMigration, /create unique index order_item_allocations_order_item_key/);
   });
 
-  it('scopes eligible stock by every required dimension and active location', () => {
-    for (const expression of [
-      /working\.supply_id = v_item\.supply_id/,
-      /working\.provider_id = v_item\.provider_id/,
-      /working\.area_id = v_order\.from_area_id/,
-      /working\.set_per_qty = v_item\.set_per_qty/,
-      /balance\.stack_quantity > 0/,
-      /location\.is_active = true/,
-      /location\.is_deleted = false/,
-      /location\.area_id = balance\.area_id/,
-    ]) assert.match(allocationFunction, expression);
-    assert.match(allocationFunction, /balance\.set_per_qty is not null/);
-  });
-
-  it('persists an initial proposal only and rejects repeat/non-approved allocation', () => {
-    assert.match(allocationFunction, /v_status_code <> 'APPROVED'/);
-    assert.match(allocationFunction, /message = 'ALLOCATION_ALREADY_EXISTS'/);
-    assert.match(allocationFunction, /category\.code = 'KIEN_SAT_TC'/);
-    assert.match(allocationFunction, /v_take_stack_quantity,\s*null,\s*null,\s*null,\s*now\(\),\s*null/);
-    assert.doesNotMatch(allocationFunction, /update public\.stock_balances/i);
-    assert.doesNotMatch(allocationFunction, /insert into public\.stock_transactions/i);
-    assert.doesNotMatch(allocationFunction, /reserved_(stack_)?quantity|reservation|stock hold/i);
-  });
-
-  it('returns allocation relations through the Order detail select without N+1 queries', () => {
+  it('returns confirmations through the Order detail select without N+1 queries', () => {
     assert.match(orderService, /allocations:order_item_allocations!order_item_allocations_order_item_fkey/);
-    assert.match(orderService, /stock_balance:stock_balances!order_item_allocations_stock_balance_fkey/);
-    assert.match(orderService, /location:storage_locations!stock_balances_storage_location_id_fkey/);
-    assert.match(orderService, /actual_stack_quantity/);
+    assert.match(orderService, /reason:allocation_confirm_reasons!order_item_allocations_reason_fkey/);
+    assert.match(orderService, /location_labels:stock_balance_locations!stock_balance_locations_balance_fkey/);
+    assert.doesNotMatch(orderService, /stock_balances_storage_location_id_fkey/);
   });
 });

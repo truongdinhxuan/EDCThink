@@ -21,6 +21,9 @@ import {
   assertPositiveQuantity,
   assertRejectedReason,
   calculateStockAvailability,
+  assertWholeStackApproval,
+  findApprovalStockExcess,
+  isOrderItemIssueClosed,
   isOrderStatusUpdateExpired,
   ORDER_STATUS_UPDATE_EXPIRED_MESSAGE,
   OrderRuleError,
@@ -29,7 +32,7 @@ import { hasPermission } from './authorization.service';
 import type {
   ApproveOrderBody,
   CancelOrderBody,
-  ConfirmAllocationBody,
+  ConfirmStackItemBody,
   CreateOrderBody,
   IssueOrderBody,
   OrderListItemInput,
@@ -81,7 +84,10 @@ interface OrderItemData {
   shortage_quantity?: number;
   has_stock_shortage?: boolean;
   available_stack_quantity?: number;
+  /** Labels of the pooled row this item draws from: where to pick. */
+  locations?: AllocationLocationData[];
   allocations?: OrderItemAllocationData[];
+  supply?: { id: string; code: string } | Array<{ id: string; code: string }> | null;
 }
 
 interface AllocationLocationData {
@@ -92,24 +98,39 @@ interface AllocationLocationData {
 
 interface AllocationStockBalanceData {
   id: string;
-  storage_location_id: string;
-  location: AllocationLocationData | AllocationLocationData[] | null;
+  location_labels?: Array<{
+    storage_location: AllocationLocationData | AllocationLocationData[] | null;
+  }> | null;
 }
 
+interface AllocationReasonData {
+  id: string;
+  code: string;
+  name: string;
+  direction: 'LOWER' | 'HIGHER';
+  corrects_stock: boolean;
+}
+
+/**
+ * The stack-count confirmation of one order item. expected = approved stacks,
+ * actual = confirmed stacks; status goes CONFIRMED -> ISSUED.
+ */
 interface OrderItemAllocationData {
   id: string;
   order_item_id: string;
   stock_balance_id: string;
   expected_stack_quantity: number | string;
   actual_stack_quantity: number | string | null;
-  status: string | null;
-  discrepancy_reason: string | null;
+  status: 'CONFIRMED' | 'ISSUED' | null;
+  reason_note: string | null;
   allocated_at: string;
   confirmed_at: string | null;
+  issued_at: string | null;
   is_active: boolean;
   is_deleted: boolean;
+  reason?: AllocationReasonData | AllocationReasonData[] | null;
   stock_balance?: AllocationStockBalanceData | AllocationStockBalanceData[] | null;
-  location?: AllocationLocationData | null;
+  locations?: AllocationLocationData[];
   discrepancies?: InventoryDiscrepancyData[];
 }
 
@@ -131,6 +152,7 @@ interface InventoryDiscrepancyData {
   difference_stack_quantity: number | string;
   reason: string | null;
   status: 'OPEN' | 'RESOLVED';
+  source: 'CONFIRMATION' | 'ISSUE';
   reported_by: string;
   reported_at: string;
   resolved_by: string | null;
@@ -146,6 +168,9 @@ interface StockBalanceAvailabilityRow {
   quantity: number | string;
   set_per_qty: number | string | null;
   stack_quantity: number | string | null;
+  location_labels?: Array<{
+    storage_location: AllocationLocationData | AllocationLocationData[] | null;
+  }> | null;
 }
 
 interface SupplyProviderLookup {
@@ -335,43 +360,28 @@ function createOrderRpcError(error: SupabaseErrorLike): never {
   serviceError(400, code === 'ORDER_CREATE_FAILED' ? 'Không thể tạo Order.' : code, details, code);
 }
 
-function allocationRpcError(error: SupabaseErrorLike): never {
-  const code = error.message ?? 'ALLOCATION_FAILED';
+/**
+ * review_order repeats the service's approval checks under the Order lock, so
+ * stock can have moved in between; its codes are mapped rather than regex-matched.
+ */
+function approvalRpcError(error: SupabaseErrorLike): never {
+  const code = error.message ?? '';
   const details = parseRpcDetails(error.details);
-  const failures: Record<string, { status: number; message: string }> = {
-    ALLOCATION_FORBIDDEN: {
-      status: 403,
-      message: 'Missing supply.order.allocate permission',
-    },
-    ORDER_NOT_FOUND: { status: 404, message: 'Order not found' },
-    ORDER_STATUS_NOT_FOUND: {
-      status: 409,
-      message: 'Trạng thái Order không tồn tại hoặc đã ngừng hoạt động.',
-    },
-    ORDER_NOT_APPROVED: {
-      status: 409,
-      message: 'Chỉ Order APPROVED mới được phân bổ vị trí.',
-    },
-    ALLOCATION_ALREADY_EXISTS: {
-      status: 409,
-      message: 'Order đã được phân bổ vị trí.',
-    },
-    NO_STACK_ITEMS: {
-      status: 409,
-      message: 'Order không có vật tư KIEN_SAT_TC cần phân bổ.',
-    },
-    STACK_APPROVAL_NOT_COMPATIBLE: {
-      status: 409,
-      message: 'Số lượng đã duyệt không tương ứng với quy cách chồng của vật tư.',
-    },
-    INSUFFICIENT_STACK_STOCK: {
-      status: 409,
-      message: 'Không đủ tồn kho để phân bổ.',
-    },
-  };
-  const failure = failures[code];
-  if (failure) serviceError(failure.status, failure.message, details);
-  serviceError(400, 'Không thể phân bổ vị trí cho Order.');
+  if (code === 'ORDER_APPROVAL_EXCEEDS_STOCK') {
+    serviceError(
+      409,
+      `Số duyệt vượt tồn khu vực cấp: ${details?.supply_code ?? 'vật tư'} duyệt ${details?.approved_quantity ?? '?'}, tồn ${details?.available_quantity ?? '?'}.`,
+      details,
+      code,
+    );
+  }
+  if (code === 'STACK_APPROVAL_NOT_COMPATIBLE') {
+    serviceError(409, 'Kiện tiêu chuẩn phải duyệt theo bội số SET/chồng.', details, code);
+  }
+  if (code === 'Invalid approved quantity or order item') {
+    serviceError(400, 'Số duyệt phải là số nguyên không âm và thuộc đúng Order.', details, 'ORDER_APPROVAL_INVALID');
+  }
+  rpcError(error);
 }
 
 function confirmationRpcError(error: SupabaseErrorLike): never {
@@ -382,29 +392,30 @@ function confirmationRpcError(error: SupabaseErrorLike): never {
       status: 403,
       message: 'Missing supply.order.confirm_allocation permission',
     },
-    ALLOCATION_NOT_FOUND: { status: 404, message: 'Allocation not found' },
     ORDER_ITEM_NOT_FOUND: { status: 404, message: 'Order item not found' },
-    ORDER_NOT_FOUND: { status: 404, message: 'Order not found' },
-    STOCK_BALANCE_NOT_FOUND: { status: 409, message: 'Stock balance not found' },
     ACTUAL_STACK_INVALID: {
       status: 400,
-      message: 'Số chồng thực tế phải lớn hơn hoặc bằng 0.',
-    },
-    ACTUAL_STACK_EXCEEDS_EXPECTED: {
-      status: 400,
-      message: 'Số chồng thực tế không được vượt số chồng dự kiến.',
+      message: 'Số chồng xác nhận phải là số nguyên lớn hơn hoặc bằng 0.',
     },
     ALLOCATION_ALREADY_CONFIRMED: {
       status: 409,
-      message: 'Allocation đã được xác nhận trước đó.',
-    },
-    DISCREPANCY_CORRECTION_STOCK_CONFLICT: {
-      status: 409,
-      message: 'Tồn hiện tại không đủ để ghi nhận phần chênh lệch.',
+      message: 'Dòng vật tư này đã được xác nhận số chồng trước đó.',
     },
     ORDER_NOT_CONFIRMABLE: {
       status: 409,
       message: 'Order hoặc OrderItem không ở trạng thái có thể xác nhận.',
+    },
+    STACK_APPROVAL_NOT_COMPATIBLE: {
+      status: 409,
+      message: 'Số lượng đã duyệt không tương thích với quy cách SET/chồng.',
+    },
+    CONFIRM_REASON_REQUIRED: {
+      status: 400,
+      message: 'Số chồng xác nhận khác số đã duyệt: phải chọn lý do.',
+    },
+    CONFIRM_REASON_DIRECTION_MISMATCH: {
+      status: 400,
+      message: 'Lý do không khớp chiều chênh lệch (nhận ít hơn / nhận thêm).',
     },
     DISCREPANCY_TRANSACTION_TYPE_NOT_FOUND: {
       status: 500,
@@ -412,7 +423,7 @@ function confirmationRpcError(error: SupabaseErrorLike): never {
     },
   };
   const failure = failures[code];
-  if (failure) serviceError(failure.status, failure.message, details);
+  if (failure) serviceError(failure.status, failure.message, details, code);
   serviceError(400, code, details);
 }
 
@@ -436,27 +447,11 @@ function issueRpcError(error: SupabaseErrorLike): never {
     },
     STACK_ALLOCATIONS_NOT_CONFIRMED: {
       status: 409,
-      message: 'Chưa xác nhận đầy đủ số chồng thực tế trước khi xuất hàng.',
-    },
-    STACK_ISSUE_ALLOCATION_INCOMPLETE: {
-      status: 409,
-      message: 'Số chồng thực tế đã xác nhận chưa đủ số lượng được duyệt.',
-    },
-    STACK_APPROVAL_NOT_COMPATIBLE: {
-      status: 409,
-      message: 'Số lượng đã duyệt không tương thích với quy cách SET/chồng.',
-    },
-    STACK_PARTIAL_ISSUE_NOT_SUPPORTED: {
-      status: 409,
-      message: 'Kiện sắt tiêu chuẩn hiện chưa hỗ trợ xuất một phần.',
-    },
-    STACK_ISSUE_STOCK_CONFLICT: {
-      status: 409,
-      message: 'Tồn kho tại vị trí đã thay đổi sau khi xác nhận. Vui lòng kiểm tra lại trước khi xuất.',
+      message: 'Còn vật tư kiện tiêu chuẩn chưa xác nhận số chồng trước khi xuất hàng.',
     },
     NORMAL_ISSUE_STOCK_CONFLICT: {
       status: 409,
-      message: 'Tồn kho tại vị trí không đủ để cấp hàng.',
+      message: 'Tồn kho không đủ để cấp hàng.',
     },
     ORDER_ISSUE_EXCEEDS_APPROVED: {
       status: 409,
@@ -532,11 +527,15 @@ const ORDER_DETAIL_SELECT = `
       expected_stack_quantity,
       actual_stack_quantity,
       status,
-      discrepancy_reason,
+      reason_note,
       allocated_at,
       confirmed_at,
+      issued_at,
       is_active,
       is_deleted,
+      reason:allocation_confirm_reasons!order_item_allocations_reason_fkey(
+        id, code, name, direction, corrects_stock
+      ),
       discrepancies:inventory_discrepancies!inventory_discrepancies_allocation_fkey(
         id,
         stock_balance_id,
@@ -548,6 +547,7 @@ const ORDER_DETAIL_SELECT = `
         difference_stack_quantity,
         reason,
         status,
+        source,
         reported_by,
         reported_at,
         resolved_by,
@@ -562,9 +562,10 @@ const ORDER_DETAIL_SELECT = `
       ),
       stock_balance:stock_balances!order_item_allocations_stock_balance_fkey(
         id,
-        storage_location_id,
-        location:storage_locations!stock_balances_storage_location_id_fkey(
-          id, code, name
+        location_labels:stock_balance_locations!stock_balance_locations_balance_fkey(
+          storage_location:storage_locations!stock_balance_locations_location_fkey(
+            id, code, name
+          )
         )
       )
     )
@@ -626,6 +627,10 @@ export class OrderService {
           .filter((allocation) => allocation.is_active && !allocation.is_deleted)
           .map((allocation) => {
           const stockBalance = firstRelation(allocation.stock_balance ?? null);
+          const locations = (stockBalance?.location_labels ?? [])
+            .map((label) => firstRelation(label.storage_location))
+            .filter((location): location is AllocationLocationData => location !== null)
+            .sort((left, right) => left.code.localeCompare(right.code));
           return {
             id: allocation.id,
             order_item_id: allocation.order_item_id,
@@ -635,12 +640,14 @@ export class OrderService {
               ? null
               : Number(allocation.actual_stack_quantity),
             status: allocation.status,
-            discrepancy_reason: allocation.discrepancy_reason,
+            reason: firstRelation(allocation.reason ?? null),
+            reason_note: allocation.reason_note,
             allocated_at: allocation.allocated_at,
             confirmed_at: allocation.confirmed_at,
+            issued_at: allocation.issued_at,
             is_active: allocation.is_active,
             is_deleted: allocation.is_deleted,
-            location: firstRelation(stockBalance?.location ?? null),
+            locations,
             discrepancies: (allocation.discrepancies ?? []).map((discrepancy) => ({
               ...discrepancy,
               expected_stack_quantity: Number(discrepancy.expected_stack_quantity),
@@ -690,31 +697,35 @@ export class OrderService {
     const { data, error } = await this.db
       .from('stock_balances')
       .select(`
-        supply_id,
-        provider_id,
-        quantity,
-        set_per_qty,
-        stack_quantity,
-        storage_location:storage_locations!stock_balances_storage_location_id_fkey!inner(id)
+        supply_id, provider_id, quantity, set_per_qty, stack_quantity,
+        location_labels:stock_balance_locations!stock_balance_locations_balance_fkey(
+          storage_location:storage_locations!stock_balance_locations_location_fkey(id, code, name)
+        )
       `)
       .eq('area_id', order.from_area_id)
       .eq('is_active', true)
       .eq('is_deleted', false)
-      .eq('storage_location.is_active', true)
-      .eq('storage_location.is_deleted', false)
       .in('supply_id', supplyIds);
 
     if (error) databaseError(error, 'Cannot calculate order stock availability');
 
     const availableByDimension = new Map<string, number>();
     const availableStacksByDimension = new Map<string, number>();
-    for (const balance of (data ?? []) as StockBalanceAvailabilityRow[]) {
-      const quantity = Number(balance.quantity);
-      if (!Number.isFinite(quantity) || quantity <= 0) continue;
+    // Where to go and pick, known before anyone confirms a count. Collected even
+    // for empty rows: a label on a row the books show as empty is exactly where
+    // a picker should look when the books are wrong.
+    const locationsByDimension = new Map<string, AllocationLocationData[]>();
+    for (const balance of (data ?? []) as unknown as StockBalanceAvailabilityRow[]) {
       const stackDimension = balance.set_per_qty === null
         ? 'normal'
         : String(Number(balance.set_per_qty));
       const key = `${balance.supply_id}:${balance.provider_id}:${stackDimension}`;
+      locationsByDimension.set(key, (balance.location_labels ?? [])
+        .map((label) => firstRelation(label.storage_location))
+        .filter((location): location is AllocationLocationData => location !== null)
+        .sort((left, right) => left.code.localeCompare(right.code)));
+      const quantity = Number(balance.quantity);
+      if (!Number.isFinite(quantity) || quantity <= 0) continue;
       availableByDimension.set(
         key,
         (availableByDimension.get(key) ?? 0) + quantity,
@@ -746,6 +757,7 @@ export class OrderService {
           available_stack_quantity: item.set_per_qty === null
             ? undefined
             : (availableStacksByDimension.get(key) ?? 0),
+          locations: locationsByDimension.get(key) ?? [],
         };
       }),
     };
@@ -863,15 +875,10 @@ export class OrderService {
     if (stackItems.length > 0) {
       const { data: balances, error: balanceError } = await this.db
         .from('stock_balances')
-        .select(`
-          supply_id, provider_id, set_per_qty, stack_quantity,
-          storage_location:storage_locations!stock_balances_storage_location_id_fkey!inner(id)
-        `)
+        .select('supply_id, provider_id, set_per_qty, stack_quantity')
         .eq('area_id', fromAreaId)
         .eq('is_active', true)
         .eq('is_deleted', false)
-        .eq('storage_location.is_active', true)
-        .eq('storage_location.is_deleted', false)
         .gt('stack_quantity', 0)
         .not('set_per_qty', 'is', null)
         .in('supply_id', [...new Set(stackItems.map((item) => item.supply_id))])
@@ -1217,6 +1224,11 @@ export class OrderService {
       const approval = approvalMap.get(item.id);
       if (!approval) serviceError(400, `Missing approval for order item ${item.id}`);
       try {
+        const quantityApproved = assertApprovedQuantity(
+          approval.quantity_approved,
+          Number(item.quantity_requested),
+        );
+        assertWholeStackApproval(quantityApproved, item.set_per_qty);
         return {
           id: item.id,
           order_id: item.order_id,
@@ -1224,10 +1236,7 @@ export class OrderService {
           provider_id: item.provider_id,
           unit_id: item.unit_id,
           quantity_requested: Number(item.quantity_requested),
-          quantity_approved: assertApprovedQuantity(
-            approval.quantity_approved,
-            Number(item.quantity_requested),
-          ),
+          quantity_approved: quantityApproved,
           quantity_issued:
             item.quantity_issued === null ? null : Number(item.quantity_issued),
           note: item.note,
@@ -1236,6 +1245,29 @@ export class OrderService {
         return translateRuleError(error);
       }
     });
+
+    // Snapshot check against the stock attached by findOrder. Approval reserves
+    // nothing, so issue still revalidates; this only stops promising more than
+    // the source Area holds at the moment of approval.
+    const excess = findApprovalStockExcess(order.order_items.map((item, index) => ({
+      supply_id: item.supply_id,
+      provider_id: item.provider_id,
+      set_per_qty: item.set_per_qty,
+      quantity_approved: updates[index].quantity_approved,
+      available_quantity: item.available_quantity ?? 0,
+    })));
+    if (excess) {
+      const supplyCode = firstRelation(
+        order.order_items.find((item) =>
+          item.supply_id === excess.supply_id)?.supply ?? null,
+      )?.code ?? excess.supply_id;
+      serviceError(
+        409,
+        `Số duyệt vượt tồn khu vực cấp: ${supplyCode} duyệt ${excess.approved_quantity}, tồn ${excess.available_quantity}.`,
+        { ...excess, supply_code: supplyCode },
+        'ORDER_APPROVAL_EXCEEDS_STOCK',
+      );
+    }
 
     const { error: orderError } = await this.db.rpc('review_order', {
       p_order_id: orderId,
@@ -1248,65 +1280,39 @@ export class OrderService {
       p_reason: null,
       p_note: body.note ?? null,
     });
-    if (orderError) rpcError(orderError);
+    if (orderError) approvalRpcError(orderError);
     return this.finishStatusTransition(actor, order);
   }
 
-  async allocate(actor: OrderActor, orderId: string) {
-    if (!hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_ALLOCATE)) {
-      serviceError(403, 'Missing supply.order.allocate permission');
-    }
-    // Reads the Order up front purely to test the deadline; the RPC below
-    // mutates it, so the copy returned at the end is fetched again anyway.
-    this.assertWithinStatusUpdateWindow(await this.findOrder(orderId));
-    const { error } = await this.db.rpc('allocate_stack_order', {
-      p_order_id: orderId,
-      p_actor_id: actor.id,
-    });
-    if (error) allocationRpcError(error);
-    return this.findOrder(orderId);
-  }
-
-  async confirmAllocation(
+  /**
+   * Data vật tư's stack count for one KIEN_SAT_TC item. It may differ from the
+   * approval in either direction; the RPC demands a reason when it does and
+   * decides from that reason whether the books are corrected.
+   */
+  async confirmStackItem(
     actor: OrderActor,
     orderId: string,
-    allocationId: string,
-    body: ConfirmAllocationBody,
+    orderItemId: string,
+    body: ConfirmStackItemBody,
   ) {
     if (!hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_CONFIRM_ALLOCATION)) {
       serviceError(403, 'Missing supply.order.confirm_allocation permission');
     }
 
-    const { data: allocation, error: allocationError } = await this.db
-      .from('order_item_allocations')
-      .select(`
-        id,
-        order_item:order_items!order_item_allocations_order_item_fkey!inner(
-          order_id
-        )
-      `)
-      .eq('id', allocationId)
-      .eq('is_active', true)
-      .eq('is_deleted', false)
-      .maybeSingle();
-    if (allocationError) databaseError(allocationError, 'Cannot validate allocation');
-    const allocationItem = firstRelation(
-      (allocation as unknown as {
-        order_item: { order_id: string } | Array<{ order_id: string }> | null;
-      } | null)?.order_item ?? null,
-    );
-    if (!allocation || allocationItem?.order_id !== orderId) {
-      serviceError(404, 'Allocation not found for this Order');
+    const order = await this.findOrder(orderId);
+    if (!order.order_items.some((item) => item.id === orderItemId)) {
+      serviceError(404, 'Order item not found for this Order');
     }
-    this.assertWithinStatusUpdateWindow(await this.findOrder(orderId));
+    this.assertWithinStatusUpdateWindow(order);
 
     const { data: confirmation, error } = await this.db.rpc(
-      'confirm_stack_allocation_actual',
+      'confirm_stack_order_item',
       {
-        p_allocation_id: allocationId,
+        p_order_item_id: orderItemId,
         p_actual_stack_quantity: body.actual_stack_quantity,
+        p_reason_code: body.reason_code?.trim() || null,
+        p_reason_note: body.reason_note?.trim() || null,
         p_actor_id: actor.id,
-        p_reason: body.reason?.trim() || null,
       },
     );
     if (error) confirmationRpcError(error);
@@ -1371,13 +1377,8 @@ export class OrderService {
         serviceError(400, 'items must contain at least one issue');
       }
       for (const item of issueItems) {
-        if (!item.order_item_id || !Array.isArray(item.issues) || item.issues.length === 0) {
-          serviceError(400, 'Each order item must contain issues');
-        }
-        for (const issue of item.issues) {
-          if (!issue.storage_location_id) serviceError(400, 'storage_location_id is required');
-          assertPositiveQuantity(issue.quantity, 'issue quantity');
-        }
+        if (!item.order_item_id) serviceError(400, 'order_item_id is required');
+        assertPositiveQuantity(item.quantity, 'issue quantity');
       }
     } catch (error) {
       translateRuleError(error);
@@ -1438,11 +1439,7 @@ export class OrderService {
       translateRuleError(error);
     }
 
-    const hasPendingIssue = order.order_items.some(
-      (item) =>
-        item.quantity_approved === null ||
-        Number(item.quantity_issued ?? 0) < Number(item.quantity_approved),
-    );
+    const hasPendingIssue = order.order_items.some((item) => !isOrderItemIssueClosed(item));
     if (hasPendingIssue) serviceError(409, 'Order still has quantity pending issue');
 
     const completedStatusId = await this.getStatusId(ORDER_STATUS.COMPLETED);

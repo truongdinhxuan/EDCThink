@@ -213,7 +213,6 @@ export interface StockBalanceRecord {
   supply_id: string;
   provider_id: string;
   area_id: string;
-  storage_location_id: string;
   quantity: number;
   set_per_qty: number | null;
   stack_quantity: number | null;
@@ -315,14 +314,41 @@ export interface OrderItemAllocationRecord {
   stock_balance_id: string;
   expected_stack_quantity: number;
   actual_stack_quantity: number | null;
-  status: string | null;
+  status: 'CONFIRMED' | 'ISSUED' | null;
   discrepancy_reason: string | null;
+  reason_id: string | null;
+  reason_note: string | null;
+  confirmed_by: string | null;
   allocated_at: string;
   confirmed_at: string | null;
+  issued_at: string | null;
   is_active: boolean;
   is_deleted: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface AllocationConfirmReasonRecord {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  direction: 'LOWER' | 'HIGHER';
+  corrects_stock: boolean;
+  sort_order: number;
+  is_system: boolean;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StockBalanceLocationRecord {
+  stock_balance_id: string;
+  storage_location_id: string;
+  area_id: string;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface InventoryDiscrepancyRecord {
@@ -336,6 +362,7 @@ export interface InventoryDiscrepancyRecord {
   difference_stack_quantity: number;
   reason: string | null;
   status: 'OPEN' | 'RESOLVED';
+  source: 'CONFIRMATION' | 'ISSUE';
   reported_by: string;
   reported_at: string;
   resolved_by: string | null;
@@ -352,7 +379,8 @@ export interface StockTransactionRecord {
   supply_id: string;
   provider_id: string;
   area_id: string;
-  storage_location_id: string;
+  /** Historical only: null on rows written after stock stopped tracking locations. */
+  storage_location_id: string | null;
   order_id: string | null;
   order_item_id: string | null;
   inventory_discrepancy_id: string | null;
@@ -457,12 +485,14 @@ export interface DatabaseRecordMap {
   supply_providers: SupplyProviderRecord;
   storage_locations: StorageLocationRecord;
   stock_balances: StockBalanceRecord;
+  stock_balance_locations: StockBalanceLocationRecord;
   orders: OrderRecord;
   supply_shift_order_sheets: SupplyShiftOrderSheetRecord;
   notifications: NotificationRecord;
   notification_recipients: NotificationRecipientRecord;
   order_items: OrderItemRecord;
   order_item_allocations: OrderItemAllocationRecord;
+  allocation_confirm_reasons: AllocationConfirmReasonRecord;
   inventory_discrepancies: InventoryDiscrepancyRecord;
   stock_transactions: StockTransactionRecord;
   order_statuses: OrderStatusRecord;

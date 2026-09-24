@@ -89,6 +89,7 @@ export const queryKeys = {
   orderStatuses: resourceKeys('order-statuses'),
   stockTransactionTypes: resourceKeys('stock-transaction-types'),
   adjustmentReasons: resourceKeys('adjustment-reasons'),
+  allocationConfirmReasons: resourceKeys('allocation-confirm-reasons'),
   orderRevisionActions: resourceKeys('order-revision-actions'),
   milkrunTrips: resourceKeys('milkrun-trips'),
   milkrunRacks: resourceKeys('milkrun-racks'),

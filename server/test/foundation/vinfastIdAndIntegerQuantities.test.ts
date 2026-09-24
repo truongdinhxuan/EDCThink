@@ -137,8 +137,7 @@ describe('Supply quantities are whole numbers', () => {
       { type: 'integer', minimum: 0 },
     );
     assert.deepEqual(
-      orderIssueSchema.body.properties.items.items.properties.issues.items
-        .properties.quantity,
+      orderIssueSchema.body.properties.items.items.properties.quantity,
       { type: 'integer', minimum: 1 },
     );
     const adjustment = schemaProperties(stockAdjustmentCreateSchema);

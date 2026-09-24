@@ -423,18 +423,13 @@ export class SuppliesService {
 
     const { data: balances, error: balanceError } = await this.db
       .from('stock_balances')
-      .select(`
-        quantity,
-        storage_location:storage_locations!stock_balances_storage_location_id_fkey!inner(id)
-      `)
+      .select('quantity')
       .eq('supply_id', id)
       .eq('provider_id', providerId)
       .eq('area_id', areaId)
       .is('set_per_qty', null)
       .eq('is_active', true)
-      .eq('is_deleted', false)
-      .eq('storage_location.is_active', true)
-      .eq('storage_location.is_deleted', false);
+      .eq('is_deleted', false);
     if (balanceError) databaseError(balanceError, 'Không thể tính tồn khả dụng');
 
     const availableQuantity = ((balances ?? []) as Array<{ quantity: number | string }>)

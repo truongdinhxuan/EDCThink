@@ -50,7 +50,8 @@ export interface CreateStockAdjustmentBody {
   supply_id: string;
   provider_id: string;
   area_id: string;
-  storage_location_id: string;
+  /** Labels to add to the pooled row. Never a place the quantity is kept. */
+  location_ids?: string[];
   type?: StockAdjustmentType;
   transaction_type_id?: string;
   transaction_type_code?: StockAdjustmentType;
@@ -61,6 +62,10 @@ export interface CreateStockAdjustmentBody {
   reason?: string;
   reason_note?: string;
   note?: string | null;
+}
+
+export interface ReplaceStockBalanceLocationsBody {
+  location_ids: string[];
 }
 
 export interface StockActor {

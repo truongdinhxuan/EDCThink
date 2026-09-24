@@ -2,7 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type {
   ApproveOrderBody,
   CancelOrderBody,
-  ConfirmAllocationBody,
+  ConfirmStackItemBody,
   CreateOrderBody,
   IssueOrderBody,
   OrderListQuery,
@@ -100,25 +100,17 @@ export const approveOrder = (request: FastifyRequest, reply: FastifyReply) =>
     ),
   );
 
-export const allocateOrder = (request: FastifyRequest, reply: FastifyReply) =>
-  respond(request, reply, () =>
-    new OrderService(request.server).allocate(
-      actorFrom(request),
-      (request.params as { id: string }).id,
-    ),
-  );
-
-export const confirmOrderAllocation = (
+export const confirmOrderStackItem = (
   request: FastifyRequest,
   reply: FastifyReply,
 ) => {
-  const params = request.params as { id: string; allocationId: string };
+  const params = request.params as { id: string; itemId: string };
   return respond(request, reply, () =>
-    new OrderService(request.server).confirmAllocation(
+    new OrderService(request.server).confirmStackItem(
       actorFrom(request),
       params.id,
-      params.allocationId,
-      request.body as ConfirmAllocationBody,
+      params.itemId,
+      request.body as ConfirmStackItemBody,
     ),
   );
 };

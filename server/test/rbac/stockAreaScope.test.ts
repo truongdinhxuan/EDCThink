@@ -92,8 +92,14 @@ test('services scope before applying the caller own areaId filter', () => {
 test('every stock write path checks the Area before it reaches the RPC', () => {
   const adjustments = read('src', 'services', 'stock-adjustments.service.ts');
   const assertAt = adjustments.indexOf('assertCanWrite(body.area_id)');
-  const rpcAt = adjustments.indexOf("rpc('apply_stock_adjustment_v4'");
+  const rpcAt = adjustments.indexOf("rpc('apply_stock_adjustment_v5'");
   assert.ok(assertAt > 0 && rpcAt > assertAt);
+
+  // Relabelling a row is a write to that Area too.
+  const balances = read('src', 'services', 'stock-balances.service.ts');
+  const labelAssertAt = balances.indexOf('this.areaAccess.assertCanWrite(');
+  const labelRpcAt = balances.indexOf("rpc('replace_stock_balance_locations'");
+  assert.ok(labelAssertAt > 0 && labelRpcAt > labelAssertAt);
 
   const discrepancies = read('src', 'services', 'inventory-discrepancies.service.ts');
   assert.match(discrepancies, /assertCanWrite\(/);

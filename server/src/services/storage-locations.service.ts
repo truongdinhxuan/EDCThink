@@ -50,8 +50,10 @@ export class StorageLocationsService {
     if (!currentAreaId) fail(404, 'Không tìm thấy vị trí lưu kho');
     if (currentAreaId === nextAreaId) return;
 
+    // Labels pin a location to its Area through a composite key, so moving a
+    // labelled location would be refused by the database anyway.
     const references = await Promise.all([
-      this.db.from('stock_balances').select('id', { count: 'exact', head: true }).eq('storage_location_id', id),
+      this.db.from('stock_balance_locations').select('stock_balance_id', { count: 'exact', head: true }).eq('storage_location_id', id),
       this.db.from('stock_transactions').select('id', { count: 'exact', head: true }).eq('storage_location_id', id),
     ]);
     const referenceError = references.find((result) => result.error)?.error;

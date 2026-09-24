@@ -5,9 +5,16 @@ import { createListQuerySchema } from './pagination';
 const uuid = { type: 'string', format: 'uuid' } as const;
 
 export const STOCK_BALANCE_SORT_FIELDS = [
-  'id', 'quantity', 'supply_id', 'provider_id', 'area_id', 'storage_location_id',
+  'id', 'quantity', 'supply_id', 'provider_id', 'area_id',
   'created_at', 'updated_at',
 ] as const;
+
+const locationIds = {
+  type: 'array',
+  maxItems: 50,
+  uniqueItems: true,
+  items: uuid,
+} as const;
 export const STOCK_TRANSACTION_SORT_FIELDS = [
   'id', 'type', 'transaction_type_id', 'quantity', 'before_quantity', 'after_quantity', 'supply_id',
   'provider_id', 'area_id', 'storage_location_id', 'created_by', 'created_at',
@@ -67,6 +74,21 @@ export const inventoryDiscrepancyResolveSchema: FastifySchema = {
   },
 };
 
+export const stockBalanceLocationsReplaceSchema: FastifySchema = {
+  params: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id'],
+    properties: { id: uuid },
+  },
+  body: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['location_ids'],
+    properties: { location_ids: locationIds },
+  },
+};
+
 export const stockTransactionListSchema = createListQuerySchema(
   STOCK_TRANSACTION_SORT_FIELDS,
   {
@@ -96,13 +118,12 @@ export const stockAdjustmentCreateSchema: FastifySchema = {
       'supply_id',
       'provider_id',
       'area_id',
-      'storage_location_id',
     ],
     properties: {
       supply_id: uuid,
       provider_id: uuid,
       area_id: uuid,
-      storage_location_id: uuid,
+      location_ids: locationIds,
       type: { type: 'string', enum: [...STOCK_ADJUSTMENT_TYPES] },
       transaction_type_id: uuid,
       transaction_type_code: {

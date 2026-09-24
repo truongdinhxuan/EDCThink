@@ -14,10 +14,11 @@ const orderService = readFileSync(
   resolve(process.cwd(), 'src/services/orders.service.ts'),
   'utf8',
 );
+// The current authoritative issue_order. Earlier definitions are history.
 const stackIssueMigration = readFileSync(
   resolve(
     process.cwd(),
-    'supabase/migrations/20260824031430_supply_stack_issue_finalization.sql',
+    'supabase/migrations/20260924010200_stack_confirm_issue_flow.sql',
   ),
   'utf8',
 );
@@ -83,49 +84,63 @@ describe('atomic order issue migration', () => {
   });
 });
 
-describe('Supply stack Phase 6 issue finalization', () => {
-  it('extends the single authoritative issue_order RPC', () => {
+describe('Stack issue ships the confirmed count', () => {
+  const issueBody = stackIssueMigration.slice(
+    stackIssueMigration.indexOf('create or replace function public.issue_order'),
+  );
+
+  it('keeps one authoritative issue_order RPC', () => {
     assert.match(
-      stackIssueMigration,
+      issueBody,
       /create or replace function public\.issue_order\(\s*p_order_id uuid,\s*p_actor_id uuid,\s*p_items jsonb/,
     );
     assert.equal((orderService.match(/\.rpc\(['"]issue_order['"]/g) ?? []).length, 1);
-    assert.doesNotMatch(stackIssueMigration, /create\s+function\s+public\.[a-z_]*stack[a-z_]*issue/i);
   });
 
   it('resolves KIEN_SAT_TC in PostgreSQL and never treats KIEN_SAT_SPECIAL as Stack', () => {
-    assert.match(stackIssueMigration, /v_order_item\.category_code = 'KIEN_SAT_TC'/);
-    assert.doesNotMatch(stackIssueMigration, /v_order_item\.category_code\s*=\s*'KIEN_SAT_SPECIAL'/);
+    assert.match(issueBody, /category\.code = 'KIEN_SAT_TC'/);
+    assert.doesNotMatch(issueBody, /'KIEN_SAT_SPECIAL'/);
   });
 
-  it('uses confirmed actual allocations as the Stack source of truth', () => {
-    assert.match(stackIssueMigration, /allocation\.actual_stack_quantity is null/);
-    assert.match(stackIssueMigration, /sum\(allocation\.actual_stack_quantity\)/);
-    assert.match(stackIssueMigration, /STACK_ISSUE_ALLOCATION_INCOMPLETE/);
-    assert.match(stackIssueMigration, /STACK_APPROVAL_NOT_COMPATIBLE/);
-    assert.match(stackIssueMigration, /STACK_PARTIAL_ISSUE_NOT_SUPPORTED/);
+  it('no longer holds a short or long count back for review', () => {
+    // The old rule refused to issue unless the confirmed total equalled the
+    // approval. The confirmed count is now what ships, in either direction.
+    assert.doesNotMatch(issueBody, /STACK_ISSUE_ALLOCATION_INCOMPLETE/);
+    assert.doesNotMatch(issueBody, /STACK_PARTIAL_ISSUE_NOT_SUPPORTED/);
+    assert.match(
+      issueBody,
+      /set quantity_issued = v_allocation\.actual_stack_quantity \* v_order_item\.set_per_qty/,
+    );
+    assert.match(issueBody, /set status = 'ISSUED'/);
   });
 
-  it('locks deterministically and writes official immutable ISSUE transactions', () => {
-    assert.match(stackIssueMigration, /order by balance\.id\s*for update/);
-    assert.match(stackIssueMigration, /insert into public\.stock_transactions/);
-    assert.match(stackIssueMigration, /transaction_type\.code = 'ISSUE'/);
-    assert.match(stackIssueMigration, /actual_stack_quantity > 0/);
+  it('ships in full when the books fall short and opens a recount instead', () => {
+    assert.match(issueBody, /v_take_stack := least\(/);
+    assert.match(issueBody, /v_shortage_stack := v_allocation\.actual_stack_quantity - v_take_stack/);
+    assert.match(issueBody, /'OPEN', 'ISSUE'/);
+    // A shortfall must not abort the issue.
+    assert.doesNotMatch(issueBody, /STACK_ISSUE_STOCK_CONFLICT/);
+  });
+
+  it('closes a stack item on its ISSUED confirmation, not on reaching the approval', () => {
+    const statusRule = issueBody.slice(issueBody.indexOf("v_new_status_code := 'PARTIAL_ISSUED'") - 900);
+    assert.match(statusRule, /allocation\.status is distinct from 'ISSUED'/);
+    assert.match(statusRule, /item\.set_per_qty is null\s+and coalesce\(item\.quantity_issued, 0\) < item\.quantity_approved/);
+  });
+
+  it('locks every balance once, in id order, before mutating', () => {
+    const lockAt = issueBody.search(/order by balance\.id\s*for update of balance/);
+    const firstUpdate = issueBody.indexOf('update public.stock_balances');
+    assert.ok(lockAt > 0 && lockAt < firstUpdate);
+    assert.match(issueBody, /transaction_type\.code = 'ISSUE'/);
   });
 
   it('preserves service-role-only execution and structured semantic errors', () => {
-    assert.match(
-      stackIssueMigration,
-      /grant select on table public\.adjustment_reasons to service_role/,
-    );
-    assert.match(stackIssueMigration, /revoke all[\s\S]*from public, anon, authenticated/i);
-    assert.match(stackIssueMigration, /grant execute[\s\S]*to service_role/i);
+    assert.match(issueBody, /revoke all[\s\S]*from public, anon, authenticated/i);
+    assert.match(issueBody, /grant execute[\s\S]*to service_role/i);
     for (const code of [
       'STACK_ALLOCATIONS_NOT_CONFIRMED',
-      'STACK_ISSUE_ALLOCATION_INCOMPLETE',
-      'STACK_APPROVAL_NOT_COMPATIBLE',
-      'STACK_PARTIAL_ISSUE_NOT_SUPPORTED',
-      'STACK_ISSUE_STOCK_CONFLICT',
+      'NORMAL_ISSUE_STOCK_CONFLICT',
       'ORDER_NOT_ISSUABLE',
       'ORDER_ALREADY_ISSUED',
     ]) {

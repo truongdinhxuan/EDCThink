@@ -79,15 +79,22 @@ describe('OrderDetailPage locks status actions once expired', () => {
     const block = page.slice(start, page.indexOf('{isStatusUpdateExpired &&', start));
     assert.ok(block, 'action block not found');
     for (const label of [
-      'Xác nhận', 'Từ chối', 'Phân bổ vị trí', 'Xuất hàng',
+      'Xác nhận', 'Từ chối', 'Xuất hàng',
       'Đã nhận hàng', 'Hoàn thành', 'Hủy order',
     ]) {
       assert.ok(block.includes(label), `missing action: ${label}`);
     }
-    // Seven actions, seven gates. A button left ungated would stay clickable.
-    assert.equal((block.match(/actionsLocked/g) ?? []).length, 7);
+    // "Phân bổ vị trí" is gone: stock has no locations to split an Order across.
+    assert.ok(!block.includes('Phân bổ vị trí'));
+    // Six actions, six gates. A button left ungated would stay clickable.
+    assert.equal((block.match(/actionsLocked/g) ?? []).length, 6);
     assert.doesNotMatch(block, /disabled=\{mutating\}/);
     assert.match(page, /const actionsLocked = mutating \|\| isStatusUpdateExpired/);
+  });
+
+  it('gates the per-item stack confirmation on the same deadline', () => {
+    const button = page.slice(page.indexOf('onClick={() => openConfirmation(item)}') - 200);
+    assert.match(button, /disabled=\{mutating \|\| isStatusUpdateExpired\}/);
   });
 
   it('shows the expiry banner', () => {

@@ -54,69 +54,75 @@ export interface OrderAllocationLocation {
   name: string;
 }
 
+export type AllocationConfirmDirection = 'LOWER' | 'HIGHER';
+
+export interface AllocationConfirmReason {
+  id: string;
+  code: string;
+  name: string;
+  direction: AllocationConfirmDirection;
+  corrects_stock: boolean;
+}
+
+/**
+ * The stack-count confirmation of one KIEN_SAT_TC item: expected = approved
+ * stacks, actual = confirmed stacks. There is at most one per item.
+ */
 export interface OrderItemAllocation {
   id: string;
   order_item_id: string;
   stock_balance_id: string;
   expected_stack_quantity: number;
   actual_stack_quantity: number | null;
-  status: string | null;
-  discrepancy_reason: string | null;
+  status: 'CONFIRMED' | 'ISSUED' | null;
+  reason?: AllocationConfirmReason | null;
+  reason_note: string | null;
   allocated_at: string;
   confirmed_at: string | null;
-  location?: OrderAllocationLocation | null;
+  issued_at: string | null;
+  /** Where the code sits. Labels only: the quantity is on the pooled row. */
+  locations?: OrderAllocationLocation[];
   discrepancies?: InventoryDiscrepancy[];
 }
 
-export interface AllocationConfirmation {
+export interface StackItemConfirmation {
   allocation_id: string;
+  order_item_id: string;
+  approved_stack_quantity: number;
   actual_stack_quantity: number;
+  reason_code: string | null;
   discrepancy_id: string | null;
-  difference_stack_quantity: number;
-  reallocation_status: 'NOT_REQUIRED' | 'REALLOCATED' | 'INSUFFICIENT';
-  required_stack_quantity: number;
-  available_stack_quantity: number;
-  unallocated_stack_quantity: number;
-  reallocation_count?: number;
-  new_allocations: Array<{
-    id: string;
-    stock_balance_id: string;
-    expected_stack_quantity: number;
-  }>;
+  corrected_stack_quantity: number;
 }
 
-export interface ConfirmAllocationInput {
+export interface ConfirmStackItemInput {
   actual_stack_quantity: number;
-  reason?: string;
+  reason_code?: string;
+  reason_note?: string;
 }
 
-export interface ConfirmAllocationResult {
+export interface ConfirmStackItemResult {
   order: Order;
-  confirmation: AllocationConfirmation;
+  confirmation: StackItemConfirmation;
 }
 
-export interface StackAllocationErrorDetails {
+export interface StackConfirmErrorDetails {
   order_item_id?: string;
   supply_code?: string;
   quantity_approved?: number;
   set_per_qty?: number;
-  required_stack_quantity?: number;
-  available_stack_quantity?: number;
-  shortage_stack_quantity?: number;
+  approved_stack_quantity?: number;
+  actual_stack_quantity?: number;
   current_status?: string;
 }
 
-export interface StackIssueStockConflictDetails {
-  reason?: string;
-  stock_balance_id?: string;
+export interface NormalIssueStockConflictDetails {
   order_item_id?: string;
   supply_code?: string;
   provider_code?: string;
-  location_code?: string;
-  set_per_qty?: number;
-  required_stack_quantity?: number;
-  current_stack_quantity?: number;
-  shortage_stack_quantity?: number;
+  required_quantity?: number;
+  current_quantity?: number;
+  shortage_quantity?: number;
 }
 
 export interface OrderItem {
@@ -135,6 +141,8 @@ export interface OrderItem {
   shortage_quantity: number;
   has_stock_shortage: boolean;
   available_stack_quantity?: number;
+  /** Labels of the pooled stock row this item draws from: where to pick. */
+  locations?: OrderAllocationLocation[];
   note: string | null;
   supply?: OrderSupplySummary | null;
   provider?: Pick<Provider, 'id' | 'code' | 'name' | 'description'> | null;
@@ -243,10 +251,14 @@ export interface RejectOrderInput {
   rejected_reason: string;
 }
 
+/**
+ * Normal supplies only: one quantity per item, taken from the pooled balance.
+ * Stack items are never sent — they ship their confirmed count on every issue.
+ */
 export interface IssueOrderInput {
   items: Array<{
     order_item_id: string;
-    issues: Array<{ storage_location_id: string; quantity: number }>;
+    quantity: number;
   }>;
   forklift_by?: string;
   taken_away_by?: string;

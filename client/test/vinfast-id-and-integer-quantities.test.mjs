@@ -80,10 +80,11 @@ describe('Supply quantities are whole numbers on the client', () => {
     assert.match(stackFields, /min="1"/);
   });
 
-  it('validates integers when approving, issuing and confirming an allocation', () => {
+  it('validates integers when approving, issuing and confirming a stack count', () => {
     assert.match(orderDetailPage, /!Number\.isInteger\(approval\.quantity_approved\)/);
     assert.match(orderDetailPage, /Số lượng cấp phải là số nguyên\./);
-    assert.match(orderDetailPage, /Số chồng phải là số nguyên\./);
+    assert.match(orderDetailPage, /Number\.isInteger\(confirmActual\)/);
+    assert.match(orderDetailPage, /Số chồng xác nhận phải là số nguyên/);
     assert.match(orderDetailPage, /!Number\.isInteger\(quantity\) \|\| quantity <= 0/);
   });
 

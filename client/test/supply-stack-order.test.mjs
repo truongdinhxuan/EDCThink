@@ -46,75 +46,80 @@ describe('Supply stack Phase 3 frontend (T-017 to T-019)', () => {
   });
 });
 
-describe('Supply stack Phase 4 frontend', () => {
-  it('uses effective permission and the single allocation API action', () => {
+describe('Stack confirmation frontend (no allocation step)', () => {
+  it('has no allocation step: confirmation is per item, gated by its own permission', () => {
+    // Stock has no locations to split an Order across any more.
+    assert.doesNotMatch(orderDetail, /allocateOrder|SUPPLY_ORDER_ALLOCATE|Phân bổ vị trí/);
+    assert.doesNotMatch(orderService, /\/allocate`/);
+    assert.match(orderDetail, /hasPermission\(\s*PERMISSION_CODE\.SUPPLY_ORDER_CONFIRM_ALLOCATION/);
+    assert.match(orderService, /items\/\$\{orderItemId\}\/confirm/);
+    // The code stays: it still grants read access to Orders.
     assert.match(permissionCodes, /SUPPLY_ORDER_ALLOCATE: 'supply\.order\.allocate'/);
-    assert.match(orderDetail, /hasPermission\(PERMISSION_CODE\.SUPPLY_ORDER_ALLOCATE\)/);
-    assert.match(orderService, /orders\/\$\{id\}\/allocate/);
-    assert.match(orderDetail, /allocateOrder\(id\)/);
     assert.doesNotMatch(orderDetail, /role\s*===\s*['"]ADMIN['"]/);
   });
 
-  it('derives approved stacks exactly and blocks incompatible approval UX', () => {
+  it('derives approved stacks exactly and blocks partial-stack approvals', () => {
     assert.match(orderDetail, /approved % setPerQty !== 0/);
     assert.match(orderDetail, /return approved \/ setPerQty/);
-    assert.match(orderDetail, /Không tương thích quy cách/);
+    assert.match(orderDetail, /approvals\[index\]\.quantity_approved % Number\(item\.set_per_qty\) !== 0/);
     assert.doesNotMatch(orderDetail, /Math\.(round|floor|ceil)/);
   });
 
-  it('renders allocations and keeps actual quantity empty for Phase 4', () => {
-    assert.match(orderTypes, /interface OrderItemAllocation/);
-    assert.match(orderDetail, /Đề xuất phân bổ vị trí/);
-    assert.match(orderDetail, /allocation\.location\?\.code/);
-    assert.match(orderDetail, /allocation\.expected_stack_quantity/);
-    assert.match(orderDetail, /allocation\.actual_stack_quantity \?\? "—"/);
+  it('shows where to pick before anyone confirms', () => {
+    assert.match(orderTypes, /locations\?: OrderAllocationLocation\[\]/);
+    assert.match(orderDetail, /locationCodes\(item\.locations\)/);
+    assert.match(orderDetail, /Xác nhận số chồng — kiện tiêu chuẩn/);
   });
 
-  it('maps structured shortage details without parsing PostgreSQL messages', () => {
+  it('maps structured details without parsing PostgreSQL messages', () => {
     assert.match(apiErrors, /getApiErrorDetails/);
-    assert.match(orderDetail, /required_stack_quantity/);
-    assert.match(orderDetail, /available_stack_quantity/);
-    assert.match(orderDetail, /shortage_stack_quantity/);
-    assert.match(orderDetail, /SET\/chồng/);
+    assert.match(orderDetail, /shortage_quantity/);
     assert.doesNotMatch(orderDetail, /JSON\.parse\(|PostgreSQL|PGRST/);
   });
 });
 
-describe('Supply stack Phase 6 issue UX', () => {
-  it('derives readiness from confirmed actual allocations, not manual Stack issue input', () => {
-    assert.match(orderDetail, /const getStackIssueReadiness/);
-    assert.match(orderDetail, /actualConfirmedStacks/);
-    assert.match(orderDetail, /unconfirmedAllocations/);
-    assert.match(orderDetail, /actualConfirmedStacks === approvedStacks/);
+describe('Stack issue ships the confirmed count', () => {
+  it('is ready once confirmed, whatever the count', () => {
+    assert.match(orderDetail, /const getStackItemState/);
+    assert.match(orderDetail, /ready: rejected \|\| issued \|\| confirmation\?\.status === 'CONFIRMED'/);
+    // The old "confirmed total must equal the approval" gate is gone.
+    assert.doesNotMatch(orderDetail, /actualConfirmedStacks === approvedStacks/);
     assert.match(orderDetail, /normalIssueItems\.flatMap/);
   });
 
-  it('allows the existing issue API to send an empty normal-item payload for Stack-only orders', () => {
-    assert.match(orderDetail, /selected\.length === 0 && stackItems\.length === 0/);
+  it('lets a stack-only issue send an empty normal-item payload', () => {
+    assert.match(orderDetail, /selected\.length === 0 && !pendingStack/);
     assert.match(orderService, /orders\/\$\{id\}\/issue/);
     assert.doesNotMatch(orderService, /stack-issue|issue-stack/);
   });
 
+  it('sends one quantity per normal item, with no storage location', () => {
+    assert.match(orderTypes, /order_item_id: string;\s*quantity: number;/);
+    assert.doesNotMatch(orderDetail, /storage_location_id|storageLocationId|listStorageLocations/);
+  });
+
   it('maps structured stock conflicts and invalidates only affected server caches', () => {
     assert.match(apiErrors, /getApiErrorCode/);
-    assert.match(orderDetail, /STACK_ISSUE_STOCK_CONFLICT/);
-    assert.match(orderDetail, /StackIssueConflictDetails/);
+    assert.match(orderDetail, /NORMAL_ISSUE_STOCK_CONFLICT/);
     assert.match(orderDetail, /queryKeys\.stockBalances\.all/);
     assert.match(orderDetail, /queryKeys\.stockTransactions\.all/);
     assert.match(orderDetail, /queryKeys\.supplyStackOptions\.all/);
+    assert.match(orderDetail, /queryKeys\.inventoryDiscrepancies\.all/);
   });
 
-  it('maps Stack error codes to readable Vietnamese messages', () => {
+  it('maps the current Stack error codes to readable Vietnamese messages', () => {
     for (const code of [
       'STACK_ALLOCATIONS_NOT_CONFIRMED',
-      'STACK_ISSUE_ALLOCATION_INCOMPLETE',
       'STACK_APPROVAL_NOT_COMPATIBLE',
-      'STACK_PARTIAL_ISSUE_NOT_SUPPORTED',
-      'STACK_ISSUE_STOCK_CONFLICT',
+      'CONFIRM_REASON_REQUIRED',
+      'CONFIRM_REASON_DIRECTION_MISMATCH',
+      'NORMAL_ISSUE_STOCK_CONFLICT',
       'ORDER_ALREADY_ISSUED',
     ]) {
       assert.match(apiErrors, new RegExp(code));
     }
+    // Codes the server can no longer raise are not kept around.
+    assert.doesNotMatch(apiErrors, /STACK_ISSUE_ALLOCATION_INCOMPLETE|STACK_PARTIAL_ISSUE_NOT_SUPPORTED|ACTUAL_STACK_EXCEEDS_EXPECTED/);
     assert.match(apiErrors, /technicalErrorPattern/);
   });
 
@@ -125,7 +130,7 @@ describe('Supply stack Phase 6 issue UX', () => {
     // has closed, on top of the Stack readiness check.
     assert.match(orderDetail, /disabled=\{!canIssue \|\| actionsLocked\}/);
     assert.match(orderDetail, /const actionsLocked = mutating \|\| isStatusUpdateExpired/);
-    assert.match(orderDetail, /Cần kiểm kê/);
+    assert.match(orderDetail, /cần kiểm kê/);
   });
 
   it('uses readable relations and explicit allocation confirmation state', () => {

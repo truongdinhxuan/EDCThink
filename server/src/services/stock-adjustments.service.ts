@@ -111,11 +111,11 @@ export class StockAdjustmentsService {
     }
 
     const note = typeof body.note === 'string' ? body.note.trim() || null : null;
-    const { data, error } = await this.db.rpc('apply_stock_adjustment_v4', {
+    const { data, error } = await this.db.rpc('apply_stock_adjustment_v5', {
       p_supply_id: body.supply_id,
       p_provider_id: body.provider_id,
       p_area_id: body.area_id,
-      p_storage_location_id: body.storage_location_id,
+      p_location_ids: body.location_ids?.length ? body.location_ids : null,
       p_transaction_type_id: transactionType.id,
       p_quantity: quantity,
       p_stack_quantity: body.stack_quantity ?? null,
