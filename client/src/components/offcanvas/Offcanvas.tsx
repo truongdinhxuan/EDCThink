@@ -15,7 +15,17 @@ const SIZE_CLASS_NAMES: Record<OffcanvasSize, string> = {
   full: 'md:w-[calc(100dvw-4rem)] xl:w-[min(90dvw,80rem)]',
 };
 
+/**
+ * drawer — slides in from the right (forms, most confirmations)
+ * card   — a centred pop-up card, for short warnings that should interrupt
+ *          without taking over the screen edge
+ */
+export type OffcanvasPresentation = 'drawer' | 'card';
+
 interface OffcanvasProps {
+  presentation?: OffcanvasPresentation;
+  /** Card only: a coloured top edge that tells the kind of warning at a glance. */
+  accentClassName?: string;
   id: string;
   phase: DrawerPhase;
   layer: 'primary' | 'confirmation';
@@ -32,6 +42,8 @@ interface OffcanvasProps {
 }
 
 export const Offcanvas = ({
+  presentation = 'drawer',
+  accentClassName = '',
   id,
   phase,
   layer,
@@ -84,8 +96,11 @@ export const Offcanvas = ({
         aria-hidden={!isTopmost || undefined}
         tabIndex={-1}
         data-offcanvas-panel="true"
+        data-presentation={presentation}
         data-state={phase}
-        className={`offcanvas-panel fixed inset-y-0 right-0 flex h-dvh w-screen w-[100dvw] max-w-full flex-col overflow-hidden bg-white shadow-2xl outline-none ${SIZE_CLASS_NAMES[size]} ${isTopmost ? '' : 'pointer-events-none'}`}
+        className={presentation === 'card'
+          ? `confirm-card fixed left-1/2 top-1/2 flex max-h-[85dvh] w-[min(calc(100vw-2rem),26rem)] flex-col overflow-hidden rounded-2xl border-t-4 bg-white shadow-2xl outline-none ${accentClassName} ${isTopmost ? '' : 'pointer-events-none'}`
+          : `offcanvas-panel fixed inset-y-0 right-0 flex h-dvh w-screen w-[100dvw] max-w-full flex-col overflow-hidden bg-white shadow-2xl outline-none ${SIZE_CLASS_NAMES[size]} ${isTopmost ? '' : 'pointer-events-none'}`}
         style={{ zIndex: panelLayer }}
       >
         <header className="sticky top-0 z-10 flex min-w-0 shrink-0 items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-5 sm:py-4">

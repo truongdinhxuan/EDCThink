@@ -8,6 +8,11 @@ const read = (path: string): string =>
 
 const migration = read('supabase/migrations/20260822135035_supply_stack_import.sql');
 const phaseOneMigration = read('supabase/migrations/20260822131844_supply_stack_foundation.sql');
+const locationFree = read('supabase/migrations/20260924010100_stock_location_free_rpcs.sql');
+const currentAdjustment = locationFree.slice(
+  locationFree.indexOf('create or replace function public.apply_stock_adjustment_v5'),
+  locationFree.indexOf('revoke all on function public.apply_stock_adjustment_v5'),
+);
 const adjustmentService = read('src/services/stock-adjustments.service.ts');
 const adjustmentSchema = read('src/schemas/stock.ts');
 const balanceService = read('src/services/stock-balances.service.ts');
@@ -60,17 +65,19 @@ describe('Supply stack Phase 2 IMPORT contract', () => {
     assert.match(migration, /where set_per_qty is null and is_deleted = false/);
   });
 
-  it('validates Provider, Area/Location and reason inside the same RPC', () => {
-    assert.match(migration, /from public\.supply_providers sp/);
-    assert.match(migration, /Provider not valid for Supply/);
-    assert.match(migration, /l\.area_id = p_area_id/);
-    assert.match(migration, /StorageLocation not in Area/);
-    assert.match(migration, /adjustment_reason_id or reason_note is required/);
-    assert.match(migration, /public\.has_permission\(p_created_by, 'supply\.stock\.adjust'\)/);
+  it('validates Provider, Area, location labels and reason inside the same RPC (v5)', () => {
+    assert.match(currentAdjustment, /from public\.supply_providers sp/);
+    assert.match(currentAdjustment, /Provider not valid for Supply/);
+    assert.match(currentAdjustment, /adjustment_reason_id or reason_note is required/);
+    assert.match(currentAdjustment, /public\.has_permission\(p_created_by, 'supply\.stock\.adjust'\)/);
+    // Labels are checked against the Area in the helper v5 calls.
+    assert.match(currentAdjustment, /perform public\.attach_stock_balance_locations\(/);
+    assert.match(locationFree, /location\.area_id = p_area_id/);
+    assert.match(locationFree, /StorageLocation not in Area/);
   });
 
-  it('routes the API through v4 and exposes stack fields in response selects', () => {
-    assert.match(adjustmentService, /rpc\('apply_stock_adjustment_v4'/);
+  it('routes the API through v5 and exposes stack fields in response selects', () => {
+    assert.match(adjustmentService, /rpc\('apply_stock_adjustment_v5'/);
     assert.match(adjustmentService, /p_stack_quantity: body\.stack_quantity \?\? null/);
     assert.match(adjustmentService, /p_set_per_qty: body\.set_per_qty \?\? null/);
     assert.match(adjustmentSchema, /stack_quantity: \{ type: 'integer', minimum: 1 \}/);

@@ -43,6 +43,17 @@ const lookupRoutes: FastifyPluginAsync = async (fastify) => {
     listLookup('adjustment_reasons'),
   );
   fastify.get(
+    '/allocation-confirm-reasons',
+    {
+      preHandler: [
+        verifyToken,
+        requirePermission(PERMISSION_CODE.SUPPLY_ORDER_CONFIRM_ALLOCATION),
+      ],
+      schema: lookupListSchema,
+    },
+    listLookup('allocation_confirm_reasons'),
+  );
+  fastify.get(
     '/order-revision-actions',
     systemManagers,
     listLookup('order_revision_actions'),

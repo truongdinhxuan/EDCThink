@@ -106,6 +106,28 @@ body,
   transition-timing-function: ease-in;
 }
 
+/* Centred confirmation card. The centring translate lives here, not in a
+   utility class, so the open/close animation can scale it without fighting
+   Tailwind's own transform. */
+.confirm-card {
+  opacity: 0;
+  transform: translate3d(-50%, -50%, 0) scale(0.96);
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+  will-change: opacity, transform;
+}
+
+.confirm-card[data-state="open"] {
+  opacity: 1;
+  transform: translate3d(-50%, -50%, 0) scale(1);
+}
+
+.confirm-card[data-state="closing"] {
+  opacity: 0;
+  transform: translate3d(-50%, -50%, 0) scale(0.96);
+  transition-duration: 160ms;
+  transition-timing-function: ease-in;
+}
+
 @keyframes app-tooltip-in {
   from {
     opacity: 0;
@@ -138,7 +160,8 @@ body,
   .filter-rail-backdrop,
   .filter-rail-panel,
   .offcanvas-backdrop,
-  .offcanvas-panel {
+  .offcanvas-panel,
+  .confirm-card {
     transition-duration: 0.01ms;
     transition-delay: 0s;
   }

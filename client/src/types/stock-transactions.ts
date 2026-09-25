@@ -32,7 +32,8 @@ export interface StockTransaction {
   supply_id: string;
   provider_id: string;
   area_id: string;
-  storage_location_id: string;
+  /** Historical only: null on rows written after stock stopped tracking locations. */
+  storage_location_id: string | null;
   order_id: string | null;
   order_item_id: string | null;
   inventory_discrepancy_id: string | null;
@@ -89,7 +90,8 @@ export interface CreateStockAdjustmentInput {
   supply_id: string;
   provider_id: string;
   area_id: string;
-  storage_location_id: string;
+  /** Labels added to the pooled row; never where the quantity is kept. */
+  location_ids?: string[];
   type?: StockAdjustmentType;
   transaction_type_id?: string;
   transaction_type_code?: StockAdjustmentType;
@@ -108,7 +110,6 @@ export interface StockAdjustmentResult {
     supply_id: string;
     provider_id: string;
     area_id: string;
-    storage_location_id: string;
     quantity: number;
     set_per_qty: number | null;
     stack_quantity: number | null;

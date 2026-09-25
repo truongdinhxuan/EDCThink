@@ -44,3 +44,10 @@ export const canReadOrder = (
   order: OrderReadResource,
 ): boolean => hasOrderReadPermission(access)
   && (!isOrderAreaScoped(access) || order.to_area_id === access.areaId);
+
+/**
+ * The Area that fulfils every Supply Order. It supplies rather than orders, so
+ * it may not raise Orders for itself and it is the one Area whose stock is not
+ * reachable through an Area Type scope.
+ */
+export const ORDER_SOURCE_AREA_CODE = 'VTDG';

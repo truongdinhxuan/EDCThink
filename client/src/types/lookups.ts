@@ -27,6 +27,19 @@ export interface AdjustmentReasonLookup extends LookupBase {
   requires_note: boolean;
 }
 
+/**
+ * Why a confirmed stack count differs from the approval. `direction` says which
+ * side of the approval it may be used on; `corrects_stock` means the difference
+ * is missing stock, so the books are corrected and a recount is opened.
+ */
+export interface AllocationConfirmReasonLookup extends LookupBase {
+  description: string | null;
+  direction: 'LOWER' | 'HIGHER';
+  corrects_stock: boolean;
+  sort_order: number;
+  is_system: boolean;
+}
+
 export interface OrderRevisionActionLookup extends LookupBase {
   description: string | null;
   is_system: boolean;

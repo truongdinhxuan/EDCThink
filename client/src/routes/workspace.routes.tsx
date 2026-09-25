@@ -16,6 +16,7 @@ const RoleDashboardPage = lazy(() => import('../pages/dashboards/RoleDashboardPa
 const UsersPage = lazy(() => import('../pages/management/UsersPage'));
 const RolesPage = lazy(() => import('../pages/management/RolesPage'));
 const AreasPage = lazy(() => import('../pages/management/AreasPage'));
+const TeamsWebhookPage = lazy(() => import('../pages/management/TeamsWebhookPage'));
 const SuppliesPage = lazy(() => import('../pages/catalog/SuppliesPage'));
 const ProvidersPage = lazy(() => import('../pages/catalog/ProvidersPage'));
 const SupplyCategoriesPage = lazy(() => import('../pages/catalog/SupplyCategoriesPage'));
@@ -152,6 +153,7 @@ const createFeatureRoutes = (): RouteObject[] => [
   // },
   { path: 'users', element: guarded([PERMISSION_CODE.ADMIN_USER_READ], <UsersPage />) },
   { path: 'roles', element: guarded([PERMISSION_CODE.ADMIN_ROLE_READ], <RolesPage />) },
+  { path: 'teams-webhook', element: guarded([PERMISSION_CODE.TEAMS_WEBHOOK_VIEW], <TeamsWebhookPage />) },
   { path: '*', element: <Navigate to="/404" replace /> },
 ];
 

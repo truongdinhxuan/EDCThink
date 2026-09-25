@@ -35,6 +35,7 @@ export const PERMISSION_CODE = {
   MILKRUN_TRIP_STATUS_DEACTIVATE: "milkrun.trip_status.deactivate",
   SUPPLY_STOCK_READ: "supply.stock.read",
   SUPPLY_STOCK_ADJUST: "supply.stock.adjust",
+  SUPPLY_STOCK_READ_ALL_AREAS: "supply.stock.read_all_areas",
   SUPPLY_CATALOG_READ: "supply.catalog.read",
   SUPPLY_CATALOG_CREATE: "supply.catalog.create",
   SUPPLY_CATALOG_UPDATE: "supply.catalog.update",
@@ -51,6 +52,8 @@ export const PERMISSION_CODE = {
   SUPPLY_ORDER_ISSUE: "supply.order.issue",
   SUPPLY_DISCREPANCY_RESOLVE: "supply.discrepancy.resolve",
   SUPPLY_DASHBOARD_READ: "supply.dashboard.read",
+  TEAMS_WEBHOOK_VIEW: "teams_webhook.view",
+  TEAMS_WEBHOOK_MANAGE: "teams_webhook.manage",
 } as const;
 
 export type PermissionCode =

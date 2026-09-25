@@ -14,23 +14,21 @@ const businessErrorMessages: Record<string, string> = {
   [ORDER_STATUS_UPDATE_WINDOW_EXPIRED]:
     "Đã quá thời hạn cho phép cập nhật trạng thái Order (kết thúc ca + 3 giờ). Không thể tiếp tục thao tác trên Order này.",
   STACK_ALLOCATIONS_NOT_CONFIRMED:
-    "Cần xác nhận thực tế cho tất cả vị trí phân bổ trước khi xuất hàng.",
-  STACK_ISSUE_ALLOCATION_INCOMPLETE:
-    "Tổng số chồng thực tế chưa bằng số chồng đã duyệt.",
+    "Còn vật tư kiện tiêu chuẩn chưa xác nhận số chồng trước khi xuất hàng.",
   STACK_APPROVAL_NOT_COMPATIBLE:
     "Số lượng đã duyệt không tương thích với quy cách SET/chồng.",
-  STACK_PARTIAL_ISSUE_NOT_SUPPORTED:
-    "Kiện sắt tiêu chuẩn chưa hỗ trợ cấp hàng một phần.",
-  STACK_ISSUE_STOCK_CONFLICT:
-    "Tồn thực tế tại vị trí đã xác nhận không còn đủ để cấp hàng.",
+  ALLOCATION_ALREADY_CONFIRMED:
+    "Dòng vật tư này đã được xác nhận số chồng trước đó.",
+  CONFIRM_REASON_REQUIRED:
+    "Số chồng xác nhận khác số đã duyệt: phải chọn lý do.",
+  CONFIRM_REASON_DIRECTION_MISMATCH:
+    "Lý do không khớp chiều chênh lệch (nhận ít hơn / nhận thêm).",
+  NORMAL_ISSUE_STOCK_CONFLICT:
+    "Tồn kho không đủ để cấp hàng.",
   ORDER_ALREADY_ISSUED:
     "Order đã được cấp hàng; không thể trừ tồn lần nữa.",
   ORDER_NOT_ISSUABLE:
     "Order không ở trạng thái có thể cấp hàng.",
-  INSUFFICIENT_STACK_STOCK:
-    "Không đủ số chồng tồn kho để phân bổ.",
-  ACTUAL_STACK_EXCEEDS_EXPECTED:
-    "Số chồng thực tế không được vượt số chồng dự kiến.",
   ORDER_ITEM_ZERO_STOCK:
     "Vật tư hiện không còn tồn tại khu vực cấp. Không thể gửi Order.",
   WORK_SHIFT_ASSIGNMENT_NOT_FOUND:

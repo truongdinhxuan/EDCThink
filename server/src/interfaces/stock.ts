@@ -1,3 +1,4 @@
+import type { PermissionCode } from '../domain/permission-codes';
 import type { StockTransactionType } from '../domain/enums';
 import type { PaginationQuery } from './pagination';
 
@@ -49,7 +50,8 @@ export interface CreateStockAdjustmentBody {
   supply_id: string;
   provider_id: string;
   area_id: string;
-  storage_location_id: string;
+  /** Labels to add to the pooled row. Never a place the quantity is kept. */
+  location_ids?: string[];
   type?: StockAdjustmentType;
   transaction_type_id?: string;
   transaction_type_code?: StockAdjustmentType;
@@ -62,6 +64,14 @@ export interface CreateStockAdjustmentBody {
   note?: string | null;
 }
 
+export interface ReplaceStockBalanceLocationsBody {
+  location_ids: string[];
+}
+
 export interface StockActor {
   id: string;
+  areaId: string | null;
+  roleIds: string[];
+  permissions: readonly PermissionCode[];
+  isSystemAdmin: boolean;
 }

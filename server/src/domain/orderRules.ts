@@ -163,6 +163,93 @@ export const assertIssueWithinApproved = (
   }
 };
 
+/**
+ * A stack item ships in whole stacks, so its approval must be a whole number of
+ * them. An approval of 11 SET on a 12-SET stack can never be confirmed or
+ * issued; refusing it here stops the Order from getting stuck after review.
+ */
+export const assertWholeStackApproval = (
+  quantityApproved: number,
+  setPerQty: number | string | null,
+): void => {
+  if (setPerQty === null || quantityApproved === 0) return;
+  const perStack = Number(setPerQty);
+  if (quantityApproved % perStack !== 0) {
+    throw new OrderRuleError(
+      `Kiện tiêu chuẩn phải duyệt theo bội số của ${perStack} SET/chồng.`,
+    );
+  }
+};
+
+export interface ApprovalStockLine {
+  supply_id: string;
+  provider_id: string;
+  set_per_qty: number | string | null;
+  quantity_approved: number;
+  /** Pooled stock of this code in the source Area, in the item's own unit (SET for stacks). */
+  available_quantity: number;
+}
+
+export interface ApprovalStockExcess {
+  supply_id: string;
+  provider_id: string;
+  set_per_qty: number | null;
+  approved_quantity: number;
+  available_quantity: number;
+}
+
+/**
+ * The approval may not promise more than the source Area holds. Lines of the
+ * same code draw from one pooled row, so they are summed before comparing:
+ * two lines of 60 against a stock of 100 is an over-promise even though each
+ * line alone fits. Returns the first code that exceeds, or null.
+ */
+export const findApprovalStockExcess = (
+  lines: readonly ApprovalStockLine[],
+): ApprovalStockExcess | null => {
+  const totals = new Map<string, ApprovalStockExcess>();
+  for (const line of lines) {
+    if (line.quantity_approved <= 0) continue;
+    const setPerQty = line.set_per_qty === null ? null : Number(line.set_per_qty);
+    const key = `${line.supply_id}:${line.provider_id}:${setPerQty ?? 'normal'}`;
+    const current = totals.get(key) ?? {
+      supply_id: line.supply_id,
+      provider_id: line.provider_id,
+      set_per_qty: setPerQty,
+      approved_quantity: 0,
+      available_quantity: Math.max(0, Number(line.available_quantity) || 0),
+    };
+    current.approved_quantity += line.quantity_approved;
+    totals.set(key, current);
+  }
+  return [...totals.values()].find(
+    (total) => total.approved_quantity > total.available_quantity,
+  ) ?? null;
+};
+
+interface IssueClosureItem {
+  set_per_qty: number | string | null;
+  quantity_approved: number | string | null;
+  quantity_issued: number | string | null;
+  allocations?: ReadonlyArray<{ status: string | null }>;
+}
+
+/**
+ * Whether an item has nothing left to issue. Mirrors the status rule at the end
+ * of issue_order: a stack item closes when its confirmed count has been issued,
+ * whatever that count was — it may sit below or above the approval by design —
+ * while a normal item closes when it reaches its approval.
+ */
+export const isOrderItemIssueClosed = (item: IssueClosureItem): boolean => {
+  if (item.quantity_approved === null) return false;
+  const approved = Number(item.quantity_approved);
+  if (item.set_per_qty !== null) {
+    return approved === 0
+      || (item.allocations ?? []).some((allocation) => allocation.status === 'ISSUED');
+  }
+  return Number(item.quantity_issued ?? 0) >= approved;
+};
+
 export const assertStockAvailable = (available: number, requestedIssue: number): void => {
   if (requestedIssue > available) {
     throw new OrderRuleError('Cannot issue more than StockBalances.quantity');

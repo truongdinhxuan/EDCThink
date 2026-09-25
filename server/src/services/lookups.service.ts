@@ -13,6 +13,8 @@ const TABLE_SELECT: Record<LookupTableName, string> = {
     'id, code, name, description, requires_note, is_active, is_deleted, created_at, updated_at',
   order_revision_actions:
     'id, code, name, description, is_system, is_active, is_deleted, created_at, updated_at',
+  allocation_confirm_reasons:
+    'id, code, name, description, direction, corrects_stock, sort_order, is_system, is_active, is_deleted, created_at, updated_at',
 };
 
 const SORT_FIELDS: Record<LookupTableName, readonly string[]> = {
@@ -26,6 +28,7 @@ const SORT_FIELDS: Record<LookupTableName, readonly string[]> = {
   order_revision_actions: LOOKUP_SORT_FIELDS.filter(
     (field) => field !== 'sort_order',
   ),
+  allocation_confirm_reasons: LOOKUP_SORT_FIELDS,
 };
 
 const SEARCH_FIELDS: Record<LookupTableName, readonly string[]> = {
@@ -33,7 +36,13 @@ const SEARCH_FIELDS: Record<LookupTableName, readonly string[]> = {
   stock_transaction_types: ['code', 'name'],
   adjustment_reasons: ['code', 'name', 'description'],
   order_revision_actions: ['code', 'name', 'description'],
+  allocation_confirm_reasons: ['code', 'name', 'description'],
 };
+
+const SORTED_BY_SORT_ORDER: ReadonlySet<LookupTableName> = new Set([
+  'order_statuses',
+  'allocation_confirm_reasons',
+]);
 
 export class LookupsService {
   constructor(private readonly fastify: FastifyInstance) {}
@@ -45,7 +54,7 @@ export class LookupsService {
   async list(table: LookupTableName, query: LookupListQuery = {}) {
     const pagination = parsePagination(query, {
       allowedSortBy: SORT_FIELDS[table],
-      defaultSortBy: table === 'order_statuses' ? 'sort_order' : 'code',
+      defaultSortBy: SORTED_BY_SORT_ORDER.has(table) ? 'sort_order' : 'code',
       defaultSortOrder: 'asc',
     });
     const isActive = parseActiveFilter(query.isActive);

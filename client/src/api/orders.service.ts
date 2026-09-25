@@ -2,8 +2,8 @@ import instance from "./http";
 import type {
   ApproveOrderInput,
   CancelOrderInput,
-  ConfirmAllocationInput,
-  ConfirmAllocationResult,
+  ConfirmStackItemInput,
+  ConfirmStackItemResult,
   CreateOrderInput,
   IssueOrderInput,
   Order,
@@ -51,19 +51,16 @@ export const updateOrder = async (id: string, input: UpdateOrderInput): Promise<
 export const approveOrder = async (id: string, input: ApproveOrderInput): Promise<Order> =>
   normalizeOrder(get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/approve`, input)));
 
-export const allocateOrder = async (id: string): Promise<Order> =>
-  normalizeOrder(get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/allocate`)));
-
-export const confirmOrderAllocation = async (
+export const confirmOrderStackItem = async (
   orderId: string,
-  allocationId: string,
-  input: ConfirmAllocationInput,
-): Promise<ConfirmAllocationResult> => {
+  orderItemId: string,
+  input: ConfirmStackItemInput,
+): Promise<ConfirmStackItemResult> => {
   const result = get(
     await instance.post<
-      ApiEnvelope<ConfirmAllocationResult>,
-      ApiEnvelope<ConfirmAllocationResult>
-    >(`orders/${orderId}/allocations/${allocationId}/confirm`, input),
+      ApiEnvelope<ConfirmStackItemResult>,
+      ApiEnvelope<ConfirmStackItemResult>
+    >(`orders/${orderId}/items/${orderItemId}/confirm`, input),
   );
   return { ...result, order: normalizeOrder(result.order) };
 };

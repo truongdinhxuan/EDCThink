@@ -43,6 +43,22 @@ describe('Order direct-PENDING Phase 1 contract', () => {
     assert.equal('exclusiveMinimum' in quantitySchema, false);
   });
 
+  it('does not cap the approval at the request inside review_order either', () => {
+    // The table and API allowed it, but review_order still refused it with
+    // 'Invalid approved quantity or order item' until 20260925010000. A check on
+    // the table migration alone missed that.
+    const review = readFileSync(
+      resolve(process.cwd(), 'supabase/migrations/20260925010000_review_order_stock_bound.sql'),
+      'utf8',
+    );
+    const body = review.slice(review.indexOf('create or replace function public.review_order'));
+    assert.doesNotMatch(body, /quantity_approved'\)::numeric\s*>\s*oi\.quantity_requested/);
+    assert.match(body, /has_permission\(p_actor_id, 'supply\.order\.approve'\)/);
+    assert.match(body, /message = 'ORDER_APPROVAL_EXCEEDS_STOCK'/);
+    assert.match(body, /demand\.approved_quantity > coalesce\(balance\.quantity, 0\)/);
+    assert.match(body, /group by oi\.supply_id, oi\.provider_id, oi\.set_per_qty/);
+  });
+
   it('does not introduce a hard-coded status UUID default', () => {
     assert.doesNotMatch(migration, /delete\s+from\s+public\.order_statuses/i);
     assert.doesNotMatch(migration, /update\s+public\.order_statuses/i);

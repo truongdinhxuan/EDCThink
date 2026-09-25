@@ -15,6 +15,12 @@ const orderRuntime = read(
 const stackImport = read(
   'supabase/migrations/20260822135035_supply_stack_import.sql',
 );
+const locationLabels = read(
+  'supabase/migrations/20260924010000_stock_location_labels.sql',
+);
+const locationFree = read(
+  'supabase/migrations/20260924010100_stock_location_free_rpcs.sql',
+);
 const directPendingOrder = read(
   'supabase/migrations/20260909173958_create_order_direct_pending.sql',
 );
@@ -55,14 +61,18 @@ describe('Provider-aware atomic stock adjustment contract', () => {
       stockSchema,
       /required:[\s\S]*'supply_id',[\s\S]*'provider_id',[\s\S]*'area_id'/,
     );
-    assert.match(adjustmentService, /rpc\('apply_stock_adjustment_v4'/);
+    assert.match(adjustmentService, /rpc\('apply_stock_adjustment_v5'/);
     assert.match(adjustmentService, /p_provider_id: body\.provider_id/);
   });
 
-  it('keeps Provider in the complete stack balance identity', () => {
+  it('keeps Provider, and no longer the location, in the stack balance identity', () => {
     assert.match(
-      stackImport,
-      /on conflict \([\s\S]*supply_id,[\s\S]*provider_id,[\s\S]*area_id,[\s\S]*storage_location_id,[\s\S]*set_per_qty[\s\S]*\)/i,
+      locationLabels,
+      /stock_balances_stack_identity_key\s+on public\.stock_balances \(supply_id, provider_id, area_id, set_per_qty\)/,
+    );
+    assert.match(
+      locationFree,
+      /on conflict \(supply_id, provider_id, area_id, set_per_qty\)/,
     );
     assert.match(stackImport, /sp\.provider_id = p_provider_id/);
   });

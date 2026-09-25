@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { CreateStockAdjustmentBody } from '../../interfaces/stock';
 import { StockAdjustmentsService } from '../../services/stock-adjustments.service';
 import { StockServiceError } from '../../services/stock.helpers';
+import { stockActor } from '../stock-actor';
 import { respondWithStockData } from '../stock-response';
 
 export const createStockAdjustment = (
@@ -13,7 +14,7 @@ export const createStockAdjustment = (
   () => {
     if (!request.user) throw new StockServiceError(401, 'Unauthorized');
     return new StockAdjustmentsService(request.server).create(
-      { id: request.user.id },
+      stockActor(request),
       request.body as CreateStockAdjustmentBody,
     );
   },

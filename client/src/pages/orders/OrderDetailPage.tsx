@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createRef, useCallback, useMemo, useState, type MouseEvent } from "react";
+import { createRef, useMemo, useState, type MouseEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   getApiErrorCode,
@@ -7,13 +7,12 @@ import {
   getApiErrorMessage,
   ORDER_STATUS_UPDATE_WINDOW_EXPIRED,
 } from "../../api/errors";
-import { listStorageLocations } from "../../api/storage-locations.service";
+import { listAllocationConfirmReasons } from "../../api/lookups.service";
 import {
   approveOrder,
-  allocateOrder,
   cancelOrder,
   completeOrder,
-  confirmOrderAllocation,
+  confirmOrderStackItem,
   getOrder,
   issueOrder,
   receiveOrder,
@@ -26,7 +25,7 @@ import {
   SecondaryButton,
   TextButton,
 } from "../../components/common/Button";
-import { CardSkeleton, SelectSkeleton } from "../../components/common/skeleton";
+import { CardSkeleton } from "../../components/common/skeleton";
 
 /**
  * The status-action row can show up to seven buttons at once, and which ones
@@ -47,23 +46,22 @@ import { CrudModal, FieldError, inputClassName, labelClassName } from "../../com
 import { PERMISSION_CODE } from "../../constants/permissions";
 import { getWorkspacePath } from "../../constants/workspaces";
 import { useAuth } from "../../context/AuthContext";
-import { useServerLookup } from "../../hooks/useServerLookup";
 import { useCrudOffcanvas } from "../../hooks/useCrudOffcanvas";
 import { useDeadlinePassed } from "../../hooks/useDeadlinePassed";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { queryKeys } from "../../lib/queryKeys";
 import { resolveStatusUpdateCutoff } from "../../utils/workShiftWindow";
-import type { StorageLocationOption } from "../../types/catalog";
 import type {
+  NormalIssueStockConflictDetails,
   Order,
+  OrderAllocationLocation,
   OrderItem,
   OrderItemAllocation,
-  StackAllocationErrorDetails,
-  StackIssueStockConflictDetails,
+  StackItemConfirmation,
 } from "../../types/orders";
 
 type ActionPanel = "approve" | "issue" | null;
-type ItemValues = Record<string, { quantity: string; note?: string; storageLocationId?: string }>;
+type ItemValues = Record<string, { quantity: string; note?: string }>;
 
 const formatDate = (value: string | null) =>
   value
@@ -87,44 +85,55 @@ const approvedStackQuantity = (item: OrderItem): number | null => {
   return approved / setPerQty;
 };
 
-interface StackIssueReadiness {
+/**
+ * Where one KIEN_SAT_TC item stands. Data vật tư confirms one stack count per
+ * item; that count may sit below or above the approval (with a reason) and is
+ * exactly what ships. There is no "short of approval" state any more: once
+ * confirmed, the item is ready.
+ */
+interface StackItemState {
   approvedStacks: number | null;
-  actualConfirmedStacks: number;
-  unconfirmedAllocations: number;
-  remainingStacks: number;
-  isAlreadyIssued: boolean;
+  confirmation: OrderItemAllocation | null;
+  confirmedStacks: number | null;
+  /** Rejected at review (approved 0): nothing to confirm or ship. */
+  rejected: boolean;
+  issued: boolean;
   ready: boolean;
 }
 
-const getStackIssueReadiness = (item: OrderItem): StackIssueReadiness => {
-  const approvedStacks = approvedStackQuantity(item);
-  const allocations = item.allocations ?? [];
-  const unconfirmedAllocations = allocations.filter(
-    (allocation) => allocation.actual_stack_quantity === null || !allocation.confirmed_at,
-  ).length;
-  const actualConfirmedStacks = allocations.reduce(
-    (total, allocation) => total + Number(allocation.actual_stack_quantity ?? 0),
-    0,
-  );
-  const isAlreadyIssued = item.quantity_approved !== null
-    && Number(item.quantity_issued ?? 0) === Number(item.quantity_approved);
-  const remainingStacks = approvedStacks === null
-    ? 0
-    : Math.max(0, approvedStacks - actualConfirmedStacks);
-
+const getStackItemState = (item: OrderItem): StackItemState => {
+  const confirmation = item.allocations?.[0] ?? null;
+  const rejected = item.quantity_approved !== null && Number(item.quantity_approved) === 0;
+  const issued = confirmation?.status === 'ISSUED';
   return {
-    approvedStacks,
-    actualConfirmedStacks,
-    unconfirmedAllocations,
-    remainingStacks,
-    isAlreadyIssued,
-    ready: isAlreadyIssued || (
-      approvedStacks !== null
-      && allocations.length > 0
-      && unconfirmedAllocations === 0
-      && actualConfirmedStacks === approvedStacks
-    ),
+    approvedStacks: approvedStackQuantity(item),
+    confirmation,
+    confirmedStacks: confirmation?.actual_stack_quantity ?? null,
+    rejected,
+    issued,
+    ready: rejected || issued || confirmation?.status === 'CONFIRMED',
   };
+};
+
+const locationCodes = (locations: OrderAllocationLocation[] | undefined) =>
+  locations && locations.length > 0
+    ? locations.map((location) => location.code).join(', ')
+    : 'Chưa gắn vị trí';
+
+const describeConfirmation = (
+  confirmation: StackItemConfirmation,
+  reasonName: string | undefined,
+): string => {
+  const { actual_stack_quantity: actual, approved_stack_quantity: approved } = confirmation;
+  return [
+    actual === approved
+      ? `Đã xác nhận đủ ${actual} chồng. Có thể xuất hàng.`
+      : `Đã xác nhận ${actual}/${approved} chồng${reasonName ? ` (${reasonName})` : ''}. Sẽ xuất đúng ${actual} chồng.`,
+    confirmation.corrected_stack_quantity > 0
+      ? `Đã trừ ${confirmation.corrected_stack_quantity} chồng tồn sổ không có thật.`
+      : null,
+    confirmation.discrepancy_id ? 'Đã mở phiếu kiểm kê cho mã này.' : null,
+  ].filter(Boolean).join(' ');
 };
 
 const OrderDetailPage = () => {
@@ -148,16 +157,19 @@ const OrderDetailPage = () => {
   });
   const confirmationMutation = useMutation({
     mutationFn: ({
-      allocationId,
+      orderItemId,
       actualStackQuantity,
-      reason: confirmationReason,
+      reasonCode,
+      reasonNote,
     }: {
-      allocationId: string;
+      orderItemId: string;
       actualStackQuantity: number;
-      reason?: string;
-    }) => confirmOrderAllocation(id!, allocationId, {
+      reasonCode?: string;
+      reasonNote?: string;
+    }) => confirmOrderStackItem(id!, orderItemId, {
       actual_stack_quantity: actualStackQuantity,
-      reason: confirmationReason,
+      reason_code: reasonCode,
+      reason_note: reasonNote,
     }),
   });
   const order = orderQuery.data ?? null;
@@ -166,10 +178,8 @@ const OrderDetailPage = () => {
     ? getApiErrorMessage(orderQuery.error, "Không thể tải order.")
     : null;
   const [actionError, setActionError] = useState<string | null>(null);
-  const [allocationErrorDetails, setAllocationErrorDetails] =
-    useState<StackAllocationErrorDetails | null>(null);
-  const [stackIssueErrorDetails, setStackIssueErrorDetails] =
-    useState<StackIssueStockConflictDetails | null>(null);
+  const [issueConflict, setIssueConflict] =
+    useState<NormalIssueStockConflictDetails | null>(null);
   const mutating = orderMutation.isPending || confirmationMutation.isPending;
   // Status changes close three hours after the Order's shift ends. The backend
   // refuses them regardless; this only keeps the operator from filling in a
@@ -186,48 +196,25 @@ const OrderDetailPage = () => {
   const actionsLocked = mutating || isStatusUpdateExpired;
   const [panel, setPanel] = useState<ActionPanel>(null);
   const [itemValues, setItemValues] = useState<ItemValues>({});
-  const [confirmationTarget, setConfirmationTarget] = useState<{
-    item: OrderItem;
-    allocation: OrderItemAllocation;
-  } | null>(null);
+  const [confirmationTarget, setConfirmationTarget] = useState<OrderItem | null>(null);
   const [actualStackQuantity, setActualStackQuantity] = useState('');
-  const [confirmationReason, setConfirmationReason] = useState('');
+  const [confirmationReasonCode, setConfirmationReasonCode] = useState('');
+  const [confirmationNote, setConfirmationNote] = useState('');
   const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
-  const storageLocationLoader = useCallback(
-    (search: string | undefined, signal: AbortSignal) => {
-      if (!order) throw new Error("Order chưa sẵn sàng.");
-      return listStorageLocations({
-        page: 1,
-        pageSize: 20,
-        search,
-        areaId: order.from_area_id,
-        isActive: true,
-        sortBy: 'code',
-        sortOrder: 'asc',
-      }, signal);
-    },
-    [order],
-  );
-  const storageLocationLookup = useServerLookup<StorageLocationOption>({
-    loader: storageLocationLoader,
-    queryKey: (search) => queryKeys.storageLocations.lookup({
-      search,
-      areaId: order?.from_area_id,
-      pageSize: 20,
-      isActive: true,
-    }),
-    errorMessage: "Không thể tải danh sách vị trí kho.",
-    enabled: panel === "issue" && Boolean(
-      order?.order_items?.some(
-        (item) => item.set_per_qty === null && itemRemaining(item) > 0,
-      ),
+  // Only needed once someone opens the confirm dialog; it is a short, stable list.
+  const confirmReasonsQuery = useQuery({
+    queryKey: queryKeys.allocationConfirmReasons.lookup({ isActive: true }),
+    queryFn: ({ signal }) => listAllocationConfirmReasons(
+      { page: 1, pageSize: 50, isActive: true },
+      signal,
     ),
+    enabled: confirmationTarget !== null,
+    staleTime: 5 * 60 * 1000,
   });
-  const storageLocations = storageLocationLookup.items;
-  const storageLocationsLoading = storageLocationLookup.loading;
-  const storageLocationsError = storageLocationLookup.error;
-  const storageLocationSearch = storageLocationLookup.search;
-  const setStorageLocationSearch = storageLocationLookup.setSearch;
+  const confirmReasons = useMemo(
+    () => confirmReasonsQuery.data?.data ?? [],
+    [confirmReasonsQuery.data],
+  );
 
   const items = useMemo(() => order?.order_items ?? [], [order]);
   const actorId = user?.publicData.id ?? user?.id;
@@ -243,8 +230,7 @@ const OrderDetailPage = () => {
     ),
   );
   const isApprover = hasPermission(PERMISSION_CODE.SUPPLY_ORDER_APPROVE);
-  const isAllocator = hasPermission(PERMISSION_CODE.SUPPLY_ORDER_ALLOCATE);
-  const canConfirmAllocations = hasPermission(
+  const canConfirmStacks = hasPermission(
     PERMISSION_CODE.SUPPLY_ORDER_CONFIRM_ALLOCATION,
   );
   const isIssuer = hasPermission(PERMISSION_CODE.SUPPLY_ORDER_ISSUE);
@@ -256,49 +242,43 @@ const OrderDetailPage = () => {
     () => items.filter((item) => item.set_per_qty === null && itemRemaining(item) > 0),
     [items],
   );
-  const stackReadiness = useMemo(
-    () => new Map(stackItems.map((item) => [item.id, getStackIssueReadiness(item)])),
+  const stackStates = useMemo(
+    () => new Map(stackItems.map((item) => [item.id, getStackItemState(item)])),
     [stackItems],
   );
   const stackItemsNotReady = useMemo(
-    () => stackItems.filter((item) => !stackReadiness.get(item.id)?.ready),
-    [stackItems, stackReadiness],
+    () => stackItems.filter((item) => !stackStates.get(item.id)?.ready),
+    [stackItems, stackStates],
   );
+  // Approved before whole-stack approval was enforced; nothing can confirm these.
   const incompatibleStackItems = useMemo(
-    () => stackItems.filter((item) => approvedStackQuantity(item) === null),
-    [stackItems],
-  );
-  const hasInitialAllocations = stackItems.some(
-    (item) => (item.allocations?.length ?? 0) > 0,
+    () => stackItems.filter((item) => {
+      const state = stackStates.get(item.id);
+      return state && !state.rejected && state.approvedStacks === null && item.quantity_approved !== null;
+    }),
+    [stackItems, stackStates],
   );
   const canCancel = Boolean(order && isPackingOwner && order.status === "PENDING");
   const canApprove = Boolean(order && isApprover && order.status === "PENDING");
-  const canAllocate = Boolean(
-    order &&
-    isAllocator &&
-    order.status === "APPROVED" &&
-    stackItems.length > 0 &&
-    incompatibleStackItems.length === 0 &&
-    !hasInitialAllocations
-  );
   const hasIssueAction = Boolean(
     order && isIssuer && ["APPROVED", "PARTIAL_ISSUED"].includes(order.status),
   );
   const canIssue = hasIssueAction && stackItemsNotReady.length === 0;
   const canReceive = Boolean(order && isPackingOwner && order.status === "ISSUED");
   const canComplete = Boolean(order && isIssuer && ["ISSUED", "RECEIVED"].includes(order.status));
-  const stackAllocationRows = useMemo(
-    () => stackItems.flatMap((item) =>
-      (item.allocations ?? []).map((allocation) => ({ item, allocation })),
-    ),
-    [stackItems],
-  );
-  const canConfirmAnyAllocation = Boolean(
-    order?.status === 'APPROVED'
-    && canConfirmAllocations
-    && stackAllocationRows.some(({ allocation }) =>
-      allocation.actual_stack_quantity === null && allocation.confirmed_at === null),
-  );
+  const canConfirmItem = (item: OrderItem) => {
+    const state = stackStates.get(item.id);
+    return Boolean(
+      order?.status === 'APPROVED'
+      && canConfirmStacks
+      && state
+      && !state.rejected
+      && state.approvedStacks !== null
+      && state.confirmation === null,
+    );
+  };
+  const canConfirmAnyStack = stackItems.some(canConfirmItem);
+  const showStackSection = stackItems.some((item) => item.quantity_approved !== null);
 
   const runMutation = async (
     operation: () => Promise<Order>,
@@ -307,8 +287,7 @@ const OrderDetailPage = () => {
     throwOnError = false,
   ) => {
     setActionError(null);
-    setAllocationErrorDetails(null);
-    setStackIssueErrorDetails(null);
+    setIssueConflict(null);
     try {
       const updated = await orderMutation.mutateAsync(operation);
       queryClient.setQueryData(queryKeys.orders.detail(updated.id), updated);
@@ -325,6 +304,8 @@ const OrderDetailPage = () => {
           queryClient.invalidateQueries({ queryKey: queryKeys.stockBalances.all }),
           queryClient.invalidateQueries({ queryKey: queryKeys.stockTransactions.all }),
           queryClient.invalidateQueries({ queryKey: queryKeys.supplyStackOptions.all }),
+          // Issuing more stacks than the books hold opens a recount.
+          queryClient.invalidateQueries({ queryKey: queryKeys.inventoryDiscrepancies.all }),
         ]);
       }
       setPanel(null);
@@ -403,39 +384,53 @@ const OrderDetailPage = () => {
     });
   };
 
-  const openConfirmation = (
-    item: OrderItem,
-    allocation: OrderItemAllocation,
-  ) => {
+  const openConfirmation = (item: OrderItem) => {
     setActionError(null);
     setConfirmationMessage(null);
-    setConfirmationTarget({ item, allocation });
-    setActualStackQuantity(String(allocation.expected_stack_quantity));
-    setConfirmationReason('');
+    setConfirmationTarget(item);
+    setActualStackQuantity(String(approvedStackQuantity(item) ?? ''));
+    setConfirmationReasonCode('');
+    setConfirmationNote('');
   };
 
-  const confirmActualAllocation = async () => {
+  const confirmTargetApproved = confirmationTarget
+    ? approvedStackQuantity(confirmationTarget)
+    : null;
+  const confirmActual = Number(actualStackQuantity);
+  const confirmActualValid = actualStackQuantity.trim() !== ''
+    && Number.isInteger(confirmActual)
+    && confirmActual >= 0;
+  // Which side of the approval the typed count sits on; null when equal or unknown.
+  const confirmDirection = confirmActualValid && confirmTargetApproved !== null
+    && confirmActual !== confirmTargetApproved
+    ? (confirmActual < confirmTargetApproved ? 'LOWER' : 'HIGHER')
+    : null;
+  const confirmReasonOptions = useMemo(
+    () => confirmReasons.filter((reason) => reason.direction === confirmDirection),
+    [confirmReasons, confirmDirection],
+  );
+  const selectedConfirmReason = confirmReasonOptions.find(
+    (reason) => reason.code === confirmationReasonCode,
+  );
+
+  const submitStackConfirmation = async () => {
     if (!id || !confirmationTarget) return;
-    const actual = Number(actualStackQuantity);
-    if (!Number.isFinite(actual) || actual < 0) {
-      setActionError('Số chồng thực tế phải lớn hơn hoặc bằng 0.');
+    if (!confirmActualValid) {
+      setActionError('Số chồng xác nhận phải là số nguyên lớn hơn hoặc bằng 0.');
       return;
     }
-    if (!Number.isInteger(actual)) {
-      setActionError('Số chồng phải là số nguyên.');
-      return;
-    }
-    if (actual > confirmationTarget.allocation.expected_stack_quantity) {
-      setActionError('Số chồng thực tế không được vượt số chồng dự kiến.');
+    if (confirmDirection && !selectedConfirmReason) {
+      setActionError('Số chồng khác số đã duyệt: phải chọn lý do.');
       return;
     }
 
     setActionError(null);
     try {
       const result = await confirmationMutation.mutateAsync({
-        allocationId: confirmationTarget.allocation.id,
-        actualStackQuantity: actual,
-        reason: confirmationReason.trim() || undefined,
+        orderItemId: confirmationTarget.id,
+        actualStackQuantity: confirmActual,
+        reasonCode: confirmDirection ? selectedConfirmReason?.code : undefined,
+        reasonNote: confirmDirection ? confirmationNote.trim() || undefined : undefined,
       });
       queryClient.setQueryData(queryKeys.orders.detail(result.order.id), result.order);
       await Promise.all([
@@ -445,25 +440,23 @@ const OrderDetailPage = () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.supplyStackOptions.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.inventoryDiscrepancies.all }),
       ]);
-      const confirmation = result.confirmation;
       setConfirmationMessage(
-        confirmation.reallocation_status === 'INSUFFICIENT'
-          ? `Đã ghi nhận chênh lệch ${confirmation.difference_stack_quantity} chồng. Không đủ tồn thay thế; còn thiếu ${confirmation.unallocated_stack_quantity} chồng.`
-          : confirmation.reallocation_status === 'REALLOCATED'
-            ? `Đã ghi nhận chênh lệch và tạo ${confirmation.reallocation_count ?? confirmation.new_allocations.length} allocation thay thế.`
-            : 'Đã xác nhận đúng số chồng dự kiến.',
+        describeConfirmation(result.confirmation, selectedConfirmReason?.name),
       );
       setConfirmationTarget(null);
     } catch (requestError) {
+      if (getApiErrorCode(requestError) === ORDER_STATUS_UPDATE_WINDOW_EXPIRED) {
+        setServerRefusedAsExpired(true);
+      }
       setActionError(
-        getApiErrorMessage(requestError, 'Không thể xác nhận số chồng thực tế.'),
+        getApiErrorMessage(requestError, 'Không thể xác nhận số chồng.'),
       );
     }
   };
 
   const openPanel = (nextPanel: Exclude<ActionPanel, null>) => {
     setActionError(null);
-    setStackIssueErrorDetails(null);
+    setIssueConflict(null);
     setPanel(nextPanel);
     if (nextPanel === "approve") {
       setItemValues(Object.fromEntries(items.map((item) => [item.id, {
@@ -473,15 +466,8 @@ const OrderDetailPage = () => {
     if (nextPanel === "issue") {
       setItemValues(Object.fromEntries(items.map((item) => [item.id, {
         quantity: "",
-        storageLocationId: "",
       }])));
     }
-  };
-
-  const openIssuePanel = () => {
-    if (!order) return;
-    openPanel("issue");
-    setStorageLocationSearch("");
   };
 
   const confirmApprove = () => {
@@ -490,13 +476,41 @@ const OrderDetailPage = () => {
       order_item_id: item.id,
       quantity_approved: Number(itemValues[item.id]?.quantity),
     }));
-    const invalid = approvals.some((approval, index) =>
-      !Number.isInteger(approval.quantity_approved) ||
-      approval.quantity_approved <= 0 ||
-      approval.quantity_approved > Number(items[index].quantity_requested),
+    // Zero rejects a line; above the request is allowed. The only ceiling is
+    // what the source Area holds — the server checks the same rule.
+    const invalid = approvals.some((approval) =>
+      !Number.isInteger(approval.quantity_approved) || approval.quantity_approved < 0,
     );
     if (invalid) {
-      setActionError("Số duyệt của mỗi dòng phải là số nguyên lớn hơn 0 và không vượt số lượng yêu cầu.");
+      setActionError("Số duyệt của mỗi dòng phải là số nguyên, không nhỏ hơn 0.");
+      return;
+    }
+    // Lines of one code draw from one pooled row, so they are summed.
+    const approvedByCode = new Map<string, { item: OrderItem; approved: number }>();
+    items.forEach((item, index) => {
+      const key = `${item.supply_id}:${item.provider_id}:${item.set_per_qty ?? 'normal'}`;
+      const current = approvedByCode.get(key) ?? { item, approved: 0 };
+      current.approved += approvals[index].quantity_approved;
+      approvedByCode.set(key, current);
+    });
+    const overStock = [...approvedByCode.values()].find(
+      ({ item, approved }) => approved > Number(item.available_quantity ?? 0),
+    );
+    if (overStock) {
+      setActionError(
+        `Số duyệt vượt tồn khu vực cấp: ${overStock.item.supply?.code ?? 'Vật tư'} duyệt ${overStock.approved}, tồn ${overStock.item.available_quantity ?? 0}.`,
+      );
+      return;
+    }
+    // A stack ships whole or not at all; the server refuses the rest too.
+    const partialStack = items.find((item, index) =>
+      item.set_per_qty !== null
+      && approvals[index].quantity_approved % Number(item.set_per_qty) !== 0,
+    );
+    if (partialStack) {
+      setActionError(
+        `${partialStack.supply?.code ?? 'Kiện tiêu chuẩn'} phải duyệt theo bội số của ${partialStack.set_per_qty} SET/chồng.`,
+      );
       return;
     }
     void runMutation(() => approveOrder(id, { items: approvals }));
@@ -505,7 +519,7 @@ const OrderDetailPage = () => {
   const confirmIssue = () => {
     if (!id) return;
     if (stackItemsNotReady.length > 0) {
-      setActionError("Chưa xác nhận đầy đủ số chồng thực tế trước khi xuất hàng.");
+      setActionError("Còn vật tư kiện tiêu chuẩn chưa xác nhận số chồng.");
       return;
     }
     // A typed-but-fractional quantity must be reported, not silently skipped as
@@ -519,40 +533,31 @@ const OrderDetailPage = () => {
       return;
     }
     const selected = normalIssueItems.flatMap((item) => {
-      const values = itemValues[item.id];
-      const quantity = Number(values?.quantity);
+      const quantity = Number(itemValues[item.id]?.quantity);
       if (!Number.isInteger(quantity) || quantity <= 0) return [];
-      return [{ item, quantity, storageLocationId: values?.storageLocationId?.trim() ?? "" }];
+      return [{ item, quantity }];
     });
-    if (selected.length === 0 && stackItems.length === 0) {
+    // Confirmed stack items ship on their own, so an issue with only those is valid.
+    const pendingStack = stackItems.some((item) => {
+      const state = stackStates.get(item.id);
+      return state?.confirmation?.status === 'CONFIRMED';
+    });
+    if (selected.length === 0 && !pendingStack) {
       setActionError("Nhập ít nhất một số lượng cần cấp.");
       return;
     }
-    if (selected.length > 0 && storageLocationsLoading) {
-      setActionError("Danh sách vị trí kho vẫn đang tải.");
-      return;
-    }
-    if (selected.length > 0 && (storageLocationsError || storageLocations.length === 0)) {
-      setActionError("Danh sách vị trí kho chưa sẵn sàng. Không thể issue hàng.");
-      return;
-    }
-    if (selected.some(({ item, quantity, storageLocationId }) =>
-      !storageLocations.some((location) => location.id === storageLocationId) ||
-      quantity > itemRemaining(item),
-    )) {
-      setActionError("Cần chọn vị trí kho hợp lệ và số cấp không được vượt phần đã duyệt còn lại.");
+    if (selected.some(({ item, quantity }) => quantity > itemRemaining(item))) {
+      setActionError("Số cấp không được vượt phần đã duyệt còn lại.");
       return;
     }
     void runMutation(() => issueOrder(id, {
-      items: selected.map(({ item, quantity, storageLocationId }) => ({
+      items: selected.map(({ item, quantity }) => ({
         order_item_id: item.id,
-        issues: [{ storage_location_id: storageLocationId, quantity }],
+        quantity,
       })),
     }), true, (error) => {
-      if (getApiErrorCode(error) === 'STACK_ISSUE_STOCK_CONFLICT') {
-        setStackIssueErrorDetails(
-          getApiErrorDetails<StackIssueStockConflictDetails>(error),
-        );
+      if (getApiErrorCode(error) === 'NORMAL_ISSUE_STOCK_CONFLICT') {
+        setIssueConflict(getApiErrorDetails<NormalIssueStockConflictDetails>(error));
       }
     });
   };
@@ -569,8 +574,8 @@ const OrderDetailPage = () => {
     );
   }
 
-  const hasActions = canCancel || canApprove || canAllocate
-    || canConfirmAnyAllocation || hasIssueAction || canReceive || canComplete;
+  const hasActions = canCancel || canApprove
+    || canConfirmAnyStack || hasIssueAction || canReceive || canComplete;
   const fromAreaName = order.from_area?.name ?? 'Không rõ';
   const toAreaName = order.to_area?.name ?? 'Không rõ';
   const stockShortageItems = items.filter((item) => item.has_stock_shortage && (
@@ -586,431 +591,426 @@ const OrderDetailPage = () => {
   );
 
   return (
-    <section className="space-y-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+    <section className="space-y-3 sm:space-y-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <Link to={ordersPath} className={TextButton}>← Danh sách order</Link>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold text-slate-900">{order.code}</h1>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2.5">
+            <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">{order.code}</h1>
             <OrderStatusBadge status={order.status} />
           </div>
         </div>
-        <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-800">
-          Tạo, submit và approve không thay đổi tồn kho.<br />Chỉ thao tác issue mới trừ tồn và tạo transaction.
-        </div>
+        <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs leading-5 text-blue-800">
+          Tạo, submit và approve không thay đổi tồn kho. Chỉ thao tác issue mới trừ tồn và tạo transaction.
+        </p>
       </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {[
-          ["Area gửi", fromAreaName],
-          ["Area nhận", toAreaName],
-          ["Người tạo", requesterName],
-          ["Ngày tạo", formatDate(order.created_at)],
-        ].map(([label, value]) => (
-          <div key={label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-            <p className="mt-2 break-words text-sm font-semibold text-slate-800">{value}</p>
-          </div>
-        ))}
-      </div>
-
-      {reviewRevisions.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="font-bold text-slate-900">Lịch sử duyệt / từ chối</h2>
-          <div className="mt-3 space-y-2">
-            {reviewRevisions.map((revision) => {
-              const actorName = revision.creator
-                ? `${revision.creator.first_name} ${revision.creator.last_name}`.trim()
-                : 'Không rõ';
-              return (
-                <div
-                  key={revision.id}
-                  className="flex flex-col gap-1 rounded-xl bg-slate-50 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <span className="font-semibold text-slate-800">
-                    {revision.action?.name ?? revision.action?.code} — {actorName}
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    {formatDate(revision.created_at)}
-                    {revision.reason ? ` — ${revision.reason}` : ''}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {stockShortageItems.length > 0 && (
-        <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+        <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-900">
           <p className="font-bold">⚠ {stockShortageItems.length} vật tư đang có tồn thấp tại Area gửi.</p>
-          <p className="mt-1">Đây là cảnh báo tại thời điểm kiểm tra. Order vẫn có thể được duyệt và chưa làm thay đổi tồn kho.</p>
+          <p className="mt-0.5 text-xs">Đây là cảnh báo tại thời điểm kiểm tra. Order vẫn có thể được duyệt và chưa làm thay đổi tồn kho.</p>
         </div>
       )}
 
       {order.status === "APPROVED" && incompatibleStackItems.length > 0 && (
-        <div role="alert" className="rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-800">
-          <p className="font-bold">Không thể phân bổ vị trí cho một số vật tư chồng.</p>
-          <p className="mt-1">
-            Số lượng đã duyệt phải chia hết cho quy cách SET/chồng. Cần điều chỉnh bước duyệt trước khi phân bổ.
+        <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 px-3.5 py-2.5 text-sm text-rose-800">
+          <p className="font-bold">Không thể xác nhận số chồng cho một số vật tư kiện tiêu chuẩn.</p>
+          <p className="mt-0.5 text-xs">
+            Số lượng đã duyệt không chia hết cho quy cách SET/chồng ({incompatibleStackItems.map((item) => item.supply?.code ?? 'Vật tư').join(', ')}).
+            Order này được duyệt trước khi hệ thống chặn trường hợp đó; cần hủy và tạo lại.
           </p>
         </div>
       )}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm sm:p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-bold text-slate-900">Thao tác theo trạng thái và quyền</h2>
-            <p className="mt-1 text-xs text-slate-500">Backend vẫn là lớp kiểm tra quyền cuối cùng.</p>
-          </div>
-          <div className="flex flex-wrap gap-1.5 sm:gap-2">
-            {canApprove && <button type="button" title="Thao tác này chưa làm thay đổi tồn kho" disabled={actionsLocked} onClick={() => openPanel("approve")} className={ACTION_INFO}>Xác nhận</button>}
-            {canApprove && <button type="button" title="Từ chối yêu cầu" disabled={actionsLocked} onClick={openRejectConfirmation} className={ACTION_ERROR}>Từ chối</button>}
-            {canAllocate && <button type="button" title="Tạo đề xuất vị trí; không trừ hoặc giữ tồn kho" disabled={actionsLocked} onClick={() => void runMutation(() => allocateOrder(id), false, (error) => setAllocationErrorDetails(getApiErrorDetails<StackAllocationErrorDetails>(error)))} className={ACTION_INFO}>Phân bổ vị trí</button>}
-            {hasIssueAction && (
-              <button
-                type="button"
-                title={canIssue
-                  ? "Issue mới trừ tồn và tạo StockTransactions"
-                  : "Chưa xác nhận đủ số chồng thực tế"}
-                disabled={!canIssue || actionsLocked}
-                onClick={openIssuePanel}
-                className={ACTION_VIOLET}
-              >
-                Xuất hàng
-              </button>
-            )}
-            {canReceive && <button type="button" disabled={actionsLocked} onClick={() => void runMutation(() => receiveOrder(id))} className={ACTION_CYAN}>Đã nhận hàng</button>}
-            {canComplete && <button type="button" disabled={actionsLocked} onClick={() => void runMutation(() => completeOrder(id))} className={ACTION_SUCCESS}>Hoàn thành</button>}
-            {canCancel && <button type="button" disabled={actionsLocked} onClick={openCancelConfirmation} className={ACTION_SECONDARY}>Hủy order</button>}
-          </div>
-        </div>
-        {isStatusUpdateExpired && (
-          <div role="alert" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-            <p className="font-bold">
-              Đã quá thời hạn cho phép cập nhật trạng thái Order (kết thúc ca + 3 giờ).
-            </p>
-            <p className="mt-1">
-              Không thể tiếp tục thao tác trên Order này.
-              {statusUpdateCutoff && ` Hạn cuối: ${formatDate(statusUpdateCutoff.toISOString())}.`}
-            </p>
-          </div>
-        )}
-        {!hasActions && <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Không có thao tác phù hợp với role và trạng thái hiện tại.</p>}
-        {mutating && <p className="mt-4 text-sm font-semibold text-blue-600">Đang cập nhật order...</p>}
-        {actionError && <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{actionError}</div>}
-        {hasIssueAction && stackItemsNotReady.length > 0 && (
-          <div role="alert" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-            <p className="font-bold">Chưa sẵn sàng xuất kiện sắt tiêu chuẩn.</p>
-            <p className="mt-1">Chưa xác nhận đầy đủ số chồng thực tế hoặc tổng đã xác nhận chưa bằng số chồng được duyệt.</p>
-          </div>
-        )}
-        {stackIssueErrorDetails && (
-          <StackIssueConflictDetails details={stackIssueErrorDetails} />
-        )}
-        {confirmationMessage && <div role="status" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{confirmationMessage}</div>}
-        {allocationErrorDetails && (
-          <AllocationErrorDetails details={allocationErrorDetails} items={items} />
-        )}
-      </div>
-
-      {panel === "approve" && (
-        <ActionCard title="Duyệt số lượng" note="Mỗi dòng phải duyệt lớn hơn 0 và không vượt số yêu cầu. Tồn thấp chỉ cảnh báo; approve không trừ tồn.">
-          <div className="space-y-3">
-            {items.map((item) => (
-              <QuantityRow key={item.id} item={item} label="Số lượng duyệt" value={itemValues[item.id]?.quantity ?? ""} max={item.quantity_requested} onChange={(quantity) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity } }))} />
-            ))}
-          </div>
-          <PanelButtons disabled={mutating} onCancel={() => setPanel(null)} onConfirm={confirmApprove} confirmLabel="Xác nhận" />
-        </ActionCard>
-      )}
-
-      {panel === "issue" && (
-        <ActionCard title={`Cấp hàng từ ${fromAreaName}`} note="Chỉ được chọn vị trí kho thuộc Area gửi. Issue là thao tác duy nhất trừ StockBalances và tạo StockTransactions.">
-          {stackItems.length > 0 && (
-            <div className="mb-4 space-y-3">
-              {stackItems.map((item) => {
-                const readiness = stackReadiness.get(item.id)!;
-                return (
-                  <div key={item.id} className={`rounded-xl border p-4 ${readiness.ready ? 'border-emerald-200 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="font-bold text-slate-900">{item.supply?.code ?? 'Vật tư'}</p>
-                        <p className="mt-1 text-xs text-slate-600">{item.set_per_qty} SET/chồng</p>
-                      </div>
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${readiness.ready ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                        {readiness.isAlreadyIssued ? 'Đã xuất đủ' : readiness.ready ? 'Sẵn sàng xuất' : 'Chưa sẵn sàng'}
-                      </span>
-                    </div>
-                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
-                      <p>Đã duyệt: <strong>{readiness.approvedStacks ?? 'Không tương thích'} chồng</strong></p>
-                      <p>Đã xác nhận: <strong>{readiness.actualConfirmedStacks} chồng</strong></p>
-                      <p>Còn thiếu: <strong>{readiness.remainingStacks} chồng</strong></p>
-                    </div>
-                    {!readiness.ready && (
-                      <p className="mt-2 text-xs font-semibold text-amber-800">
-                        {readiness.unconfirmedAllocations > 0
-                          ? `Còn ${readiness.unconfirmedAllocations} allocation chưa xác nhận thực tế.`
-                          : 'Tổng số chồng thực tế chưa bằng số chồng được duyệt.'}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {normalIssueItems.length > 0 && (
-            <>
-              <input type="search" value={storageLocationSearch} onChange={(event) => setStorageLocationSearch(event.target.value)} placeholder={`Tìm vị trí kho thuộc ${fromAreaName}...`} className="mb-4 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
-              {storageLocationsError && (
-                <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-                  {storageLocationsError}
+      {/* Two columns from lg: what the operator reads and does on the left, the
+          items they are acting on pinned on the right so they stay in view. */}
+      <div className="grid items-start gap-3 sm:gap-4 lg:grid-cols-12">
+        <div className="min-w-0 space-y-3 sm:space-y-4 lg:col-span-5">
+          <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm sm:p-4">
+            <h2 className="text-sm font-bold text-slate-900">Thông tin order</h2>
+            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
+              {[
+                ["Area gửi", fromAreaName],
+                ["Area nhận", toAreaName],
+                ["Người tạo", requesterName],
+                ["Ngày tạo", formatDate(order.created_at)],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0">
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</dt>
+                  <dd className="mt-0.5 break-words text-sm font-semibold text-slate-800">{value}</dd>
                 </div>
-              )}
-              {!storageLocationsLoading && !storageLocationsError && storageLocations.length === 0 && (
-                <div className="mb-4 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-                  Không có vị trí kho active trong Area gửi {fromAreaName}.
-                </div>
-              )}
-            </>
-          )}
-          <div className="space-y-3">
-            {normalIssueItems.map((item) => (
-              <div key={item.id} className="grid gap-3 rounded-xl border border-slate-200 p-3 md:grid-cols-[1fr_1fr_1fr]">
-                <div className="text-sm"><p className="font-semibold text-slate-800">{item.supply?.code ?? 'Vật tư'}</p><p className="mt-1 text-xs text-slate-500">Còn được cấp: {itemRemaining(item)}</p></div>
-                {storageLocationsLoading && storageLocations.length === 0 ? (
-                  <SelectSkeleton label="Đang tải vị trí kho của Area gửi" />
-                ) : (
-                  <select
-                    value={itemValues[item.id]?.storageLocationId ?? ""}
-                    onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], storageLocationId: event.target.value } }))}
-                    disabled={Boolean(storageLocationsError) || storageLocations.length === 0}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
-                  >
-                    <option value="">
-                      {storageLocationsError
-                        ? "Không thể tải vị trí"
-                        : storageLocations.length === 0
-                          ? "Không có vị trí active"
-                          : "Chọn vị trí kho"}
-                    </option>
-                    {storageLocations.map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.code}{location.name ? ` — ${location.name}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <input type="number" min="1" step="1" max={itemRemaining(item)} value={itemValues[item.id]?.quantity ?? ""} onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity: event.target.value } }))} placeholder="Số lượng cấp" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              ))}
+            </dl>
+            {(order.note || order.rejected_reason || order.cancel_reason) && (
+              <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                {order.note && <InfoNote label="Ghi chú" value={order.note} />}
+                {order.rejected_reason && <InfoNote label="Lý do từ chối" value={order.rejected_reason} />}
+                {order.cancel_reason && <InfoNote label="Lý do hủy" value={order.cancel_reason} />}
               </div>
-            ))}
+            )}
           </div>
-          <PanelButtons
-            disabled={
-              mutating
-              || stackItemsNotReady.length > 0
-              || (normalIssueItems.length > 0 && (
-                storageLocationsLoading
-                || Boolean(storageLocationsError)
-                || storageLocations.length === 0
-              ))
-            }
-            onCancel={() => setPanel(null)}
-            onConfirm={confirmIssue}
-            confirmLabel="Xác nhận"
-          />
-        </ActionCard>
-      )}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <div><h2 className="font-bold text-slate-900">Order items</h2><p className="mt-1 text-xs text-slate-500">{items.length} dòng vật tư</p></div>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">Items đã khóa</span>
-        </div>
-        {items.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-500">Order chưa có item.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Vật tư</th><th className="px-5 py-3">Provider</th><th className="px-5 py-3">Yêu cầu</th><th className="px-5 py-3">Tồn khả dụng</th><th className="px-5 py-3">Đã duyệt</th><th className="px-5 py-3">Đã cấp</th><th className="px-5 py-3">Ghi chú</th></tr></thead>
-              <tbody className="divide-y divide-slate-100">
-                {items.map((item) => (
-                  <tr key={item.id} className={item.has_stock_shortage ? "bg-amber-50/70" : undefined}>
-                    <td className="px-5 py-4 font-mono text-xs text-slate-700">{item.supply?.code ?? '—'}</td>
-                    <td className="px-5 py-4"><p className="font-semibold text-slate-800">{item.provider?.code ?? '—'}</p><p className="text-xs text-slate-500">{item.provider?.name ?? '—'}</p></td>
-                    <td className="px-5 py-4">
-                      {item.set_per_qty !== null ? (
-                        <div>
-                          <p className="font-semibold text-slate-800">{item.set_per_qty} SET/chồng</p>
-                          <p className="text-xs text-slate-500">
-                            {item.requested_stack_quantity} chồng — {item.requested_total_set_quantity} SET
+          <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm sm:p-4">
+            {reviewRevisions.length > 0 && (
+              <div className="mb-3 border-b border-slate-100 pb-3">
+                <h2 className="text-sm font-bold text-slate-900">Lịch sử duyệt / từ chối</h2>
+                <div className="mt-2 space-y-1.5">
+                  {reviewRevisions.map((revision) => {
+                    const actorName = revision.creator
+                      ? `${revision.creator.first_name} ${revision.creator.last_name}`.trim()
+                      : 'Không rõ';
+                    return (
+                      <div key={revision.id} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                        <p className="font-semibold text-slate-800">
+                          {revision.action?.name ?? revision.action?.code} — {actorName}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {formatDate(revision.created_at)}
+                          {revision.reason ? ` — ${revision.reason}` : ''}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Thao tác theo trạng thái và quyền</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Backend vẫn là lớp kiểm tra quyền cuối cùng.</p>
+              <div className="mt-3 flex flex-wrap gap-1.5 sm:gap-2">
+                {canApprove && <button type="button" title="Thao tác này chưa làm thay đổi tồn kho" disabled={actionsLocked} onClick={() => openPanel("approve")} className={ACTION_INFO}>Xác nhận</button>}
+                {canApprove && <button type="button" title="Từ chối yêu cầu" disabled={actionsLocked} onClick={openRejectConfirmation} className={ACTION_ERROR}>Từ chối</button>}
+                {hasIssueAction && (
+                  <button
+                    type="button"
+                    title={canIssue
+                      ? "Issue mới trừ tồn và tạo StockTransactions"
+                      : "Còn kiện tiêu chuẩn chưa xác nhận số chồng"}
+                    disabled={!canIssue || actionsLocked}
+                    onClick={() => openPanel("issue")}
+                    className={ACTION_VIOLET}
+                  >
+                    Xuất hàng
+                  </button>
+                )}
+                {canReceive && <button type="button" disabled={actionsLocked} onClick={() => void runMutation(() => receiveOrder(id))} className={ACTION_CYAN}>Đã nhận hàng</button>}
+                {canComplete && <button type="button" disabled={actionsLocked} onClick={() => void runMutation(() => completeOrder(id))} className={ACTION_SUCCESS}>Hoàn thành</button>}
+                {canCancel && <button type="button" disabled={actionsLocked} onClick={openCancelConfirmation} className={ACTION_SECONDARY}>Hủy order</button>}
+              </div>
+            </div>
+            {isStatusUpdateExpired && (
+              <div role="alert" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="font-bold">
+                  Đã quá thời hạn cho phép cập nhật trạng thái Order (kết thúc ca + 3 giờ).
+                </p>
+                <p className="mt-1 text-xs">
+                  Không thể tiếp tục thao tác trên Order này.
+                  {statusUpdateCutoff && ` Hạn cuối: ${formatDate(statusUpdateCutoff.toISOString())}.`}
+                </p>
+              </div>
+            )}
+            {!hasActions && <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">Không có thao tác phù hợp với role và trạng thái hiện tại.</p>}
+            {mutating && <p className="mt-3 text-sm font-semibold text-blue-600">Đang cập nhật order...</p>}
+            {actionError && <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{actionError}</div>}
+            {hasIssueAction && stackItemsNotReady.length > 0 && (
+              <div role="alert" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="font-bold">Chưa sẵn sàng xuất kiện sắt tiêu chuẩn.</p>
+                <p className="mt-1 text-xs">
+                  Còn {stackItemsNotReady.length} dòng chưa xác nhận số chồng. Xác nhận ở mục "Xác nhận số chồng" bên dưới; số xác nhận được xuất nguyên, không cần duyệt lại.
+                </p>
+              </div>
+            )}
+            {issueConflict && <NormalIssueConflictNotice details={issueConflict} />}
+            {confirmationMessage && <div role="status" className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{confirmationMessage}</div>}
+
+            {panel === "approve" && (
+              <PanelSection title="Duyệt số lượng" note="Số duyệt không nhỏ hơn 0 (0 = từ chối dòng đó) và không vượt tồn khu vực cấp; được duyệt nhiều hơn số yêu cầu. Kiện tiêu chuẩn duyệt theo bội số SET/chồng. Approve không trừ tồn.">
+                <div className="space-y-2">
+                  {items.map((item) => (
+                    <QuantityRow key={item.id} item={item} label={item.set_per_qty !== null ? `Số SET duyệt (bội số ${item.set_per_qty})` : "Số lượng duyệt"} value={itemValues[item.id]?.quantity ?? ""} max={Number(item.available_quantity ?? 0)} onChange={(quantity) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity } }))} />
+                  ))}
+                </div>
+                <PanelButtons disabled={mutating} onCancel={() => setPanel(null)} onConfirm={confirmApprove} confirmLabel="Xác nhận" />
+              </PanelSection>
+            )}
+
+            {panel === "issue" && (
+              <PanelSection title={`Cấp hàng từ ${fromAreaName}`} note="Tồn tính theo tổng của từng mã; vị trí chỉ để biết nơi lấy hàng. Issue là thao tác duy nhất trừ tồn và tạo StockTransactions.">
+                {stackItems.length > 0 && (
+                  <div className="mb-3 space-y-2">
+                    {stackItems.map((item) => {
+                      const state = stackStates.get(item.id)!;
+                      const tone = state.issued || state.rejected
+                        ? 'border-slate-200 bg-slate-50'
+                        : state.ready
+                          ? 'border-emerald-200 bg-emerald-50'
+                          : 'border-amber-300 bg-amber-50';
+                      return (
+                        <div key={item.id} className={`rounded-lg border px-3 py-2 text-sm ${tone}`}>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="font-bold text-slate-900">{item.supply?.code ?? 'Vật tư'} <span className="text-xs font-normal text-slate-600">· {item.set_per_qty} SET/chồng · {locationCodes(item.locations)}</span></p>
+                            <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs font-bold text-slate-700">
+                              {state.rejected
+                                ? 'Đã từ chối khi duyệt'
+                                : state.issued
+                                  ? 'Đã xuất'
+                                  : state.ready
+                                    ? `Sẽ xuất ${state.confirmedStacks} chồng`
+                                    : 'Chưa xác nhận'}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-slate-600">
+                            Duyệt <strong>{state.approvedStacks ?? '—'}</strong> · Xác nhận <strong>{state.confirmedStacks ?? '—'}</strong> chồng
+                            {state.confirmation?.reason && ` · ${state.confirmation.reason.name}`}
                           </p>
-                          {item.available_stack_quantity !== undefined && (
-                            <p className="text-xs text-slate-500">Tồn: {item.available_stack_quantity} chồng cùng quy cách</p>
-                          )}
                         </div>
-                      ) : item.quantity_requested}
-                    </td>
-                    <td className="px-5 py-4"><StockAvailabilityWarning item={item} compact /></td>
-                    <td className="px-5 py-4">
-                      {item.quantity_approved ?? "—"}
-                      {item.set_per_qty !== null && item.quantity_approved !== null && (
-                        <p className="text-xs text-slate-500">
-                          {approvedStackQuantity(item) === null
-                            ? "Không tương thích quy cách"
-                            : `${approvedStackQuantity(item)} chồng`}
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  {normalIssueItems.map((item) => (
+                    <div key={item.id} className="grid gap-2 rounded-lg border border-slate-200 p-2.5 sm:grid-cols-[1fr_140px] sm:items-center">
+                      <div className="min-w-0 text-sm">
+                        <p className="font-semibold text-slate-800">{item.supply?.code ?? 'Vật tư'}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          Còn được cấp: {itemRemaining(item)} · Tồn: {item.available_quantity} · Lấy tại: {locationCodes(item.locations)}
                         </p>
-                      )}
-                    </td>
-                    <td className="px-5 py-4">
-                      <p>{item.quantity_issued ?? 0} SET</p>
-                      {item.set_per_qty !== null && (
-                        <p className="text-xs text-slate-500">
-                          {getStackIssueReadiness(item).actualConfirmedStacks} chồng thực tế đã xác nhận
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-5 py-4">{item.note ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </div>
+                      <input type="number" min="1" step="1" max={itemRemaining(item)} value={itemValues[item.id]?.quantity ?? ""} onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity: event.target.value } }))} placeholder="Số lượng cấp" aria-label={`Số lượng cấp ${item.supply?.code ?? ''}`} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+                    </div>
+                  ))}
+                </div>
+                <PanelButtons
+                  disabled={mutating || stackItemsNotReady.length > 0}
+                  onCancel={() => setPanel(null)}
+                  onConfirm={confirmIssue}
+                  confirmLabel="Xác nhận"
+                />
+              </PanelSection>
+            )}
           </div>
-        )}
-      </div>
 
-      {stackAllocationRows.length > 0 && (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-5 py-4">
-            <h2 className="font-bold text-slate-900">Đề xuất phân bổ vị trí</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Đây là đề xuất lấy hàng ban đầu; chưa trừ tồn, chưa giữ tồn và chưa ghi StockTransactions.
-            </p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-5 py-3">Vật tư</th>
-                  <th className="px-5 py-3">Provider</th>
-                  <th className="px-5 py-3">Quy cách</th>
-                  <th className="px-5 py-3">Vị trí</th>
-                  <th className="px-5 py-3">Chồng dự kiến</th>
-                  <th className="px-5 py-3">Chồng thực tế</th>
-                  <th className="px-5 py-3">Trạng thái</th>
-                  <th className="px-5 py-3">Thời điểm</th>
-                  <th className="px-5 py-3 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {stackAllocationRows.map(({ item, allocation }) => (
-                  <tr key={allocation.id}>
-                    <td className="px-5 py-4 font-semibold text-slate-800">
-                      {item.supply?.code ?? "—"}
-                    </td>
-                    <td className="px-5 py-4">
-                      <p className="font-semibold text-slate-800">{item.provider?.code ?? "—"}</p>
-                      <p className="text-xs text-slate-500">{item.provider?.name ?? "—"}</p>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${allocation.confirmed_at ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
-                        {allocation.confirmed_at ? 'Đã xác nhận' : 'Chưa xác nhận'}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">{item.set_per_qty} SET/chồng</td>
-                    <td className="px-5 py-4">
-                      <p className="font-semibold text-slate-800">{allocation.location?.code ?? "—"}</p>
-                      <p className="text-xs text-slate-500">{allocation.location?.name ?? "—"}</p>
-                    </td>
-                    <td className="px-5 py-4 font-semibold">{allocation.expected_stack_quantity}</td>
-                    <td className="px-5 py-4">
-                      <p>{allocation.actual_stack_quantity ?? "—"}</p>
-                      {(allocation.discrepancies ?? []).map((discrepancy) => (
-                        <span key={discrepancy.id} className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${discrepancy.status === 'OPEN' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}>
-                          {discrepancy.status === 'OPEN' ? 'Cần kiểm kê' : 'Đã xử lý'}
+          {showStackSection && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm sm:p-4">
+              <h2 className="text-sm font-bold text-slate-900">Xác nhận số chồng — kiện tiêu chuẩn</h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Số xác nhận có thể ít hoặc nhiều hơn số duyệt (kèm lý do) và được xuất nguyên, không cần duyệt lại. Xác nhận chưa trừ tồn; chỉ Xuất hàng mới trừ.
+              </p>
+              <ul className="mt-3 space-y-2">
+                {stackItems.map((item) => {
+                  const state = stackStates.get(item.id)!;
+                  const confirmation = state.confirmation;
+                  return (
+                    <li key={item.id} className="rounded-lg border border-slate-200 px-3 py-2.5">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-800">
+                            {item.supply?.code ?? "—"}
+                            <span className="ml-1.5 text-xs font-normal text-slate-500">{item.provider?.code ?? "—"} · {item.set_per_qty} SET/chồng</span>
+                          </p>
+                          <p className="text-xs text-slate-500">Lấy tại: {locationCodes(item.locations)}</p>
+                        </div>
+                        <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${state.issued ? 'bg-slate-100 text-slate-700' : state.ready ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>
+                          {state.rejected ? 'Từ chối khi duyệt' : state.issued ? 'Đã xuất' : state.ready ? 'Đã xác nhận' : 'Chưa xác nhận'}
                         </span>
-                      ))}
-                    </td>
-                    <td className="px-5 py-4 text-xs text-slate-500">{formatDate(allocation.allocated_at)}</td>
-                    <td className="px-5 py-4 text-right">
-                      {order.status === 'APPROVED'
-                        && canConfirmAllocations
-                        && allocation.actual_stack_quantity === null
-                        && allocation.confirmed_at === null ? (
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                        <div className="min-w-0 text-sm">
+                          <p>
+                            Duyệt <strong>{state.approvedStacks ?? '—'}</strong> → Xác nhận <strong>{state.confirmedStacks ?? "—"}</strong> chồng
+                            {confirmation?.reason && <span className="text-xs text-slate-600"> · {confirmation.reason.name}</span>}
+                          </p>
+                          {confirmation?.reason_note && (
+                            <p className="text-xs italic text-slate-500">{confirmation.reason_note}</p>
+                          )}
+                          {confirmation?.confirmed_at && (
+                            <p className="text-xs text-slate-500">{formatDate(confirmation.confirmed_at)}</p>
+                          )}
+                          {(confirmation?.discrepancies ?? []).map((discrepancy) => (
+                            <span key={discrepancy.id} title={discrepancy.reason ?? undefined} className={`mr-1 mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${discrepancy.status === 'OPEN' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}>
+                              {discrepancy.status === 'OPEN'
+                                ? (discrepancy.source === 'ISSUE' ? 'Tồn sổ thiếu — cần kiểm kê' : 'Không có hàng — cần kiểm kê')
+                                : 'Đã kiểm kê'}
+                            </span>
+                          ))}
+                        </div>
+                        {canConfirmItem(item) && (
                           <button
                             type="button"
-                            disabled={mutating}
-                            onClick={() => openConfirmation(item, allocation)}
-                            className={InfoButton}
+                            disabled={mutating || isStatusUpdateExpired}
+                            onClick={() => openConfirmation(item)}
+                            className={ACTION_INFO}
                           >
-                            Xác nhận thực tế
+                            Xác nhận số chồng
                           </button>
-                        ) : (
-                          <span className="text-xs text-slate-400">
-                            {allocation.confirmed_at ? 'Đã xác nhận' : '—'}
-                          </span>
                         )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        {/* Pinned to the viewport on large screens; a long list scrolls inside
+            the card so its header, and the page around it, stay put. The card always
+            fills the viewport height, even for a short list, so it reads as one pane. */}
+        <div className="min-w-0 lg:sticky lg:top-0 lg:col-span-7">
+          <div className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:h-[calc(80vh-3.5rem)]">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-3.5 py-2.5 sm:px-4">
+              <div><h2 className="text-base lg:text-4xl md:text-2xl sm:text-2xl font-bold text-slate-900 my-2">Thông tin cấp hàng</h2></div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-sm font-semibold text-slate-600">Items đã khóa</span>
+            </div>
+            {items.length === 0 ? (
+              <div className="p-8 text-center text-base text-slate-500">Order chưa có item.</div>
+            ) : (
+              <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+                <table className="w-full text-left text-base">
+                  <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-4 py-2.5">Vật tư</th>
+                      <th className="px-4 py-2.5">Yêu cầu</th>
+                      <th className="px-4 py-2.5">Tồn</th>
+                      <th className="px-4 py-2.5">Duyệt</th>
+                      <th className="px-4 py-2.5">Đã cấp</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {items.map((item) => (
+                      <tr key={item.id} className={`align-top ${item.has_stock_shortage ? "bg-amber-50/70" : ""}`}>
+                        <td className="px-4 py-3">
+                          <p className="font-mono text-sm font-semibold text-slate-800">{item.supply?.code ?? '—'}</p>
+                          <p className="text-sm text-slate-500" title={item.provider?.name ?? undefined}>{item.provider?.code ?? '—'}{item.provider?.name ? ` · ${item.provider.name}` : ''}</p>
+                          {item.set_per_qty !== null && <p className="text-sm text-slate-500">{item.set_per_qty} SET/chồng</p>}
+                          {item.note && <p className="mt-0.5 text-sm italic text-slate-500">{item.note}</p>}
+                        </td>
+                        <td className="px-4 py-3">
+                          {item.set_per_qty !== null ? (
+                            <div>
+                              <p className="font-semibold text-slate-800">{item.requested_stack_quantity} chồng</p>
+                              <p className="text-sm text-slate-500">{item.requested_total_set_quantity} SET</p>
+                            </div>
+                          ) : item.quantity_requested}
+                        </td>
+                        <td className="px-4 py-3">
+                          <StockAvailabilityWarning item={item} compact textSize="md" />
+                          {item.available_stack_quantity !== undefined && (
+                            <p className="text-sm text-slate-500">{item.available_stack_quantity} chồng</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {item.quantity_approved ?? "—"}
+                          {item.set_per_qty !== null && item.quantity_approved !== null && (
+                            <p className="text-sm text-slate-500">
+                              {approvedStackQuantity(item) === null
+                                ? "Không tương thích quy cách"
+                                : `${approvedStackQuantity(item)} chồng`}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <p>{item.quantity_issued ?? 0}{item.set_per_qty !== null ? ' SET' : ''}</p>
+                          {item.set_per_qty !== null && stackStates.get(item.id)?.confirmedStacks !== null && (
+                            <p className="text-sm text-slate-500">
+                              {stackStates.get(item.id)?.confirmedStacks} chồng xác nhận
+                            </p>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
-      )}
-
-      {(order.note || order.rejected_reason || order.cancel_reason) && (
-        <div className="grid gap-3 md:grid-cols-3">
-          {order.note && <InfoNote label="Ghi chú" value={order.note} />}
-          {order.rejected_reason && <InfoNote label="Lý do từ chối" value={order.rejected_reason} />}
-          {order.cancel_reason && <InfoNote label="Lý do hủy" value={order.cancel_reason} />}
-        </div>
-      )}
+      </div>
       {confirmationTarget && (
         <CrudModal
-          title="Xác nhận số chồng thực tế"
+          title="Xác nhận số chồng"
           busy={confirmationMutation.isPending}
           onClose={() => setConfirmationTarget(null)}
         >
           <div className="grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
-            <ReadOnlyValue label="Vật tư" value={confirmationTarget.item.supply?.code ?? '—'} />
-            <ReadOnlyValue label="Provider" value={confirmationTarget.item.provider ? `${confirmationTarget.item.provider.code} — ${confirmationTarget.item.provider.name}` : '—'} />
-            <ReadOnlyValue label="Vị trí" value={confirmationTarget.allocation.location ? `${confirmationTarget.allocation.location.code} — ${confirmationTarget.allocation.location.name}` : '—'} />
-            <ReadOnlyValue label="Quy cách" value={`${confirmationTarget.item.set_per_qty ?? '—'} SET/chồng`} />
-            <ReadOnlyValue label="Dự kiến" value={`${confirmationTarget.allocation.expected_stack_quantity} chồng`} />
+            <ReadOnlyValue label="Vật tư" value={confirmationTarget.supply?.code ?? '—'} />
+            <ReadOnlyValue label="Provider" value={confirmationTarget.provider ? `${confirmationTarget.provider.code} — ${confirmationTarget.provider.name}` : '—'} />
+            <ReadOnlyValue label="Lấy tại" value={locationCodes(confirmationTarget.locations)} />
+            <ReadOnlyValue label="Quy cách" value={`${confirmationTarget.set_per_qty ?? '—'} SET/chồng`} />
+            <ReadOnlyValue label="Đã duyệt" value={`${confirmTargetApproved ?? '—'} chồng`} />
+            <ReadOnlyValue label="Tồn sổ" value={`${confirmationTarget.available_stack_quantity ?? 0} chồng`} />
           </div>
           <div className="mt-4 space-y-4">
             <label className={labelClassName}>
-              <span>Số chồng thực tế *</span>
+              <span>Số chồng xác nhận *</span>
               <input
                 type="number"
                 min="0"
-                max={confirmationTarget.allocation.expected_stack_quantity}
                 step="1"
                 value={actualStackQuantity}
-                onChange={(event) => setActualStackQuantity(event.target.value)}
+                onChange={(event) => {
+                  setActualStackQuantity(event.target.value);
+                  // A reason for "fewer" means nothing once the count is "more".
+                  setConfirmationReasonCode('');
+                }}
                 className={inputClassName}
               />
-              {Number(actualStackQuantity) > confirmationTarget.allocation.expected_stack_quantity && (
-                <FieldError message="Không được vượt số chồng dự kiến." />
+              {!confirmActualValid && actualStackQuantity.trim() !== '' && (
+                <FieldError message="Số chồng phải là số nguyên lớn hơn hoặc bằng 0." />
               )}
+              <span className="text-xs font-normal text-slate-500">
+                Có thể ít hơn hoặc nhiều hơn số đã duyệt khi hai bên đã thống nhất. Số này được xuất nguyên.
+              </span>
             </label>
-            <label className={labelClassName}>
-              <span>Lý do sai lệch (không bắt buộc)</span>
-              <textarea
-                rows={3}
-                maxLength={2000}
-                value={confirmationReason}
-                onChange={(event) => setConfirmationReason(event.target.value)}
-                className={inputClassName}
-                placeholder="Nhập lý do nếu số thực tế thấp hơn dự kiến"
-              />
-            </label>
+            {confirmDirection && (
+              <>
+                <label className={labelClassName}>
+                  <span>Lý do {confirmDirection === 'LOWER' ? 'nhận ít hơn' : 'nhận thêm'} *</span>
+                  {confirmReasonsQuery.isPending ? (
+                    <p className="text-sm text-slate-500">Đang tải lý do…</p>
+                  ) : confirmReasonsQuery.isError ? (
+                    <FieldError message={getApiErrorMessage(confirmReasonsQuery.error, 'Không thể tải danh sách lý do.')} />
+                  ) : (
+                    <select
+                      value={confirmationReasonCode}
+                      onChange={(event) => setConfirmationReasonCode(event.target.value)}
+                      className={inputClassName}
+                    >
+                      <option value="">Chọn lý do</option>
+                      {confirmReasonOptions.map((reason) => (
+                        <option key={reason.id} value={reason.code}>{reason.name}</option>
+                      ))}
+                    </select>
+                  )}
+                  {selectedConfirmReason?.description && (
+                    <span className={`text-xs font-normal ${selectedConfirmReason.corrects_stock ? 'text-amber-700' : 'text-slate-500'}`}>
+                      {selectedConfirmReason.description}
+                    </span>
+                  )}
+                </label>
+                <label className={labelClassName}>
+                  <span>Ghi chú (không bắt buộc)</span>
+                  <textarea
+                    rows={3}
+                    maxLength={2000}
+                    value={confirmationNote}
+                    onChange={(event) => setConfirmationNote(event.target.value)}
+                    className={inputClassName}
+                    placeholder="Ví dụ: đã trao đổi với tổ trưởng đóng gói"
+                  />
+                </label>
+              </>
+            )}
           </div>
           <PanelButtons
-            disabled={confirmationMutation.isPending}
+            disabled={
+              confirmationMutation.isPending
+              || !confirmActualValid
+              || (confirmDirection !== null && !selectedConfirmReason)
+            }
             onCancel={() => setConfirmationTarget(null)}
-            onConfirm={() => void confirmActualAllocation()}
+            onConfirm={() => void submitStackConfirmation()}
             confirmLabel="Xác nhận"
           />
         </CrudModal>
@@ -1019,9 +1019,12 @@ const OrderDetailPage = () => {
   );
 };
 
-const ActionCard = ({ title, note, children }: { title: string; note: string; children: React.ReactNode }) => (
-  <div className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
-    <h2 className="font-bold text-slate-900">{title}</h2><p className="mt-1 text-sm text-slate-500">{note}</p><div className="mt-4">{children}</div>
+/** A panel opened by one of the status actions, shown inside the actions card. */
+const PanelSection = ({ title, note, children }: { title: string; note: string; children: React.ReactNode }) => (
+  <div className="mt-3 border-t border-slate-100 pt-3">
+    <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+    <p className="mt-0.5 text-xs text-slate-500">{note}</p>
+    <div className="mt-3">{children}</div>
   </div>
 );
 
@@ -1033,63 +1036,32 @@ const ReadOnlyValue = ({ label, value }: { label: string; value: string }) => (
 );
 
 const PanelButtons = ({ disabled, onCancel, onConfirm, confirmLabel, danger = false }: { disabled: boolean; onCancel: () => void; onConfirm: () => void; confirmLabel: string; danger?: boolean }) => (
-  <div className="mt-4 flex justify-end gap-2"><button type="button" disabled={disabled} onClick={onConfirm} className={danger ? ErrorButton : InfoButton}>{confirmLabel}</button><button type="button" disabled={disabled} onClick={onCancel} className={SecondaryButton}>Bỏ qua</button></div>
+  <div className="mt-3 flex justify-end gap-2"><button type="button" disabled={disabled} onClick={onConfirm} className={danger ? ErrorButton : InfoButton}>{confirmLabel}</button><button type="button" disabled={disabled} onClick={onCancel} className={SecondaryButton}>Bỏ qua</button></div>
 );
 
 const QuantityRow = ({ item, label, value, max, onChange }: { item: OrderItem; label: string; value: string; max: number; onChange: (value: string) => void }) => (
-  <div className={`grid gap-3 rounded-xl border p-3 text-sm md:grid-cols-[1fr_180px] md:items-center ${item.has_stock_shortage ? "border-amber-300 bg-amber-50/70" : "border-slate-200"}`}><div><strong className="block text-slate-800">{item.supply?.code ?? 'Vật tư'}</strong><span className="text-xs text-slate-500">Yêu cầu: {item.quantity_requested}</span><div className="mt-2"><StockAvailabilityWarning item={item} /></div></div><label><span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span><input type="number" min="0" max={max} step="1" value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2" /></label></div>
+  <div className={`grid gap-2 rounded-lg border p-2.5 text-sm sm:grid-cols-[1fr_140px] sm:items-center ${item.has_stock_shortage ? "border-amber-300 bg-amber-50/70" : "border-slate-200"}`}><div className="min-w-0"><strong className="block text-slate-800">{item.supply?.code ?? 'Vật tư'}</strong><span className="text-xs text-slate-500">Yêu cầu: {item.quantity_requested} · Tồn tối đa: {max}</span><div className="mt-1"><StockAvailabilityWarning item={item} compact /></div></div><label><span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span><input type="number" min="0" max={max} step="1" value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-1.5" /></label></div>
 );
 
-const AllocationErrorDetails = ({
-  details,
-  items,
-}: {
-  details: StackAllocationErrorDetails;
-  items: OrderItem[];
-}) => {
-  const item = items.find((candidate) => candidate.id === details.order_item_id);
-  const supplyLabel = details.supply_code ?? item?.supply?.code ?? "Vật tư chồng";
-  const hasAvailabilityDetails =
-    details.required_stack_quantity !== undefined &&
-    details.available_stack_quantity !== undefined &&
-    details.shortage_stack_quantity !== undefined;
-
-  return (
-    <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-      <p className="font-bold">Chi tiết phân bổ: {supplyLabel}</p>
-      {hasAvailabilityDetails ? (
-        <dl className="mt-3 grid gap-2 sm:grid-cols-4">
-          <div><dt className="text-xs text-amber-700">Cần</dt><dd className="font-semibold">{details.required_stack_quantity} chồng</dd></div>
-          <div><dt className="text-xs text-amber-700">Hiện có</dt><dd className="font-semibold">{details.available_stack_quantity} chồng</dd></div>
-          <div><dt className="text-xs text-amber-700">Thiếu</dt><dd className="font-semibold">{details.shortage_stack_quantity} chồng</dd></div>
-          <div><dt className="text-xs text-amber-700">Quy cách</dt><dd className="font-semibold">{details.set_per_qty ?? "—"} SET/chồng</dd></div>
-        </dl>
-      ) : (
-        <p className="mt-2">
-          Số duyệt: {details.quantity_approved ?? "—"}; quy cách: {details.set_per_qty ?? "—"} SET/chồng.
-        </p>
-      )}
-    </div>
-  );
-};
-
-const StackIssueConflictDetails = ({
+/**
+ * Normal supplies still refuse to issue past the books. (Stack items never land
+ * here: a short book ships anyway and opens a recount.)
+ */
+const NormalIssueConflictNotice = ({
   details,
 }: {
-  details: StackIssueStockConflictDetails;
+  details: NormalIssueStockConflictDetails;
 }) => (
   <div className="mt-3 rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900">
-    <p className="font-bold">Không đủ tồn thực tế tại vị trí đã xác nhận.</p>
-    <dl className="mt-3 grid gap-2 sm:grid-cols-5">
-      <div><dt className="text-xs text-rose-700">Vị trí</dt><dd className="font-semibold">{details.location_code ?? "—"}</dd></div>
-      <div><dt className="text-xs text-rose-700">Quy cách</dt><dd className="font-semibold">{details.set_per_qty ?? "—"} SET/chồng</dd></div>
-      <div><dt className="text-xs text-rose-700">Cần xuất</dt><dd className="font-semibold">{details.required_stack_quantity ?? "—"} chồng</dd></div>
-      <div><dt className="text-xs text-rose-700">Tồn hiện tại</dt><dd className="font-semibold">{details.current_stack_quantity ?? "—"} chồng</dd></div>
-      <div><dt className="text-xs text-rose-700">Thiếu</dt><dd className="font-semibold">{details.shortage_stack_quantity ?? "—"} chồng</dd></div>
+    <p className="font-bold">Không đủ tồn để cấp {details.supply_code ?? "vật tư"}{details.provider_code ? ` (${details.provider_code})` : ""}.</p>
+    <dl className="mt-3 grid gap-2 sm:grid-cols-3">
+      <div><dt className="text-xs text-rose-700">Cần cấp</dt><dd className="font-semibold">{details.required_quantity ?? "—"}</dd></div>
+      <div><dt className="text-xs text-rose-700">Tồn hiện tại</dt><dd className="font-semibold">{details.current_quantity ?? "—"}</dd></div>
+      <div><dt className="text-xs text-rose-700">Thiếu</dt><dd className="font-semibold">{details.shortage_quantity ?? "—"}</dd></div>
     </dl>
   </div>
 );
 
-const InfoNote = ({ label, value }: { label: string; value: string }) => <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p><p className="mt-2 text-sm text-slate-700">{value}</p></div>;
+const InfoNote = ({ label, value }: { label: string; value: string }) => <div><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p><p className="mt-0.5 break-words text-sm text-slate-700">{value}</p></div>;
 
 export default OrderDetailPage;

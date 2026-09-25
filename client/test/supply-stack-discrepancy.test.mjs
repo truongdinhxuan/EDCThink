@@ -16,12 +16,26 @@ const permissions = read('src/constants/permissions.ts');
 const transactionTypes = read('src/types/stock-transactions.ts');
 
 describe('Supply stack Phase 5 frontend', () => {
-  it('confirms actual stack quantity only with semantic permission', () => {
+  it('confirms one stack count per item, only with semantic permission', () => {
     assert.match(permissions, /supply\.order\.confirm_allocation/);
     assert.match(orderDetail, /SUPPLY_ORDER_CONFIRM_ALLOCATION/);
-    assert.match(orderService, /allocations\/\$\{allocationId\}\/confirm/);
-    assert.match(orderDetail, /actual > confirmationTarget\.allocation\.expected_stack_quantity/);
-    assert.match(orderDetail, /Số chồng thực tế không được vượt số chồng dự kiến/);
+    assert.match(orderService, /orders\/\$\{orderId\}\/items\/\$\{orderItemId\}\/confirm/);
+  });
+
+  it('lets the count go above the approval, but a difference needs a reason', () => {
+    // The old cap ("không được vượt số chồng dự kiến") is gone on purpose: the
+    // receiving Area may agree to take more.
+    assert.doesNotMatch(orderDetail, /không được vượt số chồng dự kiến/i);
+    assert.match(orderDetail, /confirmActual < confirmTargetApproved \? 'LOWER' : 'HIGHER'/);
+    // Reasons come from the lookup, filtered by their own direction column.
+    assert.match(orderDetail, /reason\.direction === confirmDirection/);
+    assert.match(orderDetail, /confirmDirection !== null && !selectedConfirmReason/);
+    assert.doesNotMatch(orderDetail, /'NOT_AVAILABLE'|'NEGOTIATED_(LOWER|HIGHER)'/);
+  });
+
+  it('labels a recount by where it came from', () => {
+    assert.match(orderDetail, /discrepancy\.source === 'ISSUE'/);
+    assert.match(balancePage, /discrepancy\.source === 'ISSUE'/);
   });
 
   it('invalidates only affected Order, stock, ledger and stack-option caches', () => {

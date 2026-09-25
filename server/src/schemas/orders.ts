@@ -91,12 +91,12 @@ export const orderApproveSchema = {
   },
 };
 
-export const allocationConfirmSchema = {
+export const stackItemConfirmSchema = {
   params: {
     type: 'object',
     additionalProperties: false,
-    required: ['id', 'allocationId'],
-    properties: { id: uuid, allocationId: uuid },
+    required: ['id', 'itemId'],
+    properties: { id: uuid, itemId: uuid },
   },
   body: {
     type: 'object',
@@ -104,7 +104,8 @@ export const allocationConfirmSchema = {
     required: ['actual_stack_quantity'],
     properties: {
       actual_stack_quantity: { type: 'integer', minimum: 0 },
-      reason: { type: 'string', maxLength: 2000 },
+      reason_code: { type: 'string', minLength: 1, maxLength: 100 },
+      reason_note: { type: 'string', maxLength: 2000 },
     },
   },
 };
@@ -126,22 +127,10 @@ export const orderIssueSchema = {
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['order_item_id', 'issues'],
+          required: ['order_item_id', 'quantity'],
           properties: {
             order_item_id: uuid,
-            issues: {
-              type: 'array',
-              minItems: 1,
-              items: {
-                type: 'object',
-                additionalProperties: false,
-                required: ['storage_location_id', 'quantity'],
-                properties: {
-                  storage_location_id: uuid,
-                  quantity: { type: 'integer', minimum: 1 },
-                },
-              },
-            },
+            quantity: { type: 'integer', minimum: 1 },
           },
         },
       },

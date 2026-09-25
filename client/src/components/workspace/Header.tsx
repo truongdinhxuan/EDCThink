@@ -6,7 +6,7 @@ import { getButtonClassName, IconButton } from "../common/Button";
 import NotificationBell from "../notifications/NotificationBell";
 import UserMenu from "./UserMenu";
 import { APP_LAYER } from "../../constants/layers";
-import { faBarsStaggered } from "@fortawesome/free-solid-svg-icons";
+import { faBarsStaggered, faXmark } from "@fortawesome/free-solid-svg-icons";
 
 interface HeaderProps {
   isMobileSidebarOpen: boolean;
@@ -75,7 +75,7 @@ const Header = ({
                 })}
                 aria-label="Xóa tìm kiếm"
               >
-                <i className="hgi-stroke hgi-cancel-01 text-sm" aria-hidden="true"></i>
+                <FontAwesomeIcon icon={faXmark} className="text-sm" aria-hidden="true" />
               </button>
             </AppTooltip>
           )}

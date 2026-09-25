@@ -33,6 +33,9 @@ export const queryKeys = {
   meAreaScopes: {
     all: ['me-area-scopes'] as const,
   },
+  meStockAreaScopes: {
+    all: ['me-stock-area-scopes'] as const,
+  },
   supplyCategories: resourceKeys('supply-categories'),
   units: resourceKeys('units'),
   supplies: resourceKeys('supplies'),
@@ -83,9 +86,15 @@ export const queryKeys = {
     incoming: (query: QueryParameters = {}) => ['shift-order-sheets', 'incoming', query] as const,
   },
   notifications: resourceKeys('notifications'),
+  teamsWorkflows: {
+    all: ['teams-workflows'] as const,
+    list: ['teams-workflows', 'list'] as const,
+    deliveries: (query: QueryParameters = {}) => ['teams-workflows', 'deliveries', query] as const,
+  },
   orderStatuses: resourceKeys('order-statuses'),
   stockTransactionTypes: resourceKeys('stock-transaction-types'),
   adjustmentReasons: resourceKeys('adjustment-reasons'),
+  allocationConfirmReasons: resourceKeys('allocation-confirm-reasons'),
   orderRevisionActions: resourceKeys('order-revision-actions'),
   milkrunTrips: resourceKeys('milkrun-trips'),
   milkrunRacks: resourceKeys('milkrun-racks'),

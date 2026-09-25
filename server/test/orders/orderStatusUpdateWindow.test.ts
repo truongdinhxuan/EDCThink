@@ -89,7 +89,7 @@ describe('Order status update window', () => {
   it('guards every status transition, not just the approval ones', () => {
     // A gap in any one of these would let a stale Order be moved along.
     const methods = [
-      'patch', 'approve', 'reject', 'allocate', 'confirmAllocation',
+      'patch', 'approve', 'reject', 'confirmStackItem',
       'issue', 'receive', 'complete', 'cancel',
     ];
     for (const method of methods) {

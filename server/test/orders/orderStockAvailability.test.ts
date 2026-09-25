@@ -17,7 +17,9 @@ describe('order stock availability response', () => {
     assert.match(orderService, /\.eq\('area_id', order\.from_area_id\)/);
     assert.match(orderService, /\.in\('supply_id', supplyIds\)/);
     assert.match(orderService, /provider_id/);
-    assert.match(orderService, /storage_location\.is_active/);
+    // One pooled row per code: availability no longer depends on which shelf
+    // the stock sits on, so it must not join through storage locations.
+    assert.doesNotMatch(orderService, /storage_location\.is_active/);
     assert.match(orderService, /eligibleStackOptions/);
   });
 

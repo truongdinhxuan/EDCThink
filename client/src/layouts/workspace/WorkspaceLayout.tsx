@@ -38,15 +38,9 @@ const WorkspaceLayoutContent = ({
   const realtime = useSupplyRealtime();
 
   useEffect(() => {
-    // Khởi tạo Fonts & Icons...
-    if (!document.getElementById("hugeicons-cdn")) {
-      const link = document.createElement("link");
-      link.id = "hugeicons-cdn";
-      link.rel = "stylesheet";
-      link.href = "https://cdn.hugeicons.com/font/hgi-stroke-rounded.css";
-      document.head.appendChild(link);
-    }
-
+    // Icons are FontAwesome SVGs bundled with the app. No icon font is loaded
+    // from a CDN: Hugeicons mapped every glyph to a real CJK codepoint, so any
+    // load delay showed Chinese characters in place of the icons.
     if (!document.getElementById("figtree-font")) {
       const link = document.createElement("link");
       link.id = "figtree-font";

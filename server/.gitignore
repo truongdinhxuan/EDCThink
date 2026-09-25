@@ -68,3 +68,5 @@ dist
 .env.example
 
 .codex-tmp
+.env.example
+.env.example

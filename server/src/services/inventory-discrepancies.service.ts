@@ -8,6 +8,8 @@ import {
   resolvePaginatedQueryResult,
 } from '../utils/pagination';
 import { stockFail, stockFailWithDetails } from './stock.helpers';
+import type { StockActor } from '../interfaces/stock';
+import { StockAreaAccessService } from './stock-area-access.service';
 
 interface SupabaseErrorLike {
   code?: string;
@@ -32,6 +34,7 @@ const SELECT = `
   difference_stack_quantity,
   reason,
   status,
+  source,
   reported_by,
   reported_at,
   resolved_by,
@@ -57,15 +60,39 @@ const SELECT = `
   allocation:order_item_allocations!inventory_discrepancies_allocation_fkey(
     id,
     expected_stack_quantity,
-    actual_stack_quantity,
-    stock_balance:stock_balances!order_item_allocations_stock_balance_fkey(
-      id,
-      storage_location:storage_locations!stock_balances_storage_location_id_fkey(
+    actual_stack_quantity
+  ),
+  stock_balance:stock_balances!inventory_discrepancies_stock_balance_fkey(
+    id,
+    location_labels:stock_balance_locations!stock_balance_locations_balance_fkey(
+      storage_location:storage_locations!stock_balance_locations_location_fkey(
         id, code, name
       )
     )
   )
 `;
+
+interface LocationRow { id: string; code: string; name: string | null }
+type DiscrepancyRow = Record<string, unknown> & {
+  stock_balance?: {
+    location_labels?: Array<{ storage_location: LocationRow | LocationRow[] | null }> | null;
+  } | null;
+};
+
+/**
+ * Where to go and count: the labels of the balance, flattened. A recount is of
+ * the whole code, so every location it is known to sit at is listed.
+ */
+const withLocations = (row: DiscrepancyRow) => {
+  const { stock_balance: balance, ...discrepancy } = row;
+  const locations = (balance?.location_labels ?? [])
+    .map((label) => (Array.isArray(label.storage_location)
+      ? label.storage_location[0]
+      : label.storage_location))
+    .filter((location): location is LocationRow => Boolean(location))
+    .sort((left, right) => left.code.localeCompare(right.code));
+  return { ...discrepancy, locations };
+};
 
 const parseDetails = (details?: string): Record<string, unknown> | undefined => {
   if (!details) return undefined;
@@ -104,16 +131,39 @@ const discrepancyRpcError = (error: SupabaseErrorLike): never => {
 };
 
 export class InventoryDiscrepanciesService {
-  constructor(private readonly fastify: FastifyInstance) {}
+  private readonly areaAccess: StockAreaAccessService;
+
+  constructor(
+    private readonly fastify: FastifyInstance,
+    actor: StockActor,
+  ) {
+    this.areaAccess = new StockAreaAccessService(fastify, actor);
+  }
 
   private get db() {
     return this.fastify.supabaseAdmin;
+  }
+
+  /**
+   * A discrepancy is an attribute of one stock balance, so it inherits that
+   * balance's Area. Resolving the Area from the balance keeps the rule in one
+   * place instead of re-deriving it from the discrepancy row.
+   */
+  private async areaOfBalance(stockBalanceId: string): Promise<string> {
+    const { data, error } = await this.db
+      .from('stock_balances')
+      .select('area_id')
+      .eq('id', stockBalanceId)
+      .single();
+    if (error || !data) return stockFail(404, 'Stock balance not found');
+    return (data as { area_id: string }).area_id;
   }
 
   async listForBalance(
     stockBalanceId: string,
     query: InventoryDiscrepancyListQuery = {},
   ) {
+    await this.areaAccess.assertCanRead(await this.areaOfBalance(stockBalanceId));
     const pagination = parsePagination(query, {
       allowedSortBy: DISCREPANCY_SORT_FIELDS,
       defaultSortBy: 'reported_at',
@@ -135,7 +185,11 @@ export class InventoryDiscrepanciesService {
       pagination.to,
     );
     const result = resolvePaginatedQueryResult(
-      { data, error, count },
+      {
+        data: (data as unknown as DiscrepancyRow[] | null)?.map(withLocations) ?? null,
+        error,
+        count,
+      },
       pagination,
     );
     if (result) return result;
@@ -147,6 +201,18 @@ export class InventoryDiscrepanciesService {
     actorId: string,
     body: ResolveInventoryDiscrepancyBody,
   ) {
+    // Resolving writes to the balance's history, so it needs write access to
+    // that Area, not merely the right to look at it.
+    const { data: target, error: targetError } = await this.db
+      .from('inventory_discrepancies')
+      .select('stock_balance_id')
+      .eq('id', discrepancyId)
+      .single();
+    if (targetError || !target) return stockFail(404, 'Inventory discrepancy not found');
+    this.areaAccess.assertCanWrite(
+      await this.areaOfBalance((target as { stock_balance_id: string }).stock_balance_id),
+    );
+
     const { error } = await this.db.rpc('resolve_inventory_discrepancy', {
       p_discrepancy_id: discrepancyId,
       p_actor_id: actorId,
@@ -162,6 +228,6 @@ export class InventoryDiscrepanciesService {
     if (detailError || !data) {
       return stockFail(404, 'Inventory discrepancy not found');
     }
-    return data;
+    return withLocations(data as unknown as DiscrepancyRow);
   }
 }

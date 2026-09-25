@@ -112,10 +112,15 @@ describe('Phase 1 backend foundation', () => {
       'id', 'code', 'area_id', 'name', 'description', 'is_active',
       'is_deleted', 'created_at', 'updated_at',
     ]);
+    // No storage_location_id: since 20260924010000 a location is a label in
+    // stock_balance_locations, not part of the row that holds the quantity.
     assert.deepEqual(interfaceProperties('StockBalanceRecord'), [
-      'id', 'supply_id', 'provider_id', 'area_id', 'storage_location_id', 'quantity',
+      'id', 'supply_id', 'provider_id', 'area_id', 'quantity',
       'set_per_qty', 'stack_quantity', 'total_set_quantity',
       'is_active', 'is_deleted', 'created_at', 'updated_at',
+    ]);
+    assert.deepEqual(interfaceProperties('StockBalanceLocationRecord'), [
+      'stock_balance_id', 'storage_location_id', 'area_id', 'created_by', 'created_at',
     ]);
     assert.deepEqual(interfaceProperties('OrderItemRecord'), [
       'id', 'order_id', 'supply_id', 'provider_id', 'unit_id',
