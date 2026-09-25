@@ -1,13 +1,12 @@
 import { TEAMS_FUNCTION_CODES } from '../teams/registry';
 import { parseAllowedHosts } from '../teams/urlPolicy';
 
-export const DEFAULT_APP_BASE_URL = 'https://edcthink.pro';
-
 /** The env variable holding a function's Workflow URL. */
 export const teamsWebhookUrlEnvKey = (functionCode: string): string =>
   `TEAMS_WEBHOOK_URL_${functionCode}`;
 
 export interface TeamsConfig {
+  /** Client origin for links in messages: ORIGIN_URL, shared with CORS. */
   appBaseUrl: string;
   allowedHosts: string[];
   /**
@@ -22,7 +21,7 @@ export interface TeamsConfig {
 }
 
 export const readTeamsConfig = (env: NodeJS.ProcessEnv = process.env): TeamsConfig => ({
-  appBaseUrl: (env.APP_BASE_URL?.trim() || DEFAULT_APP_BASE_URL).replace(/\/+$/, ''),
+  appBaseUrl: (env.ORIGIN_URL?.trim() ?? '').replace(/\/+$/, ''),
   allowedHosts: parseAllowedHosts(env.TEAMS_WEBHOOK_ALLOWED_HOSTS),
   webhookUrls: Object.fromEntries(TEAMS_FUNCTION_CODES.map((code) => [
     code,

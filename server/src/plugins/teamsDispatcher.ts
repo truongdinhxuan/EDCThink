@@ -30,6 +30,9 @@ export default fp(async (fastify) => {
       fastify.log.warn(`${teamsWebhookUrlEnvKey(code)} is not an https URL on TEAMS_WEBHOOK_ALLOWED_HOSTS; messages for ${code} will fail`);
     }
   }
+  if (!config.appBaseUrl) {
+    fastify.log.warn('ORIGIN_URL is not set; "Xem chi tiết" links in Teams messages will be relative');
+  }
   fastify.decorate('teamsDispatcher', dispatcher);
 
   if (config.dispatcherEnabled) {

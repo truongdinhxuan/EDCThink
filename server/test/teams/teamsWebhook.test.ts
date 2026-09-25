@@ -271,6 +271,10 @@ describe('Teams registry and wiring', () => {
     assert.equal(config.webhookUrls.ORDER_STATUS_CHANGED, 'https://x.logic.azure.com/a?sig=1');
     assert.equal(readTeamsConfig({} as NodeJS.ProcessEnv).webhookUrls.ORDER_STATUS_CHANGED, undefined);
     assert.equal(teamsWebhookUrlEnvKey('ORDER_STATUS_CHANGED'), 'TEAMS_WEBHOOK_URL_ORDER_STATUS_CHANGED');
+    // Links use the shared client origin; APP_BASE_URL is no longer read.
+    assert.equal(readTeamsConfig({ ORIGIN_URL: 'https://edcthink.pro/' } as NodeJS.ProcessEnv).appBaseUrl, 'https://edcthink.pro');
+    assert.equal(readTeamsConfig({ APP_BASE_URL: 'https://other.example' } as NodeJS.ProcessEnv).appBaseUrl, '');
+    assert.doesNotMatch(read('src/config/teams.ts'), /APP_BASE_URL/);
 
     const plugin = read('src/plugins/teamsDispatcher.ts');
     assert.match(plugin, /webhookUrls: config\.webhookUrls/);
