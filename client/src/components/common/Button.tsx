@@ -21,52 +21,66 @@ export interface ButtonClassNameOptions {
   className?: string;
 }
 
+// Keyboard focus keeps a visible ring on every variant: the reference design
+// drops it (focus:shadow-none), which leaves Tab users unable to see where they are.
 const baseButtonClassName =
   'inline-flex items-center justify-center align-middle select-none whitespace-nowrap font-sans font-medium text-center antialiased ' +
-  'transition duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ' +
-  'transition duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 cursor-pointer ' +
+  'cursor-pointer transition duration-200 ease-in-out ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ' +
   'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none';
 
-// A 1px bevel instead of 2px, and a softer one: at this button height a heavy
-// inner shadow reads as a chunky toy control rather than a dense ERP one.
-const raisedButtonClassName =
+// Four shapes carry the whole UI:
+//   Solid    — every action and status change (Thêm mới, Lưu, Xác nhận, Xuất hàng…)
+//   Outline  — cancel and neutral navigation (Hủy, Bỏ qua, phân trang)
+//   Ghost    — low-emphasis and icon-only controls
+//   Gradient — reserved emphasis (primary)
+// Red (reject, delete, danger) and amber (warning) keep their colour on purpose:
+// they must not look like an ordinary action.
+const solidClassName =
+  'rounded-lg border border-stone-900 bg-stone-800 text-stone-50 shadow-sm ' +
+  'hover:bg-stone-700 hover:shadow-md focus-visible:ring-stone-500';
+
+const bevelClassName =
+  'relative border shadow-sm hover:shadow ' +
+  'after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] ' +
+  'after:shadow-[inset_0_1px_0px_rgba(255,255,255,0.25),inset_0_-2px_0px_rgba(0,0,0,0.35)]';
+
+// Status colours keep a lighter 1px bevel: at this button height the full
+// gradient bevel reads as a toy control next to the flat Solid buttons.
+const statusBevelClassName =
   'relative border shadow-sm hover:shadow ' +
   'after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] ' +
   'after:shadow-[inset_0_1px_0px_rgba(255,255,255,0.22),inset_0_-1px_0px_rgba(0,0,0,0.12)]';
 
 const variantClassNames: Record<ButtonVariant, string> = {
   primary:
-    `${raisedButtonClassName} rounded-lg border-stone-900 bg-gradient-to-b from-stone-700 to-stone-800 text-stone-50 ` +
-    'hover:from-stone-800 hover:to-stone-900 focus-visible:ring-stone-500',
+    `${bevelClassName} rounded-lg border-stone-900 bg-gradient-to-b from-stone-700 to-stone-800 text-stone-50 ` +
+    'hover:from-stone-800 hover:to-stone-800 focus-visible:ring-stone-500',
+  // Outline: no hover fade (the reference's hover:opacity-60 reads as disabled);
+  // the border darkens and a faint fill appears instead.
   secondary:
-    `${raisedButtonClassName} rounded-lg border-slate-200 bg-gradient-to-b from-white to-slate-50 text-slate-700 ` +
-    'hover:from-slate-50 hover:to-slate-100 focus-visible:ring-slate-400',
-  info:
-    `${raisedButtonClassName} rounded-lg border-blue-600 bg-gradient-to-b from-blue-500 to-blue-600 text-white ` +
-    'hover:from-blue-600 hover:to-blue-700 focus-visible:ring-blue-500',
-  success:
-    `${raisedButtonClassName} rounded-lg border-emerald-600 bg-gradient-to-b from-emerald-500 to-emerald-600 text-white ` +
-    'hover:from-emerald-600 hover:to-emerald-700 focus-visible:ring-emerald-500',
+    'rounded-lg border border-stone-500 bg-transparent text-stone-700 shadow-sm ' +
+    'hover:border-stone-700 hover:bg-stone-800/5 hover:shadow-none focus-visible:ring-stone-400',
+  info: solidClassName,
+  success: solidClassName,
+  violet: solidClassName,
+  cyan: solidClassName,
   warning:
-    `${raisedButtonClassName} rounded-lg border-amber-600 bg-gradient-to-b from-amber-500 to-amber-600 text-white ` +
+    `${statusBevelClassName} rounded-lg border-amber-600 bg-gradient-to-b from-amber-500 to-amber-600 text-white ` +
     'hover:from-amber-600 hover:to-amber-700 focus-visible:ring-amber-500',
   error:
-    `${raisedButtonClassName} rounded-lg border-rose-600 bg-gradient-to-b from-rose-500 to-rose-600 text-white ` +
+    `${statusBevelClassName} rounded-lg border-rose-600 bg-gradient-to-b from-rose-500 to-rose-600 text-white ` +
     'hover:from-rose-600 hover:to-rose-700 focus-visible:ring-rose-500',
-  violet:
-    `${raisedButtonClassName} rounded-lg border-violet-600 bg-gradient-to-b from-violet-500 to-violet-600 text-white ` +
-    'hover:from-violet-600 hover:to-violet-700 focus-visible:ring-violet-500',
-  cyan:
-    `${raisedButtonClassName} rounded-lg border-cyan-600 bg-gradient-to-b from-cyan-500 to-cyan-600 text-white ` +
-    'hover:from-cyan-600 hover:to-cyan-700 focus-visible:ring-cyan-500',
   ghost:
-    'rounded-lg border border-transparent bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-slate-400',
+    'rounded-md border border-transparent bg-transparent text-stone-800 shadow-none ' +
+    'hover:border-stone-800/5 hover:bg-stone-800/5 focus-visible:ring-stone-400',
   text:
     'rounded-md text-blue-600 hover:bg-blue-50 hover:text-blue-800 focus-visible:ring-blue-500',
   textError:
     'rounded-md text-rose-600 hover:bg-rose-50 hover:text-rose-800 focus-visible:ring-rose-500',
   icon:
-    'rounded-lg border border-transparent bg-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:ring-slate-400',
+    'rounded-lg border border-transparent bg-transparent text-stone-500 ' +
+    'hover:border-stone-800/5 hover:bg-stone-800/5 hover:text-stone-800 focus-visible:ring-stone-400',
 };
 
 // Tuned for a 1366x768 operator screen: at the old scale a row of four status

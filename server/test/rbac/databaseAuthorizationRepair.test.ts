@@ -25,8 +25,13 @@ describe('Phase 4.0.1 database authorization repair', () => {
     assert.match(cancel, /this\.assertPackingOwner\(actor, order\)/);
     assert.match(cancel, /assertOrderActionAllowed\(currentStatus, 'cancel'\)/);
     assert.match(cancel, /assertCancelReason\(body\?\.cancel_reason\)/);
-    assert.match(cancel, /\.update\(\{ status_id: cancelledStatusId, cancel_reason: cancelReason \}\)/);
-    assert.match(cancel, /\.eq\('status_id', order\.status_id\)/);
+    // The write moved into transition_order_status (20260925020000) so it can
+    // record its revision; the compare-and-set on the status the caller read
+    // moved with it.
+    assert.match(cancel, /this\.transitionStatus\(actor, order, ORDER_STATUS\.CANCELLED, \{\s*cancelReason,/);
+    assert.match(service, /p_expected_status_id: order\.status_id/);
+    const rpc = read('supabase/migrations/20260925020000_teams_webhook.sql');
+    assert.match(rpc, /v_order\.status_id is distinct from p_expected_status_id then\s+return false;/);
     assert.match(service, /order\.requested_by !== actor\.id/);
     assert.match(service, /order\.to_area_id !== actor\.areaId/);
   });

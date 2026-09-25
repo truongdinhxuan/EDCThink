@@ -45,6 +45,7 @@ import { ORDER_SORT_FIELDS } from '../schemas/orders';
 import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
 import { NOTIFICATION_TYPE, type NotificationType } from '../interfaces/notifications';
 import { NotificationsService } from './notifications.service';
+import { kickTeamsDispatcher } from '../teams/dispatcher';
 
 export interface OrderActor extends OrderReadAccess {
   id: string;
@@ -663,6 +664,30 @@ export class OrderService {
     return this.attachStockAvailability(normalizedOrder);
   }
 
+  /**
+   * Receive / complete / cancel. The status write and its order_revisions row
+   * commit together (transition_order_status), which is what the Teams outbox
+   * hooks on. When the Order has moved on since `order` was read, nothing is
+   * written — the same outcome the old conditional UPDATE had.
+   */
+  private async transitionStatus(
+    actor: OrderActor,
+    order: OrderData,
+    target: OrderStatus,
+    extra: { cancelReason?: string; takenAwayBy?: string },
+    failure: string,
+  ): Promise<void> {
+    const { error } = await this.db.rpc('transition_order_status', {
+      p_order_id: order.id,
+      p_actor_id: actor.id,
+      p_expected_status_id: order.status_id,
+      p_target_status_code: target,
+      p_cancel_reason: extra.cancelReason ?? null,
+      p_taken_away_by: extra.takenAwayBy ?? null,
+    });
+    if (error) databaseError(error, failure);
+  }
+
   private async finishStatusTransition(
     actor: OrderActor,
     previous: OrderData,
@@ -670,6 +695,8 @@ export class OrderService {
   ): Promise<OrderData> {
     const current = await this.findOrder(previous.id);
     if (previous.status_id === current.status_id) return current;
+    // The revision has committed and queued its Teams message; send it now.
+    kickTeamsDispatcher(this.fastify);
     try {
       await new NotificationsService(this.fastify).persistOrderTransition(
         actor,
@@ -1054,6 +1081,8 @@ export class OrderService {
     );
     if (error) createOrderRpcError(error);
     if (!orderId) serviceError(400, 'Không thể tạo Order.');
+    // The CREATE revision was written at commit and queued its Teams message.
+    kickTeamsDispatcher(this.fastify);
     const order = await this.findOrder(orderId as string);
     try {
       await new NotificationsService(this.fastify).persistOrderCreated(actor, order);
@@ -1413,17 +1442,9 @@ export class OrderService {
       translateRuleError(error);
     }
 
-    const receivedStatusId = await this.getStatusId(ORDER_STATUS.RECEIVED);
-    const { error } = await this.db
-      .from('orders')
-      .update({
-        status_id: receivedStatusId,
-        received_at: new Date().toISOString(),
-        ...(body?.taken_away_by ? { taken_away_by: body.taken_away_by } : {}),
-      })
-      .eq('id', orderId)
-      .eq('status_id', order.status_id);
-    if (error) databaseError(error, 'Cannot receive order');
+    await this.transitionStatus(actor, order, ORDER_STATUS.RECEIVED, {
+      takenAwayBy: body?.taken_away_by,
+    }, 'Cannot receive order');
     return this.finishStatusTransition(actor, order);
   }
 
@@ -1442,13 +1463,7 @@ export class OrderService {
     const hasPendingIssue = order.order_items.some((item) => !isOrderItemIssueClosed(item));
     if (hasPendingIssue) serviceError(409, 'Order still has quantity pending issue');
 
-    const completedStatusId = await this.getStatusId(ORDER_STATUS.COMPLETED);
-    const { error } = await this.db
-      .from('orders')
-      .update({ status_id: completedStatusId, completed_at: new Date().toISOString() })
-      .eq('id', orderId)
-      .eq('status_id', order.status_id);
-    if (error) databaseError(error, 'Cannot complete order');
+    await this.transitionStatus(actor, order, ORDER_STATUS.COMPLETED, {}, 'Cannot complete order');
     return this.finishStatusTransition(actor, order);
   }
 
@@ -1460,13 +1475,9 @@ export class OrderService {
       const currentStatus = this.statusCode(order);
       assertOrderActionAllowed(currentStatus, 'cancel');
       const cancelReason = assertCancelReason(body?.cancel_reason);
-      const cancelledStatusId = await this.getStatusId(ORDER_STATUS.CANCELLED);
-      const { error } = await this.db
-        .from('orders')
-        .update({ status_id: cancelledStatusId, cancel_reason: cancelReason })
-        .eq('id', orderId)
-        .eq('status_id', order.status_id);
-      if (error) databaseError(error, 'Cannot cancel order');
+      await this.transitionStatus(actor, order, ORDER_STATUS.CANCELLED, {
+        cancelReason,
+      }, 'Cannot cancel order');
     } catch (error) {
       translateRuleError(error);
     }

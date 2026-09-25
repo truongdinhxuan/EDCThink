@@ -52,6 +52,8 @@ export const PERMISSION_CODE = {
   SUPPLY_ORDER_ISSUE: "supply.order.issue",
   SUPPLY_DISCREPANCY_RESOLVE: "supply.discrepancy.resolve",
   SUPPLY_DASHBOARD_READ: "supply.dashboard.read",
+  TEAMS_WEBHOOK_VIEW: "teams_webhook.view",
+  TEAMS_WEBHOOK_MANAGE: "teams_webhook.manage",
 } as const;
 
 export type PermissionCode =

@@ -86,6 +86,11 @@ export const queryKeys = {
     incoming: (query: QueryParameters = {}) => ['shift-order-sheets', 'incoming', query] as const,
   },
   notifications: resourceKeys('notifications'),
+  teamsWorkflows: {
+    all: ['teams-workflows'] as const,
+    list: ['teams-workflows', 'list'] as const,
+    deliveries: (query: QueryParameters = {}) => ['teams-workflows', 'deliveries', query] as const,
+  },
   orderStatuses: resourceKeys('order-statuses'),
   stockTransactionTypes: resourceKeys('stock-transaction-types'),
   adjustmentReasons: resourceKeys('adjustment-reasons'),

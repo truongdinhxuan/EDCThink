@@ -1,3 +1,5 @@
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faBell, faXmark } from '@fortawesome/free-solid-svg-icons';
 import type { NotificationLiveSignal } from '../../types/notifications';
 import { getButtonClassName } from '../common/Button';
 import { APP_LAYER } from '../../constants/layers';
@@ -21,7 +23,7 @@ export const LiveNotificationToast = ({
     >
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-          <i className="hgi-stroke hgi-notification-01 text-xl" aria-hidden="true" />
+          <FontAwesomeIcon icon={faBell} className="text-xl" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-slate-900">{notification.title}</p>
@@ -33,7 +35,7 @@ export const LiveNotificationToast = ({
           className={getButtonClassName({ variant: 'icon', size: 'icon', className: '-mr-2 -mt-2' })}
           aria-label="Đóng thông báo realtime"
         >
-          <i className="hgi-stroke hgi-cancel-01 text-lg" aria-hidden="true" />
+          <FontAwesomeIcon icon={faXmark} className="text-lg" aria-hidden="true" />
         </button>
       </div>
     </aside>

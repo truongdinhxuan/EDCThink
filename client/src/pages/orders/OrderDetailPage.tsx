@@ -591,349 +591,342 @@ const OrderDetailPage = () => {
   );
 
   return (
-    <section className="space-y-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+    <section className="space-y-3 sm:space-y-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <Link to={ordersPath} className={TextButton}>← Danh sách order</Link>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold text-slate-900">{order.code}</h1>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2.5">
+            <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">{order.code}</h1>
             <OrderStatusBadge status={order.status} />
           </div>
         </div>
-        <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-800">
-          Tạo, submit và approve không thay đổi tồn kho.<br />Chỉ thao tác issue mới trừ tồn và tạo transaction.
-        </div>
+        <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs leading-5 text-blue-800">
+          Tạo, submit và approve không thay đổi tồn kho. Chỉ thao tác issue mới trừ tồn và tạo transaction.
+        </p>
       </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {[
-          ["Area gửi", fromAreaName],
-          ["Area nhận", toAreaName],
-          ["Người tạo", requesterName],
-          ["Ngày tạo", formatDate(order.created_at)],
-        ].map(([label, value]) => (
-          <div key={label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-            <p className="mt-2 break-words text-sm font-semibold text-slate-800">{value}</p>
-          </div>
-        ))}
-      </div>
-
-      {reviewRevisions.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="font-bold text-slate-900">Lịch sử duyệt / từ chối</h2>
-          <div className="mt-3 space-y-2">
-            {reviewRevisions.map((revision) => {
-              const actorName = revision.creator
-                ? `${revision.creator.first_name} ${revision.creator.last_name}`.trim()
-                : 'Không rõ';
-              return (
-                <div
-                  key={revision.id}
-                  className="flex flex-col gap-1 rounded-xl bg-slate-50 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <span className="font-semibold text-slate-800">
-                    {revision.action?.name ?? revision.action?.code} — {actorName}
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    {formatDate(revision.created_at)}
-                    {revision.reason ? ` — ${revision.reason}` : ''}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {stockShortageItems.length > 0 && (
-        <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+        <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-900">
           <p className="font-bold">⚠ {stockShortageItems.length} vật tư đang có tồn thấp tại Area gửi.</p>
-          <p className="mt-1">Đây là cảnh báo tại thời điểm kiểm tra. Order vẫn có thể được duyệt và chưa làm thay đổi tồn kho.</p>
+          <p className="mt-0.5 text-xs">Đây là cảnh báo tại thời điểm kiểm tra. Order vẫn có thể được duyệt và chưa làm thay đổi tồn kho.</p>
         </div>
       )}
 
       {order.status === "APPROVED" && incompatibleStackItems.length > 0 && (
-        <div role="alert" className="rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-800">
+        <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 px-3.5 py-2.5 text-sm text-rose-800">
           <p className="font-bold">Không thể xác nhận số chồng cho một số vật tư kiện tiêu chuẩn.</p>
-          <p className="mt-1">
+          <p className="mt-0.5 text-xs">
             Số lượng đã duyệt không chia hết cho quy cách SET/chồng ({incompatibleStackItems.map((item) => item.supply?.code ?? 'Vật tư').join(', ')}).
             Order này được duyệt trước khi hệ thống chặn trường hợp đó; cần hủy và tạo lại.
           </p>
         </div>
       )}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm sm:p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-bold text-slate-900">Thao tác theo trạng thái và quyền</h2>
-            <p className="mt-1 text-xs text-slate-500">Backend vẫn là lớp kiểm tra quyền cuối cùng.</p>
-          </div>
-          <div className="flex flex-wrap gap-1.5 sm:gap-2">
-            {canApprove && <button type="button" title="Thao tác này chưa làm thay đổi tồn kho" disabled={actionsLocked} onClick={() => openPanel("approve")} className={ACTION_INFO}>Xác nhận</button>}
-            {canApprove && <button type="button" title="Từ chối yêu cầu" disabled={actionsLocked} onClick={openRejectConfirmation} className={ACTION_ERROR}>Từ chối</button>}
-            {hasIssueAction && (
-              <button
-                type="button"
-                title={canIssue
-                  ? "Issue mới trừ tồn và tạo StockTransactions"
-                  : "Còn kiện tiêu chuẩn chưa xác nhận số chồng"}
-                disabled={!canIssue || actionsLocked}
-                onClick={() => openPanel("issue")}
-                className={ACTION_VIOLET}
-              >
-                Xuất hàng
-              </button>
-            )}
-            {canReceive && <button type="button" disabled={actionsLocked} onClick={() => void runMutation(() => receiveOrder(id))} className={ACTION_CYAN}>Đã nhận hàng</button>}
-            {canComplete && <button type="button" disabled={actionsLocked} onClick={() => void runMutation(() => completeOrder(id))} className={ACTION_SUCCESS}>Hoàn thành</button>}
-            {canCancel && <button type="button" disabled={actionsLocked} onClick={openCancelConfirmation} className={ACTION_SECONDARY}>Hủy order</button>}
-          </div>
-        </div>
-        {isStatusUpdateExpired && (
-          <div role="alert" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-            <p className="font-bold">
-              Đã quá thời hạn cho phép cập nhật trạng thái Order (kết thúc ca + 3 giờ).
-            </p>
-            <p className="mt-1">
-              Không thể tiếp tục thao tác trên Order này.
-              {statusUpdateCutoff && ` Hạn cuối: ${formatDate(statusUpdateCutoff.toISOString())}.`}
-            </p>
-          </div>
-        )}
-        {!hasActions && <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Không có thao tác phù hợp với role và trạng thái hiện tại.</p>}
-        {mutating && <p className="mt-4 text-sm font-semibold text-blue-600">Đang cập nhật order...</p>}
-        {actionError && <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{actionError}</div>}
-        {hasIssueAction && stackItemsNotReady.length > 0 && (
-          <div role="alert" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-            <p className="font-bold">Chưa sẵn sàng xuất kiện sắt tiêu chuẩn.</p>
-            <p className="mt-1">
-              Còn {stackItemsNotReady.length} dòng chưa xác nhận số chồng. Xác nhận ở bảng "Xác nhận số chồng" bên dưới; số xác nhận được xuất nguyên, không cần duyệt lại.
-            </p>
-          </div>
-        )}
-        {issueConflict && <NormalIssueConflictNotice details={issueConflict} />}
-        {confirmationMessage && <div role="status" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{confirmationMessage}</div>}
-      </div>
-
-      {panel === "approve" && (
-        <ActionCard title="Duyệt số lượng" note="Số duyệt không nhỏ hơn 0 (0 = từ chối dòng đó) và không vượt tồn khu vực cấp; được duyệt nhiều hơn số yêu cầu. Kiện tiêu chuẩn duyệt theo bội số SET/chồng. Approve không trừ tồn.">
-          <div className="space-y-3">
-            {items.map((item) => (
-              <QuantityRow key={item.id} item={item} label={item.set_per_qty !== null ? `Số SET duyệt (bội số ${item.set_per_qty})` : "Số lượng duyệt"} value={itemValues[item.id]?.quantity ?? ""} max={Number(item.available_quantity ?? 0)} onChange={(quantity) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity } }))} />
-            ))}
-          </div>
-          <PanelButtons disabled={mutating} onCancel={() => setPanel(null)} onConfirm={confirmApprove} confirmLabel="Xác nhận" />
-        </ActionCard>
-      )}
-
-      {panel === "issue" && (
-        <ActionCard title={`Cấp hàng từ ${fromAreaName}`} note="Tồn tính theo tổng của từng mã; vị trí chỉ để biết nơi lấy hàng. Issue là thao tác duy nhất trừ tồn và tạo StockTransactions.">
-          {stackItems.length > 0 && (
-            <div className="mb-4 space-y-3">
-              {stackItems.map((item) => {
-                const state = stackStates.get(item.id)!;
-                const tone = state.issued || state.rejected
-                  ? 'border-slate-200 bg-slate-50'
-                  : state.ready
-                    ? 'border-emerald-200 bg-emerald-50'
-                    : 'border-amber-300 bg-amber-50';
-                return (
-                  <div key={item.id} className={`rounded-xl border p-4 ${tone}`}>
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="font-bold text-slate-900">{item.supply?.code ?? 'Vật tư'}</p>
-                        <p className="mt-1 text-xs text-slate-600">{item.set_per_qty} SET/chồng · {locationCodes(item.locations)}</p>
-                      </div>
-                      <span className="rounded-full bg-white/70 px-2.5 py-1 text-xs font-bold text-slate-700">
-                        {state.rejected
-                          ? 'Đã từ chối khi duyệt'
-                          : state.issued
-                            ? 'Đã xuất'
-                            : state.ready
-                              ? `Sẽ xuất ${state.confirmedStacks} chồng`
-                              : 'Chưa xác nhận'}
-                      </span>
-                    </div>
-                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
-                      <p>Đã duyệt: <strong>{state.approvedStacks ?? '—'} chồng</strong></p>
-                      <p>Xác nhận: <strong>{state.confirmedStacks ?? '—'} chồng</strong></p>
-                      <p>Lý do: <strong>{state.confirmation?.reason?.name ?? '—'}</strong></p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <div className="space-y-3">
-            {normalIssueItems.map((item) => (
-              <div key={item.id} className="grid gap-3 rounded-xl border border-slate-200 p-3 md:grid-cols-[1fr_180px] md:items-center">
-                <div className="text-sm">
-                  <p className="font-semibold text-slate-800">{item.supply?.code ?? 'Vật tư'}</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Còn được cấp: {itemRemaining(item)} · Tồn: {item.available_quantity} · Lấy tại: {locationCodes(item.locations)}
-                  </p>
+      {/* Two columns from lg: what the operator reads and does on the left, the
+          items they are acting on pinned on the right so they stay in view. */}
+      <div className="grid items-start gap-3 sm:gap-4 lg:grid-cols-12">
+        <div className="min-w-0 space-y-3 sm:space-y-4 lg:col-span-5">
+          <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm sm:p-4">
+            <h2 className="text-sm font-bold text-slate-900">Thông tin order</h2>
+            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
+              {[
+                ["Area gửi", fromAreaName],
+                ["Area nhận", toAreaName],
+                ["Người tạo", requesterName],
+                ["Ngày tạo", formatDate(order.created_at)],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0">
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</dt>
+                  <dd className="mt-0.5 break-words text-sm font-semibold text-slate-800">{value}</dd>
                 </div>
-                <input type="number" min="1" step="1" max={itemRemaining(item)} value={itemValues[item.id]?.quantity ?? ""} onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity: event.target.value } }))} placeholder="Số lượng cấp" aria-label={`Số lượng cấp ${item.supply?.code ?? ''}`} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              ))}
+            </dl>
+            {(order.note || order.rejected_reason || order.cancel_reason) && (
+              <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                {order.note && <InfoNote label="Ghi chú" value={order.note} />}
+                {order.rejected_reason && <InfoNote label="Lý do từ chối" value={order.rejected_reason} />}
+                {order.cancel_reason && <InfoNote label="Lý do hủy" value={order.cancel_reason} />}
               </div>
-            ))}
+            )}
           </div>
-          <PanelButtons
-            disabled={mutating || stackItemsNotReady.length > 0}
-            onCancel={() => setPanel(null)}
-            onConfirm={confirmIssue}
-            confirmLabel="Xác nhận"
-          />
-        </ActionCard>
-      )}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <div><h2 className="font-bold text-slate-900">Order items</h2><p className="mt-1 text-xs text-slate-500">{items.length} dòng vật tư</p></div>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">Items đã khóa</span>
-        </div>
-        {items.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-500">Order chưa có item.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Vật tư</th><th className="px-5 py-3">Provider</th><th className="px-5 py-3">Yêu cầu</th><th className="px-5 py-3">Tồn khả dụng</th><th className="px-5 py-3">Đã duyệt</th><th className="px-5 py-3">Đã cấp</th><th className="px-5 py-3">Ghi chú</th></tr></thead>
-              <tbody className="divide-y divide-slate-100">
-                {items.map((item) => (
-                  <tr key={item.id} className={item.has_stock_shortage ? "bg-amber-50/70" : undefined}>
-                    <td className="px-5 py-4 font-mono text-xs text-slate-700">{item.supply?.code ?? '—'}</td>
-                    <td className="px-5 py-4"><p className="font-semibold text-slate-800">{item.provider?.code ?? '—'}</p><p className="text-xs text-slate-500">{item.provider?.name ?? '—'}</p></td>
-                    <td className="px-5 py-4">
-                      {item.set_per_qty !== null ? (
-                        <div>
-                          <p className="font-semibold text-slate-800">{item.set_per_qty} SET/chồng</p>
-                          <p className="text-xs text-slate-500">
-                            {item.requested_stack_quantity} chồng — {item.requested_total_set_quantity} SET
+          <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm sm:p-4">
+            {reviewRevisions.length > 0 && (
+              <div className="mb-3 border-b border-slate-100 pb-3">
+                <h2 className="text-sm font-bold text-slate-900">Lịch sử duyệt / từ chối</h2>
+                <div className="mt-2 space-y-1.5">
+                  {reviewRevisions.map((revision) => {
+                    const actorName = revision.creator
+                      ? `${revision.creator.first_name} ${revision.creator.last_name}`.trim()
+                      : 'Không rõ';
+                    return (
+                      <div key={revision.id} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                        <p className="font-semibold text-slate-800">
+                          {revision.action?.name ?? revision.action?.code} — {actorName}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {formatDate(revision.created_at)}
+                          {revision.reason ? ` — ${revision.reason}` : ''}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Thao tác theo trạng thái và quyền</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Backend vẫn là lớp kiểm tra quyền cuối cùng.</p>
+              <div className="mt-3 flex flex-wrap gap-1.5 sm:gap-2">
+                {canApprove && <button type="button" title="Thao tác này chưa làm thay đổi tồn kho" disabled={actionsLocked} onClick={() => openPanel("approve")} className={ACTION_INFO}>Xác nhận</button>}
+                {canApprove && <button type="button" title="Từ chối yêu cầu" disabled={actionsLocked} onClick={openRejectConfirmation} className={ACTION_ERROR}>Từ chối</button>}
+                {hasIssueAction && (
+                  <button
+                    type="button"
+                    title={canIssue
+                      ? "Issue mới trừ tồn và tạo StockTransactions"
+                      : "Còn kiện tiêu chuẩn chưa xác nhận số chồng"}
+                    disabled={!canIssue || actionsLocked}
+                    onClick={() => openPanel("issue")}
+                    className={ACTION_VIOLET}
+                  >
+                    Xuất hàng
+                  </button>
+                )}
+                {canReceive && <button type="button" disabled={actionsLocked} onClick={() => void runMutation(() => receiveOrder(id))} className={ACTION_CYAN}>Đã nhận hàng</button>}
+                {canComplete && <button type="button" disabled={actionsLocked} onClick={() => void runMutation(() => completeOrder(id))} className={ACTION_SUCCESS}>Hoàn thành</button>}
+                {canCancel && <button type="button" disabled={actionsLocked} onClick={openCancelConfirmation} className={ACTION_SECONDARY}>Hủy order</button>}
+              </div>
+            </div>
+            {isStatusUpdateExpired && (
+              <div role="alert" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="font-bold">
+                  Đã quá thời hạn cho phép cập nhật trạng thái Order (kết thúc ca + 3 giờ).
+                </p>
+                <p className="mt-1 text-xs">
+                  Không thể tiếp tục thao tác trên Order này.
+                  {statusUpdateCutoff && ` Hạn cuối: ${formatDate(statusUpdateCutoff.toISOString())}.`}
+                </p>
+              </div>
+            )}
+            {!hasActions && <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">Không có thao tác phù hợp với role và trạng thái hiện tại.</p>}
+            {mutating && <p className="mt-3 text-sm font-semibold text-blue-600">Đang cập nhật order...</p>}
+            {actionError && <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{actionError}</div>}
+            {hasIssueAction && stackItemsNotReady.length > 0 && (
+              <div role="alert" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="font-bold">Chưa sẵn sàng xuất kiện sắt tiêu chuẩn.</p>
+                <p className="mt-1 text-xs">
+                  Còn {stackItemsNotReady.length} dòng chưa xác nhận số chồng. Xác nhận ở mục "Xác nhận số chồng" bên dưới; số xác nhận được xuất nguyên, không cần duyệt lại.
+                </p>
+              </div>
+            )}
+            {issueConflict && <NormalIssueConflictNotice details={issueConflict} />}
+            {confirmationMessage && <div role="status" className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{confirmationMessage}</div>}
+
+            {panel === "approve" && (
+              <PanelSection title="Duyệt số lượng" note="Số duyệt không nhỏ hơn 0 (0 = từ chối dòng đó) và không vượt tồn khu vực cấp; được duyệt nhiều hơn số yêu cầu. Kiện tiêu chuẩn duyệt theo bội số SET/chồng. Approve không trừ tồn.">
+                <div className="space-y-2">
+                  {items.map((item) => (
+                    <QuantityRow key={item.id} item={item} label={item.set_per_qty !== null ? `Số SET duyệt (bội số ${item.set_per_qty})` : "Số lượng duyệt"} value={itemValues[item.id]?.quantity ?? ""} max={Number(item.available_quantity ?? 0)} onChange={(quantity) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity } }))} />
+                  ))}
+                </div>
+                <PanelButtons disabled={mutating} onCancel={() => setPanel(null)} onConfirm={confirmApprove} confirmLabel="Xác nhận" />
+              </PanelSection>
+            )}
+
+            {panel === "issue" && (
+              <PanelSection title={`Cấp hàng từ ${fromAreaName}`} note="Tồn tính theo tổng của từng mã; vị trí chỉ để biết nơi lấy hàng. Issue là thao tác duy nhất trừ tồn và tạo StockTransactions.">
+                {stackItems.length > 0 && (
+                  <div className="mb-3 space-y-2">
+                    {stackItems.map((item) => {
+                      const state = stackStates.get(item.id)!;
+                      const tone = state.issued || state.rejected
+                        ? 'border-slate-200 bg-slate-50'
+                        : state.ready
+                          ? 'border-emerald-200 bg-emerald-50'
+                          : 'border-amber-300 bg-amber-50';
+                      return (
+                        <div key={item.id} className={`rounded-lg border px-3 py-2 text-sm ${tone}`}>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="font-bold text-slate-900">{item.supply?.code ?? 'Vật tư'} <span className="text-xs font-normal text-slate-600">· {item.set_per_qty} SET/chồng · {locationCodes(item.locations)}</span></p>
+                            <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs font-bold text-slate-700">
+                              {state.rejected
+                                ? 'Đã từ chối khi duyệt'
+                                : state.issued
+                                  ? 'Đã xuất'
+                                  : state.ready
+                                    ? `Sẽ xuất ${state.confirmedStacks} chồng`
+                                    : 'Chưa xác nhận'}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-slate-600">
+                            Duyệt <strong>{state.approvedStacks ?? '—'}</strong> · Xác nhận <strong>{state.confirmedStacks ?? '—'}</strong> chồng
+                            {state.confirmation?.reason && ` · ${state.confirmation.reason.name}`}
                           </p>
-                          {item.available_stack_quantity !== undefined && (
-                            <p className="text-xs text-slate-500">Tồn: {item.available_stack_quantity} chồng cùng quy cách</p>
-                          )}
                         </div>
-                      ) : item.quantity_requested}
-                    </td>
-                    <td className="px-5 py-4"><StockAvailabilityWarning item={item} compact /></td>
-                    <td className="px-5 py-4">
-                      {item.quantity_approved ?? "—"}
-                      {item.set_per_qty !== null && item.quantity_approved !== null && (
-                        <p className="text-xs text-slate-500">
-                          {approvedStackQuantity(item) === null
-                            ? "Không tương thích quy cách"
-                            : `${approvedStackQuantity(item)} chồng`}
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  {normalIssueItems.map((item) => (
+                    <div key={item.id} className="grid gap-2 rounded-lg border border-slate-200 p-2.5 sm:grid-cols-[1fr_140px] sm:items-center">
+                      <div className="min-w-0 text-sm">
+                        <p className="font-semibold text-slate-800">{item.supply?.code ?? 'Vật tư'}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          Còn được cấp: {itemRemaining(item)} · Tồn: {item.available_quantity} · Lấy tại: {locationCodes(item.locations)}
                         </p>
-                      )}
-                    </td>
-                    <td className="px-5 py-4">
-                      <p>{item.quantity_issued ?? 0} SET</p>
-                      {item.set_per_qty !== null && stackStates.get(item.id)?.confirmedStacks !== null && (
-                        <p className="text-xs text-slate-500">
-                          {stackStates.get(item.id)?.confirmedStacks} chồng đã xác nhận
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-5 py-4">{item.note ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </div>
+                      <input type="number" min="1" step="1" max={itemRemaining(item)} value={itemValues[item.id]?.quantity ?? ""} onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity: event.target.value } }))} placeholder="Số lượng cấp" aria-label={`Số lượng cấp ${item.supply?.code ?? ''}`} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+                    </div>
+                  ))}
+                </div>
+                <PanelButtons
+                  disabled={mutating || stackItemsNotReady.length > 0}
+                  onCancel={() => setPanel(null)}
+                  onConfirm={confirmIssue}
+                  confirmLabel="Xác nhận"
+                />
+              </PanelSection>
+            )}
           </div>
-        )}
-      </div>
 
-      {showStackSection && (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-5 py-4">
-            <h2 className="font-bold text-slate-900">Xác nhận số chồng — kiện tiêu chuẩn</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Số xác nhận có thể ít hoặc nhiều hơn số duyệt (kèm lý do) và được xuất nguyên, không cần duyệt lại. Xác nhận chưa trừ tồn; chỉ Xuất hàng mới trừ.
-            </p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-5 py-3">Vật tư</th>
-                  <th className="px-5 py-3">Provider</th>
-                  <th className="px-5 py-3">Quy cách</th>
-                  <th className="px-5 py-3">Lấy tại</th>
-                  <th className="px-5 py-3">Duyệt</th>
-                  <th className="px-5 py-3">Xác nhận</th>
-                  <th className="px-5 py-3">Trạng thái</th>
-                  <th className="px-5 py-3 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
+          {showStackSection && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm sm:p-4">
+              <h2 className="text-sm font-bold text-slate-900">Xác nhận số chồng — kiện tiêu chuẩn</h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Số xác nhận có thể ít hoặc nhiều hơn số duyệt (kèm lý do) và được xuất nguyên, không cần duyệt lại. Xác nhận chưa trừ tồn; chỉ Xuất hàng mới trừ.
+              </p>
+              <ul className="mt-3 space-y-2">
                 {stackItems.map((item) => {
                   const state = stackStates.get(item.id)!;
                   const confirmation = state.confirmation;
                   return (
-                    <tr key={item.id}>
-                      <td className="px-5 py-4 font-semibold text-slate-800">{item.supply?.code ?? "—"}</td>
-                      <td className="px-5 py-4">
-                        <p className="font-semibold text-slate-800">{item.provider?.code ?? "—"}</p>
-                        <p className="text-xs text-slate-500">{item.provider?.name ?? "—"}</p>
-                      </td>
-                      <td className="px-5 py-4">{item.set_per_qty} SET/chồng</td>
-                      <td className="px-5 py-4 text-xs font-semibold text-slate-700">{locationCodes(item.locations)}</td>
-                      <td className="px-5 py-4 font-semibold">{state.approvedStacks ?? '—'} chồng</td>
-                      <td className="px-5 py-4">
-                        <p className="font-semibold">{state.confirmedStacks ?? "—"}{state.confirmedStacks !== null && ' chồng'}</p>
-                        {confirmation?.reason && (
-                          <p className="text-xs text-slate-600">{confirmation.reason.name}</p>
-                        )}
-                        {confirmation?.reason_note && (
-                          <p className="text-xs italic text-slate-500">{confirmation.reason_note}</p>
-                        )}
-                        {(confirmation?.discrepancies ?? []).map((discrepancy) => (
-                          <span key={discrepancy.id} title={discrepancy.reason ?? undefined} className={`mt-1 mr-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${discrepancy.status === 'OPEN' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}>
-                            {discrepancy.status === 'OPEN'
-                              ? (discrepancy.source === 'ISSUE' ? 'Tồn sổ thiếu — cần kiểm kê' : 'Không có hàng — cần kiểm kê')
-                              : 'Đã kiểm kê'}
-                          </span>
-                        ))}
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${state.issued ? 'bg-slate-100 text-slate-700' : state.ready ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>
+                    <li key={item.id} className="rounded-lg border border-slate-200 px-3 py-2.5">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-800">
+                            {item.supply?.code ?? "—"}
+                            <span className="ml-1.5 text-xs font-normal text-slate-500">{item.provider?.code ?? "—"} · {item.set_per_qty} SET/chồng</span>
+                          </p>
+                          <p className="text-xs text-slate-500">Lấy tại: {locationCodes(item.locations)}</p>
+                        </div>
+                        <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${state.issued ? 'bg-slate-100 text-slate-700' : state.ready ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>
                           {state.rejected ? 'Từ chối khi duyệt' : state.issued ? 'Đã xuất' : state.ready ? 'Đã xác nhận' : 'Chưa xác nhận'}
                         </span>
-                        {confirmation?.confirmed_at && (
-                          <p className="mt-1 text-xs text-slate-500">{formatDate(confirmation.confirmed_at)}</p>
-                        )}
-                      </td>
-                      <td className="px-5 py-4 text-right">
-                        {canConfirmItem(item) ? (
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                        <div className="min-w-0 text-sm">
+                          <p>
+                            Duyệt <strong>{state.approvedStacks ?? '—'}</strong> → Xác nhận <strong>{state.confirmedStacks ?? "—"}</strong> chồng
+                            {confirmation?.reason && <span className="text-xs text-slate-600"> · {confirmation.reason.name}</span>}
+                          </p>
+                          {confirmation?.reason_note && (
+                            <p className="text-xs italic text-slate-500">{confirmation.reason_note}</p>
+                          )}
+                          {confirmation?.confirmed_at && (
+                            <p className="text-xs text-slate-500">{formatDate(confirmation.confirmed_at)}</p>
+                          )}
+                          {(confirmation?.discrepancies ?? []).map((discrepancy) => (
+                            <span key={discrepancy.id} title={discrepancy.reason ?? undefined} className={`mr-1 mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${discrepancy.status === 'OPEN' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}>
+                              {discrepancy.status === 'OPEN'
+                                ? (discrepancy.source === 'ISSUE' ? 'Tồn sổ thiếu — cần kiểm kê' : 'Không có hàng — cần kiểm kê')
+                                : 'Đã kiểm kê'}
+                            </span>
+                          ))}
+                        </div>
+                        {canConfirmItem(item) && (
                           <button
                             type="button"
                             disabled={mutating || isStatusUpdateExpired}
                             onClick={() => openConfirmation(item)}
-                            className={InfoButton}
+                            className={ACTION_INFO}
                           >
                             Xác nhận số chồng
                           </button>
-                        ) : (
-                          <span className="text-xs text-slate-400">—</span>
                         )}
-                      </td>
-                    </tr>
+                      </div>
+                    </li>
                   );
                 })}
-              </tbody>
-            </table>
+              </ul>
+            </div>
+          )}
+        </div>
+
+        {/* Pinned to the viewport on large screens; a long list scrolls inside
+            the card so its header, and the page around it, stay put. The card always
+            fills the viewport height, even for a short list, so it reads as one pane. */}
+        <div className="min-w-0 lg:sticky lg:top-0 lg:col-span-7">
+          <div className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:h-[calc(80vh-3.5rem)]">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-3.5 py-2.5 sm:px-4">
+              <div><h2 className="text-base lg:text-4xl md:text-2xl sm:text-2xl font-bold text-slate-900 my-2">Thông tin cấp hàng</h2></div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-sm font-semibold text-slate-600">Items đã khóa</span>
+            </div>
+            {items.length === 0 ? (
+              <div className="p-8 text-center text-base text-slate-500">Order chưa có item.</div>
+            ) : (
+              <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+                <table className="w-full text-left text-base">
+                  <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-4 py-2.5">Vật tư</th>
+                      <th className="px-4 py-2.5">Yêu cầu</th>
+                      <th className="px-4 py-2.5">Tồn</th>
+                      <th className="px-4 py-2.5">Duyệt</th>
+                      <th className="px-4 py-2.5">Đã cấp</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {items.map((item) => (
+                      <tr key={item.id} className={`align-top ${item.has_stock_shortage ? "bg-amber-50/70" : ""}`}>
+                        <td className="px-4 py-3">
+                          <p className="font-mono text-sm font-semibold text-slate-800">{item.supply?.code ?? '—'}</p>
+                          <p className="text-sm text-slate-500" title={item.provider?.name ?? undefined}>{item.provider?.code ?? '—'}{item.provider?.name ? ` · ${item.provider.name}` : ''}</p>
+                          {item.set_per_qty !== null && <p className="text-sm text-slate-500">{item.set_per_qty} SET/chồng</p>}
+                          {item.note && <p className="mt-0.5 text-sm italic text-slate-500">{item.note}</p>}
+                        </td>
+                        <td className="px-4 py-3">
+                          {item.set_per_qty !== null ? (
+                            <div>
+                              <p className="font-semibold text-slate-800">{item.requested_stack_quantity} chồng</p>
+                              <p className="text-sm text-slate-500">{item.requested_total_set_quantity} SET</p>
+                            </div>
+                          ) : item.quantity_requested}
+                        </td>
+                        <td className="px-4 py-3">
+                          <StockAvailabilityWarning item={item} compact textSize="md" />
+                          {item.available_stack_quantity !== undefined && (
+                            <p className="text-sm text-slate-500">{item.available_stack_quantity} chồng</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {item.quantity_approved ?? "—"}
+                          {item.set_per_qty !== null && item.quantity_approved !== null && (
+                            <p className="text-sm text-slate-500">
+                              {approvedStackQuantity(item) === null
+                                ? "Không tương thích quy cách"
+                                : `${approvedStackQuantity(item)} chồng`}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <p>{item.quantity_issued ?? 0}{item.set_per_qty !== null ? ' SET' : ''}</p>
+                          {item.set_per_qty !== null && stackStates.get(item.id)?.confirmedStacks !== null && (
+                            <p className="text-sm text-slate-500">
+                              {stackStates.get(item.id)?.confirmedStacks} chồng xác nhận
+                            </p>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
-      )}
-
-      {(order.note || order.rejected_reason || order.cancel_reason) && (
-        <div className="grid gap-3 md:grid-cols-3">
-          {order.note && <InfoNote label="Ghi chú" value={order.note} />}
-          {order.rejected_reason && <InfoNote label="Lý do từ chối" value={order.rejected_reason} />}
-          {order.cancel_reason && <InfoNote label="Lý do hủy" value={order.cancel_reason} />}
-        </div>
-      )}
+      </div>
       {confirmationTarget && (
         <CrudModal
           title="Xác nhận số chồng"
@@ -1026,9 +1019,12 @@ const OrderDetailPage = () => {
   );
 };
 
-const ActionCard = ({ title, note, children }: { title: string; note: string; children: React.ReactNode }) => (
-  <div className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
-    <h2 className="font-bold text-slate-900">{title}</h2><p className="mt-1 text-sm text-slate-500">{note}</p><div className="mt-4">{children}</div>
+/** A panel opened by one of the status actions, shown inside the actions card. */
+const PanelSection = ({ title, note, children }: { title: string; note: string; children: React.ReactNode }) => (
+  <div className="mt-3 border-t border-slate-100 pt-3">
+    <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+    <p className="mt-0.5 text-xs text-slate-500">{note}</p>
+    <div className="mt-3">{children}</div>
   </div>
 );
 
@@ -1040,11 +1036,11 @@ const ReadOnlyValue = ({ label, value }: { label: string; value: string }) => (
 );
 
 const PanelButtons = ({ disabled, onCancel, onConfirm, confirmLabel, danger = false }: { disabled: boolean; onCancel: () => void; onConfirm: () => void; confirmLabel: string; danger?: boolean }) => (
-  <div className="mt-4 flex justify-end gap-2"><button type="button" disabled={disabled} onClick={onConfirm} className={danger ? ErrorButton : InfoButton}>{confirmLabel}</button><button type="button" disabled={disabled} onClick={onCancel} className={SecondaryButton}>Bỏ qua</button></div>
+  <div className="mt-3 flex justify-end gap-2"><button type="button" disabled={disabled} onClick={onConfirm} className={danger ? ErrorButton : InfoButton}>{confirmLabel}</button><button type="button" disabled={disabled} onClick={onCancel} className={SecondaryButton}>Bỏ qua</button></div>
 );
 
 const QuantityRow = ({ item, label, value, max, onChange }: { item: OrderItem; label: string; value: string; max: number; onChange: (value: string) => void }) => (
-  <div className={`grid gap-3 rounded-xl border p-3 text-sm md:grid-cols-[1fr_180px] md:items-center ${item.has_stock_shortage ? "border-amber-300 bg-amber-50/70" : "border-slate-200"}`}><div><strong className="block text-slate-800">{item.supply?.code ?? 'Vật tư'}</strong><span className="text-xs text-slate-500">Yêu cầu: {item.quantity_requested}</span><div className="mt-2"><StockAvailabilityWarning item={item} /></div></div><label><span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span><input type="number" min="0" max={max} step="1" value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2" /></label></div>
+  <div className={`grid gap-2 rounded-lg border p-2.5 text-sm sm:grid-cols-[1fr_140px] sm:items-center ${item.has_stock_shortage ? "border-amber-300 bg-amber-50/70" : "border-slate-200"}`}><div className="min-w-0"><strong className="block text-slate-800">{item.supply?.code ?? 'Vật tư'}</strong><span className="text-xs text-slate-500">Yêu cầu: {item.quantity_requested} · Tồn tối đa: {max}</span><div className="mt-1"><StockAvailabilityWarning item={item} compact /></div></div><label><span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span><input type="number" min="0" max={max} step="1" value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-1.5" /></label></div>
 );
 
 /**
@@ -1066,6 +1062,6 @@ const NormalIssueConflictNotice = ({
   </div>
 );
 
-const InfoNote = ({ label, value }: { label: string; value: string }) => <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p><p className="mt-2 text-sm text-slate-700">{value}</p></div>;
+const InfoNote = ({ label, value }: { label: string; value: string }) => <div><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p><p className="mt-0.5 break-words text-sm text-slate-700">{value}</p></div>;
 
 export default OrderDetailPage;

@@ -84,8 +84,14 @@ export const ConfirmOffcanvas = ({
     </div>
   );
 
+  // Warnings (deactivate, discard unsaved changes) interrupt as a centred card
+  // and keep their amber action; everything else stays a drawer.
+  const isWarning = entry.variant === 'warning';
+
   return (
     <Offcanvas
+      presentation={isWarning ? 'card' : 'drawer'}
+      accentClassName={isWarning ? 'border-amber-500' : ''}
       id={entry.id}
       phase={entry.phase}
       layer="confirmation"
