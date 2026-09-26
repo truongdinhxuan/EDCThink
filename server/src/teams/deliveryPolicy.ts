@@ -1,18 +1,17 @@
-/** Waits before attempts 2, 3, 4 and 5; the fifth failure is final. */
-export const RETRY_DELAYS_MS = [30_000, 120_000, 600_000, 1_800_000] as const;
-export const MAX_ATTEMPTS = 5;
+/** Teams accepts about 28 KB per message; stay clear of it. */
+export const MAX_PAYLOAD_BYTES = 25 * 1024;
+/** Waits before retries 1, 2 and 3; the fourth attempt is the last. */
+export const RETRY_DELAYS_MS = [5_000, 30_000, 120_000] as const;
+export const MAX_ATTEMPTS = RETRY_DELAYS_MS.length + 1;
 export const SEND_TIMEOUT_MS = 10_000;
 
 export type SendResult =
   | { kind: 'response'; status: number; retryAfter?: string | null }
   | { kind: 'error'; message: string };
 
-export interface DeliveryOutcome {
-  status: 'SENT' | 'PENDING' | 'FAILED';
-  nextAttemptAt: Date | null;
-  httpStatus: number | null;
-  error: string | null;
-}
+export type AttemptOutcome =
+  | { final: true; success: boolean; httpStatus: number | null; error: string | null }
+  | { final: false; retryInMs: number; httpStatus: number | null; error: string };
 
 /** Retry-After as delta-seconds or an HTTP date; null when absent or unreadable. */
 export const parseRetryAfterMs = (value: string | null | undefined, now: Date): number | null => {
@@ -24,41 +23,31 @@ export const parseRetryAfterMs = (value: string | null | undefined, now: Date): 
 };
 
 /**
- * Decides what one attempt means. `attempts` counts this attempt too.
- * 2xx sent; 408/429/5xx and network errors retry on the schedule (429 honours
- * Retry-After); any other status fails for good, since resending cannot help.
+ * What one attempt means. `attempt` is 1-based. 2xx succeeds; 408/429/5xx and
+ * network errors retry on the schedule (429 honours Retry-After); any other
+ * status fails at once, since resending cannot help.
  */
 export const decideOutcome = (
   result: SendResult,
-  attempts: number,
+  attempt: number,
   now: Date = new Date(),
-): DeliveryOutcome => {
+): AttemptOutcome => {
   const httpStatus = result.kind === 'response' ? result.status : null;
   if (httpStatus !== null && httpStatus >= 200 && httpStatus < 300) {
-    return { status: 'SENT', nextAttemptAt: null, httpStatus, error: null };
+    return { final: true, success: true, httpStatus, error: null };
   }
 
-  const error = result.kind === 'error'
-    ? result.message
-    : `HTTP ${httpStatus}`;
+  const error = result.kind === 'error' ? result.message : `HTTP ${httpStatus}`;
   const retryable = result.kind === 'error'
     || httpStatus === 408
     || httpStatus === 429
     || (httpStatus !== null && httpStatus >= 500);
-
-  if (!retryable || attempts >= MAX_ATTEMPTS) {
-    return { status: 'FAILED', nextAttemptAt: null, httpStatus, error };
+  if (!retryable || attempt >= MAX_ATTEMPTS) {
+    return { final: true, success: false, httpStatus, error };
   }
 
-  const scheduled = RETRY_DELAYS_MS[Math.min(attempts - 1, RETRY_DELAYS_MS.length - 1)];
-  const retryAfter = result.kind === 'response' && httpStatus === 429
+  const retryAfter = httpStatus === 429 && result.kind === 'response'
     ? parseRetryAfterMs(result.retryAfter, now)
     : null;
-  const delay = retryAfter ?? scheduled;
-  return {
-    status: 'PENDING',
-    nextAttemptAt: new Date(now.getTime() + delay),
-    httpStatus,
-    error,
-  };
+  return { final: false, retryInMs: retryAfter ?? RETRY_DELAYS_MS[attempt - 1], httpStatus, error };
 };

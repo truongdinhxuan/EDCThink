@@ -1,8 +1,9 @@
 /**
- * Anti-SSRF policy for Workflow URLs. The server will POST to whatever is saved
- * here, so only https to a Microsoft Power Automate / Logic Apps host passes.
+ * Anti-SSRF policy for Workflow URLs read from Vault. The server POSTs to
+ * whatever the secret holds, so only https to a Microsoft Power Automate /
+ * Logic Apps host passes. Hardcoded on purpose: widening it is a code change.
  */
-export const DEFAULT_ALLOWED_HOSTS = [
+export const ALLOWED_WEBHOOK_HOSTS = [
   '*.logic.azure.com',
   '*.powerplatform.com',
   '*.api.powerplatform.com',
@@ -15,14 +16,6 @@ export class WebhookUrlError extends Error {
   }
 }
 
-export const parseAllowedHosts = (raw: string | undefined): string[] => {
-  const hosts = (raw ?? '')
-    .split(',')
-    .map((host) => host.trim().toLowerCase())
-    .filter(Boolean);
-  return hosts.length > 0 ? hosts : [...DEFAULT_ALLOWED_HOSTS];
-};
-
 /** `*.example.com` matches any subdomain but not the bare `example.com`. */
 export const hostMatches = (host: string, pattern: string): boolean => {
   const normalizedHost = host.toLowerCase().replace(/\.$/, '');
@@ -33,12 +26,16 @@ export const hostMatches = (host: string, pattern: string): boolean => {
   return normalizedHost === pattern;
 };
 
-export const assertAllowedWebhookUrl = (value: string, allowedHosts: readonly string[]): URL => {
+/** Messages never contain the URL: they end up in last_error and API responses. */
+export const assertAllowedWebhookUrl = (
+  value: string,
+  allowedHosts: readonly string[] = ALLOWED_WEBHOOK_HOSTS,
+): URL => {
   let url: URL;
   try {
     url = new URL(value.trim());
   } catch {
-    throw new WebhookUrlError('URL Workflow không hợp lệ.');
+    throw new WebhookUrlError('URL Workflow trong Vault không hợp lệ.');
   }
   if (url.protocol !== 'https:') {
     throw new WebhookUrlError('URL Workflow phải dùng https.');
@@ -53,15 +50,4 @@ export const assertAllowedWebhookUrl = (value: string, allowedHosts: readonly st
     throw new WebhookUrlError('Host của URL Workflow không nằm trong danh sách cho phép.');
   }
   return url;
-};
-
-/** host + "…" + last 6 characters. Enough to recognise a URL, useless to reuse it. */
-export const maskWebhookUrl = (value: string | null): string | null => {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return `${url.host}…${value.slice(-6)}`;
-  } catch {
-    return `…${value.slice(-6)}`;
-  }
 };

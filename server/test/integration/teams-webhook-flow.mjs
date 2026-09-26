@@ -1,12 +1,14 @@
-// Integration: Teams outbox end to end against the configured Supabase project
-// and a local mock HTTP server standing in for the Teams Workflow.
+// Integration: Teams webhooks end to end against the configured Supabase project:
+// NOTIFY trigger → LISTEN session → sender → a local mock HTTP server standing in
+// for the Teams Workflow.
 //
-//   npm run build:ts && node test/integration/teams-webhook-flow.mjs
+//   npm run build:ts && SUPABASE_DB_URL=... node test/integration/teams-webhook-flow.mjs
 //
-// Writes to the database: creates two orders coded TEAMS-TEST-* (one left APPROVED,
-// one CANCELLED) and toggles ORDER_STATUS_CHANGED, restoring its switch at the end.
-// Stop the API server first, or its dispatcher will send the test messages to the
-// real Workflow URL in .env. Run against mock data only.
+// SUPABASE_DB_URL: session pooler or direct connection of a role that may write
+// vault.secrets (postgres). The test puts a fake Workflow URL into Vault and
+// toggles ORDER_STATUS_CHANGED, then restores both. It creates TEAMS-TEST-*
+// orders (left APPROVED / PENDING). Stop the API server first: while it holds the
+// listener lock this test cannot listen. Run against mock data only.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
@@ -14,18 +16,53 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 require('dotenv').config({ quiet: true });
 const { createClient } = require('@supabase/supabase-js');
-const { TeamsDispatcher } = require('../../dist/teams/dispatcher.js');
-const { DEFAULT_ALLOWED_HOSTS } = require('../../dist/teams/urlPolicy.js');
+const { Client } = require('pg');
+const { TeamsSender } = require('../../dist/teams/sender.js');
+const { TeamsListener } = require('../../dist/teams/listener.js');
 
+assert.ok(process.env.SUPABASE_DB_URL, 'SUPABASE_DB_URL is required');
 const db = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
+const pg = new Client({ connectionString: process.env.SUPABASE_DB_URL });
+await pg.connect();
+// A Supabase CLI login role (cli_login_postgres) may act as postgres for Vault.
+if ((await pg.query('select current_user')).rows[0].current_user !== 'postgres') {
+  await pg.query('set role postgres');
+}
+
+const CODE = 'ORDER_STATUS_CHANGED';
+const SECRET_NAME = `teams_webhook:${CODE}`;
 const FAKE_URL = 'https://prod-00.southeastasia.logic.azure.com/workflows/teams-test/triggers/manual/paths/invoke?sig=TESTSIG123456';
 const one = async (promise, label) => {
   const { data, error } = await promise;
   if (error) throw new Error(`${label}: ${error.message}`);
   return data;
 };
+const until = async (condition, label, timeoutMs = 15_000) => {
+  const started = Date.now();
+  while (!(await condition())) {
+    if (Date.now() - started > timeoutMs) throw new Error(`timed out waiting for ${label}`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+};
+const settle = () => new Promise((resolve) => setTimeout(resolve, 2_000));
+
+// --- Vault helpers (the admin does this in the SQL Editor) -------------------
+const readSecret = async () => (await pg.query(
+  'select decrypted_secret from vault.decrypted_secrets where name = $1', [SECRET_NAME],
+)).rows[0]?.decrypted_secret ?? null;
+const writeSecret = async (value) => {
+  if (value === null) {
+    await pg.query('delete from vault.secrets where name = $1', [SECRET_NAME]);
+  } else if (await readSecret() === null) {
+    await pg.query('select vault.create_secret($1, $2, $3)', [value, SECRET_NAME, 'Teams workflow: trạng thái đơn hàng']);
+  } else {
+    await pg.query('select vault.update_secret((select id from vault.secrets where name = $1), $2)', [SECRET_NAME, value]);
+  }
+};
+const setActive = (isActive) => one(db.from('teams_webhooks').update({ is_active: isActive }).eq('code', CODE), 'switch');
+const webhookRow = async () => (await one(db.rpc('list_teams_webhooks'), 'list')).find((row) => row.code === CODE);
 
 // --- mock Teams Workflow -----------------------------------------------------
 const received = [];
@@ -40,32 +77,41 @@ const server = createServer((request, response) => {
 });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const mockUrl = `http://127.0.0.1:${server.address().port}/`;
-// The dispatcher takes the (https, allowlisted) URL from its env-derived map; the
-// transport checks it is that URL and then posts to the local mock instead.
-let lastTargetUrl = null;
-const transport = async (url, body) => {
-  lastTargetUrl = url;
-  const response = await fetch(mockUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
-    body: JSON.stringify(body),
-  });
-  return { kind: 'response', status: response.status, retryAfter: response.headers.get('retry-after') };
-};
-const dispatcher = new TeamsDispatcher(db, {
-  transport,
+// The sender checks the Vault URL against the real allowlist; the transport then
+// confirms it got that URL and posts to the local mock instead.
+const targets = [];
+const waits = [];
+const sender = new TeamsSender(db, {
   appBaseUrl: 'https://edcthink.pro',
-  allowedHosts: [...DEFAULT_ALLOWED_HOSTS],
-  webhookUrls: { ORDER_STATUS_CHANGED: FAKE_URL },
+  urlCacheMs: 0,
+  sleep: async (ms) => { waits.push(ms); },
+  transport: async (url, body) => {
+    targets.push(url);
+    const response = await fetch(mockUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(body),
+    });
+    return { kind: 'response', status: response.status, retryAfter: response.headers.get('retry-after') };
+  },
+});
+const logs = [];
+const listener = new TeamsListener({
+  connectionString: process.env.SUPABASE_DB_URL,
+  onNotification: (payload) => sender.handleNotification(payload),
+  log: { info: (m) => logs.push(m), warn: (m) => logs.push(m), error: (m) => logs.push(m) },
 });
 
 const results = [];
-let restoreActive = null;
 const check = async (name, fn) => {
   try { await fn(); results.push(`PASS ${name}`); } catch (error) { results.push(`FAIL ${name}: ${error.message}`); process.exitCode = 1; }
 };
 
+const backup = { secret: await readSecret(), active: (await webhookRow())?.is_active ?? false };
 try {
+  listener.start();
+  await until(() => listener.listening, 'LISTEN');
+
   // --- fixtures ---------------------------------------------------------------
   const admin = (await one(db.from('user_roles').select('user_id, role:roles!inner(code)').eq('role.code', 'ADMIN').limit(1), 'admin'))[0].user_id;
   const statuses = Object.fromEntries((await one(db.from('order_statuses').select('id, code'), 'statuses')).map((s) => [s.code, s.id]));
@@ -73,8 +119,7 @@ try {
   const vtdg = areas.find((a) => a.code === 'VTDG').id;
   const target = areas.find((a) => a.code === 'DG_HATINH').id;
   const supply = await one(db.from('supplies').select('id, code, unit_id').eq('code', '71000002').single(), 'supply');
-  const balance = await one(db.from('stock_balances').select('provider_id, quantity').eq('supply_id', supply.id).eq('area_id', vtdg).is('set_per_qty', null).eq('is_deleted', false).single(), 'balance');
-
+  const balance = await one(db.from('stock_balances').select('provider_id').eq('supply_id', supply.id).eq('area_id', vtdg).is('set_per_qty', null).eq('is_deleted', false).single(), 'balance');
   const createOrder = async (suffix) => {
     const order = await one(db.from('orders').insert({
       code: `TEAMS-TEST-${Date.now()}-${suffix}`, from_area_id: vtdg, to_area_id: target,
@@ -87,118 +132,93 @@ try {
     }), 'insert item');
     return order;
   };
-  const deliveriesFor = (orderId) => one(db.from('teams_webhook_deliveries')
-    .select('id, event_key, status, attempts, last_http_status, next_attempt_at, payload')
-    .eq('entity_id', orderId).order('seq'), 'deliveries');
 
-  // --- 1. switch only; no URL in the database -------------------------------
-  const before = await one(db.from('teams_workflows').select('is_active').eq('function_code', 'ORDER_STATUS_CHANGED').maybeSingle(), 'before');
-  restoreActive = before?.is_active ?? false;
-  let workflowId;
-  await check('the database stores only the switch, never a URL', async () => {
-    workflowId = await one(db.rpc('save_teams_workflow', {
-      p_function_code: 'ORDER_STATUS_CHANGED', p_name: null, p_is_active: true, p_actor_id: admin,
-    }), 'save');
-    const row = await one(db.from('teams_workflows').select('*').eq('id', workflowId).single(), 'workflow');
-    assert.equal(row.is_active, true);
-    assert.equal(row.name.length > 0, true, 'a null name keeps the stored one');
-    assert.equal(Object.keys(row).some((column) => /url|secret/i.test(column)), false);
-    const { error } = await db.rpc('get_teams_workflow_url', { p_workflow_id: workflowId });
-    assert.ok(error, 'the Vault reader is gone');
+  // --- 1. no secret → configured = false, nothing sent -----------------------
+  await check('without a Vault secret the API reports configured = false and nothing is sent', async () => {
+    await writeSecret(null);
+    await setActive(true);
+    assert.equal((await webhookRow()).configured, false);
+    await createOrder('NOSECRET');
+    await settle();
+    await sender.idle();
+    assert.equal(received.length, 0);
   });
 
-  await dispatcher.drain(); // clear anything already due
-  received.length = 0;
-
   // --- 2. create → 1 request ----------------------------------------------------
+  await writeSecret(FAKE_URL);
   const order = await createOrder('A');
   await check('creating an order sends one request whose body is only { html }', async () => {
-    await dispatcher.drain();
+    assert.equal((await webhookRow()).configured, true);
+    await until(() => received.length >= 1, 'create message');
+    await sender.idle();
     assert.equal(received.length, 1);
     assert.deepEqual(Object.keys(received[0].body), ['html']);
     assert.match(received[0].contentType, /application\/json; charset=utf-8/i);
     assert.match(received[0].body.html, /🔔 Thông báo đơn hàng mới/);
     assert.match(received[0].body.html, new RegExp(order.code));
-    assert.match(received[0].body.html, /\/workspace\/orders\//);
-    assert.equal(lastTargetUrl, FAKE_URL);
-    const rows = await deliveriesFor(order.id);
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0].status, 'SENT');
-    assert.match(rows[0].event_key, new RegExp(`^ORDER_STATUS_CHANGED:${order.id}:`));
+    assert.match(received[0].body.html, new RegExp(`/workspace/orders/${order.id}`));
+    assert.equal(targets[0], FAKE_URL);
   });
 
-  // --- 3. approve → +1 request, 500 then retried -------------------------------
-  await check('approving sends one more request; a 500 is retried, then sent', async () => {
+  // --- 3. approve with a 500 → retried, then sent -------------------------------
+  await check('approving sends one more message; a 500 is retried and last_* records the success', async () => {
     plannedStatuses.push(500);
+    const item = await one(db.from('order_items').select('id').eq('order_id', order.id).single(), 'item');
     await one(db.rpc('review_order', {
       p_order_id: order.id, p_actor_id: admin, p_action_code: 'APPROVE',
-      p_items: [{ order_item_id: (await one(db.from('order_items').select('id').eq('order_id', order.id).single(), 'item')).id, quantity_approved: 2 }],
-      p_reason: null, p_note: null,
+      p_items: [{ order_item_id: item.id, quantity_approved: 2 }], p_reason: null, p_note: null,
     }), 'approve');
-    await dispatcher.drain();
-    assert.equal(received.length, 2);
-    let rows = await deliveriesFor(order.id);
-    assert.equal(rows[1].status, 'PENDING');
-    assert.equal(rows[1].attempts, 1);
-    assert.equal(rows[1].last_http_status, 500);
-    const waitMs = Date.parse(rows[1].next_attempt_at) - Date.now();
-    assert.ok(waitMs > 20_000 && waitMs <= 30_000, `backoff ~30s, got ${waitMs}ms`);
-    // Fast-forward the backoff instead of waiting 30 seconds.
-    await one(db.from('teams_webhook_deliveries').update({ next_attempt_at: new Date().toISOString() }).eq('id', rows[1].id), 'ff');
-    await dispatcher.drain();
+    await until(() => received.length >= 3, 'approve message and its retry');
+    await sender.idle();
     assert.equal(received.length, 3);
-    assert.equal(received[2].body.html, received[1].body.html, 'retry resends the identical body');
+    assert.deepEqual(waits, [5_000]);
+    assert.equal(received[2].body.html, received[1].body.html);
     assert.match(received[2].body.html, /🔄 Đơn hàng cập nhật trạng thái/);
     assert.match(received[2].body.html, /Từ: Chờ xác nhận → Đã xác nhận/);
-    rows = await deliveriesFor(order.id);
-    assert.equal(rows[1].status, 'SENT');
-    assert.equal(rows[1].attempts, 2);
+    const row = await webhookRow();
+    assert.equal(row.last_success, true);
+    assert.equal(row.last_http_status, 202);
+    assert.equal(row.last_error, null);
+    assert.ok(Date.now() - Date.parse(row.last_sent_at) < 60_000);
   });
 
-  // --- 4. no duplicates ---------------------------------------------------------
-  await check('the same event cannot be queued or sent twice', async () => {
-    const [first] = await deliveriesFor(order.id);
-    const { error } = await db.from('teams_webhook_deliveries').insert({
-      workflow_id: workflowId, function_code: 'ORDER_STATUS_CHANGED', entity_type: 'order',
-      entity_id: order.id, event_key: first.event_key, payload: {},
-    });
-    assert.equal(error?.code, '23505');
-    await dispatcher.drain();
+  // --- 4. switch off → nothing ----------------------------------------------
+  await check('with the switch off nothing is sent', async () => {
+    await setActive(false);
+    await createOrder('OFF');
+    await settle();
+    await sender.idle();
     assert.equal(received.length, 3);
   });
 
-  // --- 5. guard ---------------------------------------------------------------
-  await check('a status change without a revision is refused', async () => {
-    const { error } = await db.from('orders').update({ status_id: statuses.COMPLETED }).eq('id', order.id);
-    assert.equal(error?.message, 'ORDER_STATUS_CHANGE_WITHOUT_REVISION');
+  // --- 5. clients cannot read the secret -----------------------------------------
+  await check('anon and authenticated cannot call get_teams_webhook_url', async () => {
+    const anon = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+    const { data, error } = await anon.rpc('get_teams_webhook_url', { p_code: CODE });
+    assert.ok(error, 'anon must be refused');
+    assert.equal(data, null);
+    for (const role of ['anon', 'authenticated']) {
+      await pg.query('begin');
+      try {
+        await pg.query(`set local role ${role}`);
+        await assert.rejects(pg.query('select public.get_teams_webhook_url($1)', [CODE]), /permission denied/);
+      } finally {
+        await pg.query('rollback');
+      }
+    }
   });
 
-  // --- 6. workflow off → nothing ----------------------------------------------
-  await check('with the workflow off nothing is queued or sent', async () => {
-    await one(db.rpc('save_teams_workflow', {
-      p_function_code: 'ORDER_STATUS_CHANGED', p_name: null, p_is_active: false, p_actor_id: admin,
-    }), 'off');
-    const second = await createOrder('B');
-    // Cancel through the new RPC: it writes a revision, which must also be skipped.
-    const changed = await one(db.rpc('transition_order_status', {
-      p_order_id: second.id, p_actor_id: admin, p_expected_status_id: statuses.PENDING,
-      p_target_status_code: 'CANCELLED', p_cancel_reason: 'Teams integration test', p_taken_away_by: null,
-    }), 'cancel');
-    assert.equal(changed, true);
-    await dispatcher.drain();
-    assert.equal(received.length, 3);
-    assert.equal((await deliveriesFor(second.id)).length, 0);
-    const revisions = await one(db.from('order_revisions')
-      .select('action:order_revision_actions!order_revisions_action_id_fkey(code)').eq('order_id', second.id), 'revs');
-    assert.deepEqual(revisions.map((r) => r.action.code).sort(), ['CANCEL', 'CREATE']);
+  await check('logs never contain the URL', async () => {
+    assert.doesNotMatch(JSON.stringify(logs), /TESTSIG|logic\.azure/);
   });
 } finally {
+  await listener.stop();
+  sender.stop();
   server.close();
-  if (restoreActive !== null) {
-    const admin = (await db.from('user_roles').select('user_id, role:roles!inner(code)').eq('role.code', 'ADMIN').limit(1)).data[0].user_id;
-    await db.rpc('save_teams_workflow', { p_function_code: 'ORDER_STATUS_CHANGED', p_name: null, p_is_active: restoreActive, p_actor_id: admin });
-    results.push(`(switch restored to ${restoreActive ? 'ON' : 'OFF'})`);
-  }
+  await writeSecret(backup.secret);
+  await setActive(backup.active);
+  results.push(`(Vault secret ${backup.secret ? 'restored' : 'removed again'}; switch restored to ${backup.active ? 'ON' : 'OFF'})`);
+  await pg.end();
 }
 
 console.log(results.join('\n'));
