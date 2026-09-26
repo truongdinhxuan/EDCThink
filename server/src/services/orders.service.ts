@@ -45,7 +45,6 @@ import { ORDER_SORT_FIELDS } from '../schemas/orders';
 import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
 import { NOTIFICATION_TYPE, type NotificationType } from '../interfaces/notifications';
 import { NotificationsService } from './notifications.service';
-import { kickTeamsDispatcher } from '../teams/dispatcher';
 
 export interface OrderActor extends OrderReadAccess {
   id: string;
@@ -666,8 +665,8 @@ export class OrderService {
 
   /**
    * Receive / complete / cancel. The status write and its order_revisions row
-   * commit together (transition_order_status), which is what the Teams outbox
-   * hooks on. When the Order has moved on since `order` was read, nothing is
+   * commit together (transition_order_status), whose insert notifies the Teams
+   * listener. When the Order has moved on since `order` was read, nothing is
    * written — the same outcome the old conditional UPDATE had.
    */
   private async transitionStatus(
@@ -695,8 +694,6 @@ export class OrderService {
   ): Promise<OrderData> {
     const current = await this.findOrder(previous.id);
     if (previous.status_id === current.status_id) return current;
-    // The revision has committed and queued its Teams message; send it now.
-    kickTeamsDispatcher(this.fastify);
     try {
       await new NotificationsService(this.fastify).persistOrderTransition(
         actor,
@@ -1081,8 +1078,7 @@ export class OrderService {
     );
     if (error) createOrderRpcError(error);
     if (!orderId) serviceError(400, 'Không thể tạo Order.');
-    // The CREATE revision was written at commit and queued its Teams message.
-    kickTeamsDispatcher(this.fastify);
+    // The CREATE revision written at commit has notified the Teams listener.
     const order = await this.findOrder(orderId as string);
     try {
       await new NotificationsService(this.fastify).persistOrderCreated(actor, order);

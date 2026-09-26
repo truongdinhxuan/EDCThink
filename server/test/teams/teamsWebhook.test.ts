@@ -11,21 +11,22 @@ import {
   type OrderStatusSnapshot,
 } from '../../src/teams/orderStatusTemplate';
 import {
+  ALLOWED_WEBHOOK_HOSTS,
   assertAllowedWebhookUrl,
-  DEFAULT_ALLOWED_HOSTS,
   hostMatches,
-  maskWebhookUrl,
-  parseAllowedHosts,
   WebhookUrlError,
 } from '../../src/teams/urlPolicy';
 import {
   decideOutcome,
   MAX_ATTEMPTS,
+  MAX_PAYLOAD_BYTES,
   parseRetryAfterMs,
   RETRY_DELAYS_MS,
+  type SendResult,
 } from '../../src/teams/deliveryPolicy';
-import { MAX_PAYLOAD_BYTES, TEAMS_FUNCTIONS, isTeamsFunctionCode } from '../../src/teams/registry';
-import { readTeamsConfig, teamsWebhookUrlEnvKey } from '../../src/config/teams';
+import { getTeamsHook, TEAMS_EVENTS_CHANNEL, TEAMS_HOOK_CODES } from '../../src/teams/registry';
+import { TeamsSender } from '../../src/teams/sender';
+import { readTeamsConfig } from '../../src/config/teams';
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
 const APP = { appBaseUrl: 'https://edcthink.pro' };
@@ -87,7 +88,7 @@ describe('Teams HTML: order status message', () => {
     const cases: Array<[string, string, string]> = [
       ['PENDING', 'APPROVED', '40'],
       ['PENDING', 'REJECTED', '50'],
-      ['PENDING', 'CANCELLED', '50'],
+      ['PENDING', 'CANCELLED', '40'], // approved count once it got that far
       ['APPROVED', 'PARTIAL_ISSUED', '30'],
       ['APPROVED', 'ISSUED', '30'],
       ['ISSUED', 'RECEIVED', '30'],
@@ -99,6 +100,12 @@ describe('Teams HTML: order status message', () => {
       assert.match(html, new RegExp(`<td>Ống PVC D21</td><td>${firstQuantity}</td>`), to);
     }
     assert.equal(Object.keys(ORDER_STATUS_COLORS).length, Object.keys(STATUS_NAMES).length);
+    const unapproved = snapshot({
+      old_status: { code: 'PENDING', name: STATUS_NAMES.PENDING },
+      new_status: { code: 'CANCELLED', name: STATUS_NAMES.CANCELLED },
+      items: [{ name: 'Ống PVC D21', unit: 'cây', quantity_requested: 50, quantity_approved: null, quantity_issued: 0 }],
+    });
+    assert.match(buildOrderStatusHtml(unapproved, APP), /<td>Ống PVC D21<\/td><td>50<\/td>/);
   });
 
   it('adds the reason for rejected and cancelled orders only', () => {
@@ -154,138 +161,292 @@ describe('Teams HTML: order status message', () => {
   });
 });
 
+
 describe('Teams webhook URL policy', () => {
-  const hosts = [...DEFAULT_ALLOWED_HOSTS];
-
-  it('accepts https Workflow URLs on the default hosts', () => {
+  it('accepts https Workflow URLs on the hardcoded hosts only', () => {
+    assert.deepEqual([...ALLOWED_WEBHOOK_HOSTS], ['*.logic.azure.com', '*.powerplatform.com', '*.api.powerplatform.com']);
     for (const url of [
-      'https://prod-12.southeastasia.logic.azure.com:443/workflows/abc/triggers/manual/paths/invoke?sig=x',
-      'https://default123.08.environment.api.powerplatform.com/powerautomate/automations/direct/workflows/abc',
-      'https://x.powerplatform.com/a',
-    ]) assert.doesNotThrow(() => assertAllowedWebhookUrl(url, hosts), url);
+      'https://prod-12.southeastasia.logic.azure.com/workflows/x/triggers/manual/paths/invoke?sig=abc',
+      'https://default123.f8.environment.api.powerplatform.com:443/powerautomate/automations/direct/x?sig=abc',
+    ]) {
+      assert.doesNotThrow(() => assertAllowedWebhookUrl(url));
+    }
+    assert.equal(hostMatches('logic.azure.com', '*.logic.azure.com'), false);
+    assert.equal(hostMatches('evil-logic.azure.com.attacker.io', '*.logic.azure.com'), false);
   });
 
-  it('refuses anything else', () => {
+  it('refuses anything else, with messages that never quote the URL', () => {
+    const secret = 'sig=SUPERSECRET';
     for (const url of [
-      'http://prod.logic.azure.com/x',
-      'https://logic.azure.com/x',
-      'https://evil.com/?x=.logic.azure.com',
-      'https://logic.azure.com.evil.com/x',
-      'https://user:pass@prod.logic.azure.com/x',
-      'https://prod.logic.azure.com:8443/x',
-      'https://169.254.169.254/latest',
-      'not a url',
-    ]) assert.throws(() => assertAllowedWebhookUrl(url, hosts), WebhookUrlError, url);
+      `http://prod.logic.azure.com/x?${secret}`,
+      `https://attacker.example.com/x?${secret}`,
+      `https://user:pw@prod.logic.azure.com/x?${secret}`,
+      `https://prod.logic.azure.com:8443/x?${secret}`,
+      `https://127.0.0.1/x?${secret}`,
+      `not a url ${secret}`,
+    ]) {
+      assert.throws(() => assertAllowedWebhookUrl(url), (error: unknown) =>
+        error instanceof WebhookUrlError && !error.message.includes('SUPERSECRET') && !error.message.includes('attacker'));
+    }
   });
 
-  it('reads the allowlist from the env, falling back to the defaults', () => {
-    assert.deepEqual(parseAllowedHosts(undefined), hosts);
-    assert.deepEqual(parseAllowedHosts(' *.Example.com , api.test.io '), ['*.example.com', 'api.test.io']);
-    assert.ok(hostMatches('a.example.com', '*.example.com'));
-    assert.ok(!hostMatches('example.com', '*.example.com'));
-    assert.ok(hostMatches('api.test.io', 'api.test.io'));
-  });
-
-  it('masks a URL to host + … + last 6 characters', () => {
-    assert.equal(maskWebhookUrl('https://prod-1.logic.azure.com/workflows/x?sig=SECRETabc123'), 'prod-1.logic.azure.com…abc123');
-    assert.equal(maskWebhookUrl(null), null);
+  it('takes no allowlist or URL from the environment', () => {
+    assert.doesNotMatch(read('src/teams/urlPolicy.ts'), /process\.env/);
+    assert.doesNotMatch(read('src/config/teams.ts'), /TEAMS_WEBHOOK_ALLOWED_HOSTS|TEAMS_WEBHOOK_URL_|APP_BASE_URL/);
+    assert.equal(readTeamsConfig({ ORIGIN_URL: 'https://edcthink.pro/' } as NodeJS.ProcessEnv).appBaseUrl, 'https://edcthink.pro');
   });
 });
 
-describe('Teams delivery retry policy', () => {
-  const now = new Date('2026-09-25T00:00:00Z');
-  const response = (status: number, retryAfter?: string) => ({ kind: 'response' as const, status, retryAfter });
+describe('Teams send retry policy', () => {
+  const at = new Date('2026-09-24T00:00:00Z');
 
-  it('marks 2xx as sent', () => {
-    assert.equal(decideOutcome(response(202), 1, now).status, 'SENT');
-    assert.equal(decideOutcome(response(200), 3, now).status, 'SENT');
+  it('succeeds on 2xx', () => {
+    assert.deepEqual(decideOutcome({ kind: 'response', status: 202 }, 1, at), {
+      final: true, success: true, httpStatus: 202, error: null,
+    });
   });
 
-  it('backs off 30s, 2m, 10m, 30m for 408 and 5xx, then gives up after 5 attempts', () => {
-    const waits = [1, 2, 3, 4].map((attempt) => {
-      const outcome = decideOutcome(response(503), attempt, now);
-      assert.equal(outcome.status, 'PENDING');
-      return outcome.nextAttemptAt!.getTime() - now.getTime();
+  it('retries 408, 5xx and network errors after 5s, 30s, 2m, then gives up', () => {
+    assert.deepEqual([...RETRY_DELAYS_MS], [5_000, 30_000, 120_000]);
+    assert.equal(MAX_ATTEMPTS, 4);
+    const retryable: SendResult[] = [
+      { kind: 'response', status: 500 },
+      { kind: 'response', status: 408 },
+      { kind: 'error', message: 'x' },
+    ];
+    for (const result of retryable) {
+      assert.deepEqual(
+        [1, 2, 3].map((attempt) => {
+          const outcome = decideOutcome(result, attempt, at);
+          return outcome.final ? null : outcome.retryInMs;
+        }),
+        [5_000, 30_000, 120_000],
+      );
+      assert.equal(decideOutcome(result, 4, at).final, true);
+    }
+    assert.deepEqual(decideOutcome({ kind: 'response', status: 503 }, 4, at), {
+      final: true, success: false, httpStatus: 503, error: 'HTTP 503',
     });
-    assert.deepEqual(waits, [...RETRY_DELAYS_MS]);
-    assert.equal(decideOutcome(response(408), 1, now).status, 'PENDING');
-    assert.equal(decideOutcome(response(500), MAX_ATTEMPTS, now).status, 'FAILED');
   });
 
   it('honours Retry-After on 429', () => {
-    const seconds = decideOutcome(response(429, '120'), 1, now);
-    assert.equal(seconds.nextAttemptAt!.getTime() - now.getTime(), 120_000);
-    const date = decideOutcome(response(429, 'Fri, 25 Sep 2026 00:05:00 GMT'), 1, now);
-    assert.equal(date.nextAttemptAt!.getTime() - now.getTime(), 300_000);
-    const missing = decideOutcome(response(429), 1, now);
-    assert.equal(missing.nextAttemptAt!.getTime() - now.getTime(), RETRY_DELAYS_MS[0]);
-    assert.equal(parseRetryAfterMs('garbage', now), null);
+    const outcome = decideOutcome({ kind: 'response', status: 429, retryAfter: '12' }, 1, at);
+    assert.equal(!outcome.final && outcome.retryInMs, 12_000);
+    assert.equal(parseRetryAfterMs(new Date(at.getTime() + 90_000).toUTCString(), at), 90_000);
+    const fallback = decideOutcome({ kind: 'response', status: 429 }, 2, at);
+    assert.equal(!fallback.final && fallback.retryInMs, 30_000);
   });
 
-  it('fails other 4xx and redirects without retrying; retries network errors', () => {
-    for (const status of [400, 401, 403, 404, 302]) {
-      const outcome = decideOutcome(response(status), 1, now);
-      assert.equal(outcome.status, 'FAILED', String(status));
-      assert.equal(outcome.nextAttemptAt, null);
+  it('fails other 4xx and redirects at once', () => {
+    for (const status of [400, 401, 404, 302]) {
+      const outcome = decideOutcome({ kind: 'response', status }, 1, at);
+      assert.equal(outcome.final && !outcome.success, true, String(status));
     }
-    assert.equal(decideOutcome({ kind: 'error', message: 'timeout' }, 1, now).status, 'PENDING');
   });
 });
 
-describe('Teams registry and wiring', () => {
-  const migration = read('supabase/migrations/20260925020000_teams_webhook.sql');
-  const orderService = read('src/services/orders.service.ts');
-  const transport = read('src/teams/transport.ts');
+/** Minimal stand-in for the Supabase client calls the sender makes. */
+const fakeDb = (state: { isActive: boolean; url: string | null }) => {
+  const updates: Array<Record<string, unknown>> = [];
+  const rpcCalls: string[] = [];
+  const db = {
+    from: (table: string) => {
+      assert.equal(table, 'teams_webhooks');
+      return {
+        select: () => ({
+          eq: () => ({ maybeSingle: async () => ({ data: { is_active: state.isActive }, error: null }) }),
+        }),
+        update: (values: Record<string, unknown>) => ({
+          eq: async () => {
+            updates.push(values);
+            return { error: null };
+          },
+        }),
+      };
+    },
+    rpc: async (name: string, args: Record<string, unknown>) => {
+      rpcCalls.push(name);
+      if (name === 'get_teams_webhook_url') return { data: state.url, error: null };
+      if (name === 'get_order_status_teams_event') {
+        return { data: { ...snapshot(), revision_id: args.p_revision_id }, error: null };
+      }
+      throw new Error(`unexpected rpc ${name}`);
+    },
+  };
+  return { db: db as never, updates, rpcCalls };
+};
 
-  it('registers ORDER_STATUS_CHANGED and validates codes against the registry', () => {
-    assert.ok(isTeamsFunctionCode('ORDER_STATUS_CHANGED'));
-    assert.ok(!isTeamsFunctionCode('NOPE'));
-    assert.ok(!isTeamsFunctionCode('toString'));
-    assert.equal(TEAMS_FUNCTIONS.ORDER_STATUS_CHANGED.code, 'ORDER_STATUS_CHANGED');
+const ORDER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const notice = (orderId: string, revision: number) => JSON.stringify({
+  code: 'ORDER_STATUS_CHANGED',
+  order_id: orderId,
+  revision_id: `00000000-0000-4000-8000-${String(revision).padStart(12, '0')}`,
+  old_status_id: null,
+  new_status_id: '33333333-3333-4333-8333-333333333333',
+  actor_id: null,
+});
+const REAL_LOOKING_URL = 'https://prod-01.southeastasia.logic.azure.com/workflows/w/triggers/manual/paths/invoke?sig=TOPSECRET123';
+
+describe('Teams sender', () => {
+  it('sends one { html } per event, in order per Order, retrying through a 500', async () => {
+    const { db, updates } = fakeDb({ isActive: true, url: REAL_LOOKING_URL });
+    const statuses = [500, 202, 202];
+    const sent: Array<{ revision: string; body: { html: string } }> = [];
+    const waits: number[] = [];
+    const sender = new TeamsSender(db, {
+      appBaseUrl: 'https://edcthink.pro',
+      transport: async (_url, body) => {
+        sent.push({ revision: String(sent.length), body });
+        return { kind: 'response', status: statuses.shift() ?? 202 };
+      },
+      sleep: async (ms) => {
+        waits.push(ms);
+      },
+    });
+    sender.handleNotification(notice(ORDER_A, 1));
+    sender.handleNotification(notice(ORDER_A, 2));
+    await sender.idle();
+
+    assert.equal(sent.length, 3);
+    assert.deepEqual(Object.keys(sent[0].body), ['html']);
+    assert.equal(sent[0].body.html, sent[1].body.html, 'the retry resends the same message');
+    assert.deepEqual(waits, [5_000]);
+    assert.equal(updates.length, 2);
+    assert.deepEqual(
+      { success: updates[1].last_success, status: updates[1].last_http_status, error: updates[1].last_error },
+      { success: true, status: 202, error: null },
+    );
   });
 
-  it('hooks one place, order_revisions, and makes every status change write one', () => {
-    assert.match(migration, /after insert on public\.order_revisions[\s\S]*enqueue_order_status_teams_delivery/);
-    assert.match(migration, /create constraint trigger orders_write_create_revision\s+after insert on public\.orders\s+deferrable initially deferred/);
-    assert.match(migration, /create constraint trigger orders_status_change_requires_revision\s+after update of status_id on public\.orders/);
-    assert.match(migration, /'ORDER_STATUS_CHANGED:' \|\| new\.order_id \|\| ':' \|\| new\.id/);
-    // Receive, complete and cancel no longer write orders.status_id directly.
-    assert.doesNotMatch(orderService, /\.from\('orders'\)\s*\.update\(\{[^}]*status_id/);
-    assert.equal((orderService.match(/rpc\('transition_order_status'/g) ?? []).length, 1);
-    assert.equal((orderService.match(/kickTeamsDispatcher\(this\.fastify\)/g) ?? []).length, 2);
+  it('skips when the function is off or has no secret', async () => {
+    for (const state of [{ isActive: false, url: REAL_LOOKING_URL }, { isActive: true, url: null }]) {
+      const { db, updates } = fakeDb(state);
+      let calls = 0;
+      const sender = new TeamsSender(db, {
+        appBaseUrl: '',
+        transport: async () => {
+          calls += 1;
+          return { kind: 'response', status: 202 };
+        },
+      });
+      sender.handleNotification(notice(ORDER_A, 1));
+      await sender.idle();
+      assert.equal(calls, 0);
+      assert.equal(updates.length, 0);
+    }
   });
 
-  it('reads the URL from the server env, never from the database, and never logs it', () => {
-    const envMigration = read('supabase/migrations/20260925030000_teams_webhook_url_in_env.sql');
-    assert.match(envMigration, /alter table public\.teams_workflows drop column webhook_secret_id/);
-    assert.match(envMigration, /drop function if exists public\.get_teams_workflow_url/);
-    assert.match(envMigration, /delete from vault\.secrets/);
-    // The trigger now queues on the switch alone.
-    const trigger = envMigration.slice(envMigration.indexOf('enqueue_order_status_teams_delivery'));
-    assert.doesNotMatch(trigger, /webhook_secret_id/);
-    assert.match(trigger, /is_active/);
+  it('refuses a URL off the allowlist without sending, and never logs or records the URL', async () => {
+    const logged: string[] = [];
+    const push = (message: unknown) => {
+      logged.push(String(message));
+    };
+    const { db, updates } = fakeDb({ isActive: true, url: 'https://attacker.example.com/hook?sig=TOPSECRET123' });
+    let calls = 0;
+    const sender = new TeamsSender(db, {
+      appBaseUrl: '',
+      log: { info: push, warn: push, error: push } as never,
+      transport: async () => {
+        calls += 1;
+        return { kind: 'response', status: 202 };
+      },
+      sleep: async () => undefined,
+    });
+    sender.handleNotification(notice(ORDER_A, 1));
+    sender.handleNotification('not json');
+    await sender.idle();
+    const test = await sender.sendTest('ORDER_STATUS_CHANGED', 'Thông báo');
 
-    const config = readTeamsConfig({
-      TEAMS_WEBHOOK_URL_ORDER_STATUS_CHANGED: ' "https://x.logic.azure.com/a?sig=1" ',
-    } as NodeJS.ProcessEnv);
-    assert.equal(config.webhookUrls.ORDER_STATUS_CHANGED, 'https://x.logic.azure.com/a?sig=1');
-    assert.equal(readTeamsConfig({} as NodeJS.ProcessEnv).webhookUrls.ORDER_STATUS_CHANGED, undefined);
-    assert.equal(teamsWebhookUrlEnvKey('ORDER_STATUS_CHANGED'), 'TEAMS_WEBHOOK_URL_ORDER_STATUS_CHANGED');
-    // Links use the shared client origin; APP_BASE_URL is no longer read.
-    assert.equal(readTeamsConfig({ ORIGIN_URL: 'https://edcthink.pro/' } as NodeJS.ProcessEnv).appBaseUrl, 'https://edcthink.pro');
-    assert.equal(readTeamsConfig({ APP_BASE_URL: 'https://other.example' } as NodeJS.ProcessEnv).appBaseUrl, '');
-    assert.doesNotMatch(read('src/config/teams.ts'), /APP_BASE_URL/);
-
-    const plugin = read('src/plugins/teamsDispatcher.ts');
-    assert.match(plugin, /webhookUrls: config\.webhookUrls/);
-    // Only the variable name is ever logged.
-    assert.doesNotMatch(plugin, /log\.\w+\([^)]*\burl\b(?!s)/);
-    assert.match(transport, /redirect: 'manual'/);
-    assert.doesNotMatch(transport, /message: .*url/i);
+    assert.equal(calls, 0);
+    assert.equal(test.success, false);
+    assert.doesNotMatch(JSON.stringify({ logged, updates, test }), /TOPSECRET|attacker/);
+    assert.match(String(updates[0].last_error), /Host/);
   });
 
-  it('claims with SKIP LOCKED, in order per entity', () => {
-    assert.match(migration, /for update of delivery skip locked/);
-    assert.match(migration, /earlier\.seq < delivery\.seq\s+and earlier\.status = 'PENDING'/);
+  it('caches the URL for about 5 minutes, but a test send reads it fresh', async () => {
+    const { db, rpcCalls } = fakeDb({ isActive: true, url: REAL_LOOKING_URL });
+    const sender = new TeamsSender(db, {
+      appBaseUrl: '',
+      transport: async () => ({ kind: 'response', status: 202 }),
+    });
+    sender.handleNotification(notice(ORDER_A, 1));
+    sender.handleNotification(notice(ORDER_A, 2));
+    await sender.idle();
+    const urlReads = () => rpcCalls.filter((name) => name === 'get_teams_webhook_url').length;
+    assert.equal(urlReads(), 1);
+    assert.deepEqual(await sender.sendTest('ORDER_STATUS_CHANGED', 'Thông báo'), {
+      success: true, http_status: 202, error: null,
+    });
+    assert.equal(urlReads(), 2);
+  });
+});
+
+describe('Teams registry, database and wiring', () => {
+  const migration = read('supabase/migrations/20260926010000_teams_webhooks_vault_notify.sql');
+
+  it('registers ORDER_STATUS_CHANGED with its event and templates', () => {
+    assert.deepEqual(TEAMS_HOOK_CODES, ['ORDER_STATUS_CHANGED']);
+    const hook = getTeamsHook('ORDER_STATUS_CHANGED');
+    assert.ok(hook);
+    assert.equal(getTeamsHook('NOPE'), null);
+    assert.equal(hook.parseEvent({ order_id: 'x', revision_id: 'y' }), null);
+    assert.equal(hook.parseEvent(JSON.parse(notice(ORDER_A, 1)))?.queueKey, `order:${ORDER_A}`);
+    assert.match(hook.buildTestHtml('Thông báo trạng thái đơn hàng'), /🧪 Tin nhắn thử từ EDCThink/);
+  });
+
+  it('keeps the URL in Vault only, readable by service_role only', () => {
+    assert.match(migration, /create table public\.teams_webhooks/);
+    assert.match(migration, /vault_secret_name text not null/);
+    assert.doesNotMatch(migration, /webhook_url text|secret_id uuid/);
+    assert.match(migration, /join vault\.decrypted_secrets secret on secret\.name = webhook\.vault_secret_name/);
+    assert.match(migration, /revoke all on function public\.get_teams_webhook_url\(text\) from public, anon, authenticated;/);
+    assert.match(migration, /grant execute on function public\.get_teams_webhook_url\(text\) to service_role;/);
+    assert.match(migration, /'teams_webhook:ORDER_STATUS_CHANGED'/);
+    assert.match(migration, /drop table if exists public\.teams_webhook_deliveries;/);
+  });
+
+  it('notifies on every status revision, after commit, with ids only', () => {
+    assert.match(migration, /after insert on public\.order_revisions/);
+    assert.match(migration, new RegExp(`pg_notify\\('${TEAMS_EVENTS_CHANNEL}'`));
+    for (const key of ['code', 'order_id', 'old_status_id', 'new_status_id', 'actor_id']) {
+      assert.match(migration, new RegExp(`'${key}'`));
+    }
+  });
+
+  it('listens on one instance, and exposes only the documented routes', () => {
+    const listener = read('src/teams/listener.ts');
+    assert.match(listener, /pg_try_advisory_lock/);
+    assert.match(listener, /listen \$\{TEAMS_EVENTS_CHANNEL\}/);
+    assert.doesNotMatch(listener, /log\.\w+\([^)]*connectionString/);
+    const routes = read('src/routes/teams-webhooks/index.ts');
+    assert.match(routes, /fastify\.get\('\/', \{ preHandler: canView \}/);
+    assert.match(routes, /fastify\.patch\('\/:code', \{ preHandler: canManage/);
+    assert.match(routes, /fastify\.post\('\/:code\/test', \{ preHandler: canManage/);
+    assert.match(routes, /PERMISSION_CODE\.TEAMS_WEBHOOK_VIEW/);
+    assert.match(read('src/schemas/teams-webhooks.ts'), /properties: \{ is_active: \{ type: 'boolean' \} \}/);
+  });
+
+  it('lets an admin save the URL write-only: checked, stored in Vault, never returned', () => {
+    const urlMigration = read('supabase/migrations/20260926020000_teams_webhook_url_form.sql');
+    assert.match(urlMigration, /perform vault\.create_secret\(v_url, v_secret_name/);
+    assert.match(urlMigration, /perform vault\.update_secret\(v_secret_id, v_url\)/);
+    assert.match(urlMigration, /revoke all on function public\.set_teams_webhook_url\(text, text\) from public, anon, authenticated;/);
+    assert.match(urlMigration, /grant execute on function public\.set_teams_webhook_url\(text, text\) to service_role;/);
+
+    const routes = read('src/routes/teams-webhooks/index.ts');
+    assert.match(routes, /fastify\.put\('\/:code\/url', \{ preHandler: canManage, schema: teamsWebhookUrlSchema \}/);
+    assert.match(read('src/schemas/teams-webhooks.ts'), /properties: \{ webhook_url: \{ type: 'string', minLength: 1, maxLength: 2048 \} \}/);
+
+    const service = read('src/services/teams-webhooks.service.ts');
+    const setUrl = service.slice(service.indexOf('async setUrl('), service.indexOf('async sendTest('));
+    // Allowlist before storing; the sender re-reads the new URL; the reply is the view (no URL field).
+    assert.ok(setUrl.indexOf('assertAllowedWebhookUrl(webhookUrl)') < setUrl.indexOf("rpc('set_teams_webhook_url'"));
+    assert.match(setUrl, /teamsSender\.forgetUrl\(code\)/);
+    assert.match(setUrl, /return this\.get\(code\);/);
+    assert.doesNotMatch(service.slice(service.indexOf('export interface TeamsWebhookView'), service.indexOf('export class')), /url\??:/i);
+  });
+
+  it('leaves the order flow free of Teams calls: events come from the database', () => {
+    assert.doesNotMatch(read('src/services/orders.service.ts'), /kickTeams|teamsSender/);
   });
 });

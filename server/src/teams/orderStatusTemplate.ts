@@ -1,9 +1,8 @@
 import { escapeHtml, formatTeamsDateTime } from './html';
 
 /**
- * The event data captured in the database at the moment of the status change
- * (see enqueue_order_status_teams_delivery). Rendering from it rather than from
- * the live Order keeps a retried message true to what happened.
+ * What get_order_status_teams_event(revision_id) returns: status, actor and
+ * time of that revision, plus the Order and its items as they are when read.
  */
 export interface OrderStatusSnapshot {
   order: {
@@ -45,16 +44,27 @@ export const ORDER_STATUS_COLORS: Readonly<Record<string, string>> = {
 };
 const FALLBACK_COLOR = '#605e5c';
 
-/** Which quantity the table shows: what was asked, then what was approved, then what left. */
-const QUANTITY_FIELD_BY_STATUS: Readonly<Record<string, 'quantity_requested' | 'quantity_approved' | 'quantity_issued'>> = {
-  PENDING: 'quantity_requested',
-  APPROVED: 'quantity_approved',
-  REJECTED: 'quantity_requested',
-  CANCELLED: 'quantity_requested',
-  PARTIAL_ISSUED: 'quantity_issued',
-  ISSUED: 'quantity_issued',
-  RECEIVED: 'quantity_issued',
-  COMPLETED: 'quantity_issued',
+type OrderItemSnapshot = OrderStatusSnapshot['items'][number];
+
+/**
+ * Which quantity the table shows: what was asked while waiting, what was
+ * approved after review, what left once issuing started. A cancelled Order
+ * shows the approved count when it got that far.
+ */
+export const shownQuantity = (statusCode: string, item: OrderItemSnapshot) => {
+  switch (statusCode) {
+    case 'APPROVED':
+      return item.quantity_approved;
+    case 'PARTIAL_ISSUED':
+    case 'ISSUED':
+    case 'RECEIVED':
+    case 'COMPLETED':
+      return item.quantity_issued;
+    case 'CANCELLED':
+      return item.quantity_approved ?? item.quantity_requested;
+    default:
+      return item.quantity_requested;
+  }
 };
 
 const quantityFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
@@ -93,15 +103,14 @@ export const buildOrderStatusHtml = (
     `Thời gian: ${escapeHtml(formatTeamsDateTime(snapshot.occurred_at))}`,
     `Khu gửi → khu nhận: ${escapeHtml(areaLabel(snapshot.order.from_area))} → ${escapeHtml(areaLabel(snapshot.order.to_area))}`,
   ];
-  if (!isNewOrder && snapshot.old_status) {
-    details.push(`Từ: ${escapeHtml(snapshot.old_status.name)} → ${escapeHtml(status.name)}`);
+  if (!isNewOrder) {
+    details.push(`Từ: ${escapeHtml(snapshot.old_status?.name ?? '—')} → ${escapeHtml(status.name)}`);
   }
 
-  const field = QUANTITY_FIELD_BY_STATUS[status.code] ?? 'quantity_requested';
   const shown = snapshot.items.slice(0, MAX_ITEM_ROWS);
   const hidden = snapshot.items.length - shown.length;
   const rows = shown.map((item) =>
-    `<tr><td>${escapeHtml(clip(item.name ?? '—', 120))}</td><td>${escapeHtml(formatQuantity(item[field]))}</td><td>${escapeHtml(clip(item.unit ?? '', 30))}</td></tr>`,
+    `<tr><td>${escapeHtml(clip(item.name ?? '—', 120))}</td><td>${escapeHtml(formatQuantity(shownQuantity(status.code, item)))}</td><td>${escapeHtml(clip(item.unit ?? '', 30))}</td></tr>`,
   ).join('');
   const more = hidden > 0 ? `<p>+${hidden} vật tư khác</p>` : '';
 

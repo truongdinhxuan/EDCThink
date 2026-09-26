@@ -79,7 +79,7 @@ export const LoginPage = () => {
               alt="VinFast"
               className="h-8"
             />
-            <h2 className="mt-1 text-2xl font-extrabold text-slate-800">Login</h2>
+            <h2 className="mt-1 text-2xl font-extrabold text-slate-800">Đăng nhập</h2>
             <p className="mt-2 text-sm text-slate-500">
               Đăng nhập để tiếp tục truy cập hệ thống
             </p>
